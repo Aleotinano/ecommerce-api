@@ -42,9 +42,15 @@ export class usersController {
         password,
       });
 
-      if (!user.username || !user) {
+      if (user === null) {
         return res.status(401).json({
           message: "El usuario no existe",
+        });
+      }
+
+      if (user.isValid === false) {
+        return res.status(404).json({
+          message: "Contraseña incorrecta",
         });
       }
 

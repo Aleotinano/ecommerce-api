@@ -29,7 +29,7 @@ export const UserModel = {
     if (!user) return null;
 
     const isValid = await verifyPassword(password, user.password);
-    if (!isValid) return null;
+    if (!isValid) return { isValid: false };
     return user;
   },
 };

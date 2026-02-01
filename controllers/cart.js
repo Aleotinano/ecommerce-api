@@ -7,6 +7,12 @@ export class cartController {
 
       const cart = await CartModel.getCart({ id });
 
+      if (!cart) {
+        return res
+          .status(400)
+          .json({ message: "No hay productos en el carro" });
+      }
+
       const cartInfo = {
         created: cart.createdAt,
         update: cart.updatedAt,
@@ -17,11 +23,6 @@ export class cartController {
         quantity: i.quantity,
       }));
 
-      if (!cart) {
-        return res
-          .status(400)
-          .json({ message: "No hay productos en el carro" });
-      }
       return res.json({ Cart: cartInfo, products: productsInCart });
     } catch (error) {
       return res.status(500).json({ message: "Error al cargar carro" });
