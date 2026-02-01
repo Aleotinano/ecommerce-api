@@ -11,6 +11,7 @@ import { roleRouter } from "./routes/role.js";
 import { usersRouter } from "./routes/users.js";
 import { testRouter } from "./routes/test.js";
 import { cartRouter } from "./routes/cart.js";
+import { categoriesRouter } from "./routes/categories.js";
 
 // Middlewares
 import { middleWare } from "./middleware/cors.js";
@@ -23,6 +24,7 @@ app.use(cookieParser());
 app.use(middleWare());
 
 app.use("/products", productosRouter);
+app.use("/categories", categoriesRouter);
 app.use("/cart", cartRouter);
 app.use("/users", roleRouter);
 app.use("/auth", usersRouter);
