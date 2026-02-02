@@ -2,29 +2,59 @@ import { Router } from "express";
 import { productsController } from "../controllers/productos.js";
 import { requireRole } from "../middleware/role.js";
 import { verifyToken } from "../middleware/auth.js";
+import { validate } from "../middleware/validate.js";
+import {
+  createProductSchema,
+  productQuerySchema,
+  updateProductSchema,
+  productIdSchema,
+} from "../schemas/product.schema.js";
 
 export const productosRouter = Router();
 
 const roleRequired = "ADMIN";
 
-productosRouter.get("/", verifyToken, productsController.getAll);
-productosRouter.get("/:id", verifyToken, productsController.getById);
+const validation = {
+  create: validate({ body: createProductSchema }),
+  update: validate({ params: productIdSchema, body: updateProductSchema }),
+  query: validate({ query: productQuerySchema }),
+  id: validate({ params: productIdSchema }),
+};
+
+productosRouter.get(
+  "/",
+  verifyToken,
+  validation.query,
+  productsController.getAll
+);
+
+productosRouter.get(
+  "/:id",
+  verifyToken,
+  validation.id,
+  productsController.getById
+);
 
 productosRouter.post(
   "/",
   verifyToken,
   requireRole(roleRequired),
+  validation.create,
   productsController.create
 );
+
 productosRouter.patch(
   "/:id",
   verifyToken,
   requireRole(roleRequired),
+  validation.update,
   productsController.edit
 );
+
 productosRouter.delete(
   "/:id",
   verifyToken,
   requireRole(roleRequired),
+  validation.id,
   productsController.delete
 );

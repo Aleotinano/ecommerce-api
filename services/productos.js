@@ -1,56 +1,69 @@
 import prisma from "../lib/prisma.js";
 
 export const ProductModel = {
-  async getAll({ name, price, limit = 10, offset = 0 }) {
+  async getAll({ name, price, limit, offset }) {
+    const where = {
+      isActive: true,
+    };
+
+    if (name) {
+      where.name = { contains: name, mode: "insensitive" };
+    }
+
+    if (price) {
+      where.price = { lte: price };
+    }
+
     const search = {
-      where: {
-        name: name ? { contains: name, mode: "insensitive" } : undefined,
-        price: price ? { lte: Number(price) } : undefined,
-      },
-      take: Number(limit),
-      skip: Number(offset),
+      where,
+      take: limit,
+      skip: offset,
     };
 
     return prisma.product.findMany(search);
   },
 
-  async getById(id) {
-    return prisma.product.findUnique({
-      where: { id: Number(id) },
+  async getById({ id }) {
+    const product = await prisma.product.findUnique({
+      where: { id: id, isActive: true },
     });
+    return product;
   },
 
   async create({ name, description, price, stock, img }) {
     const data = {
-      name,
+      name: name,
       description: description ?? null,
-      price: price !== undefined ? Number(price) : null,
-      stock: Number(stock),
+      price: price,
+      stock: stock,
       img: img ?? null,
     };
 
     return prisma.product.create({ data });
   },
 
-  async edit(id, data) {
-    // ← id y data como parámetros separados
+  async edit({ id }, { name, description, price, stock, img }) {
+    const data = {
+      name: name,
+      description: description,
+      price: price,
+      stock: stock,
+      img: img,
+    };
+
+    const updateData = Object.fromEntries(
+      Object.entries(data).filter(([_, value]) => value !== undefined)
+    );
+
     return prisma.product.update({
-      where: { id: Number(id) },
-      data: {
-        ...(data.name !== undefined && { name: data.name }),
-        ...(data.description !== undefined && {
-          description: data.description,
-        }),
-        ...(data.price !== undefined && { price: Number(data.price) }),
-        ...(data.stock !== undefined && { stock: Number(data.stock) }),
-        ...(data.img !== undefined && { img: data.img }),
-      },
+      where: { id },
+      data: updateData,
     });
   },
 
-  async delete(id) {
+  async delete({ id }) {
     return prisma.product.delete({
-      where: { id: Number(id) },
+      where: { id: id },
     });
   },
 };

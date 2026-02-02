@@ -32,6 +32,7 @@ model Product {
   name        String
   description String?
   price       Float?
+  isActive    Boolean   @default(true)
   stock       Int
   categoryId  Int?
   category    Categories? @relation(fields: [categoryId], references: [id])

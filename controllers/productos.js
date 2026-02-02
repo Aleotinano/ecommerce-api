@@ -2,7 +2,7 @@ import { ProductModel } from "../services/productos.js";
 
 export class productsController {
   static async getAll(req, res) {
-    const { name, price, limit, offset } = req.query;
+    const { name, price, limit, offset } = req.search;
 
     const pagination = await ProductModel.getAll({
       name,
@@ -16,7 +16,7 @@ export class productsController {
 
   static async getById(req, res) {
     const { id } = req.params;
-    const product = await ProductModel.getById(id);
+    const product = await ProductModel.getById({ id });
 
     if (!product) {
       return res.status(404).json({
@@ -38,23 +38,6 @@ export class productsController {
       img,
     });
 
-    if (!name) {
-      return res.status(400).json({
-        error: "El producto debe tener nombre",
-      });
-    }
-    if (!stock || stock === 0) {
-      return res.status(400).json({
-        error: "El producto debe tener stock",
-      });
-    }
-
-    if (!price) {
-      return res.status(400).json({
-        error: "El producto debe tener precio",
-      });
-    }
-
     return res
       .status(201)
       .json({ message: "producto creado", producto: newProduct });
@@ -65,25 +48,16 @@ export class productsController {
       const { id } = req.params;
       const { name, description, price, stock, img } = req.body;
 
-      if (
-        name === undefined &&
-        description === undefined &&
-        price === undefined &&
-        stock === undefined &&
-        img === undefined
-      ) {
-        return res.status(400).json({
-          error: "No hay datos modificados",
-        });
-      }
-
-      const updatedProduct = await ProductModel.edit(id, {
-        name,
-        description,
-        price,
-        stock,
-        img,
-      });
+      const updatedProduct = await ProductModel.edit(
+        { id },
+        {
+          name,
+          description,
+          price,
+          stock,
+          img,
+        }
+      );
 
       if (!updatedProduct) {
         return res.status(404).json({
@@ -103,7 +77,7 @@ export class productsController {
   static async delete(req, res) {
     try {
       const { id } = req.params;
-      const deletedProduct = await ProductModel.delete(id);
+      const deletedProduct = await ProductModel.delete({ id });
 
       if (!deletedProduct) {
         return res.status(404).json({ error: "Producto no encontrado" });
