@@ -4,21 +4,22 @@ import { requireRole } from "../middleware/role.js";
 import { verifyToken } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
 import {
-  createProductSchema,
-  productQuerySchema,
-  updateProductSchema,
-  productIdSchema,
+  createProduct,
+  productQuery,
+  updateProduct,
 } from "../schemas/product.schema.js";
+
+import { validateId } from "../schemas/id.schema.js";
 
 export const productosRouter = Router();
 
 const roleRequired = "ADMIN";
 
 const validation = {
-  create: validate({ body: createProductSchema }),
-  update: validate({ params: productIdSchema, body: updateProductSchema }),
-  query: validate({ query: productQuerySchema }),
-  id: validate({ params: productIdSchema }),
+  create: validate({ body: createProduct }),
+  update: validate({ params: validateId, body: updateProduct }),
+  query: validate({ query: productQuery }),
+  id: validate({ params: validateId }),
 };
 
 productosRouter.get(

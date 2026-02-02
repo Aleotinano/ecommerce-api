@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const createProductSchema = z.object({
+export const createProduct = z.object({
   name: z
     .string({ required_error: "El nombre es requerido" })
     .min(1, "El nombre no puede estar vacío")
@@ -28,7 +28,7 @@ export const createProductSchema = z.object({
   img: z.string().optional(),
 });
 
-export const updateProductSchema = z
+export const updateProduct = z
   .object({
     name: z.string().min(1).max(100).optional(),
     description: z.string().max(400).optional(),
@@ -41,13 +41,9 @@ export const updateProductSchema = z
     message: "Debe proporcionar al menos un campo para actualizar",
   });
 
-export const productQuerySchema = z.object({
+export const productQuery = z.object({
   name: z.string().optional(),
   price: z.coerce.number().positive().optional(),
   limit: z.coerce.number().int().positive().max(100).default(10),
   offset: z.coerce.number().int().min(0).default(0),
-});
-
-export const productIdSchema = z.object({
-  id: z.coerce.number().int().positive("ID inválido"),
 });

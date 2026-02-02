@@ -6,6 +6,21 @@ export class categoriesController {
     res.json({ message: "categorías disponibles:", categories });
   }
 
+  static async getById(req, res) {
+    try {
+      const { id } = req.params;
+
+      if (!id) {
+        res.status(404).json({ error: "El producto no existe" });
+      }
+
+      const category = await CategoryModel.getById({ id });
+      res.json({ message: "categoría", category });
+    } catch (error) {
+      res.status(500).json({ error: "Producto no encontrado" });
+    }
+  }
+
   static async create(req, res) {
     try {
       const { name, description, isActive, icon } = req.body;
@@ -70,20 +85,18 @@ export class categoriesController {
 
       const category = await CategoryModel.delete({ id });
 
+      if (!category) {
+        return res.status(404).json({ error: "El producto no existe" });
+      }
+
       res.json({ message: "Categoría eliminada", category });
     } catch (error) {
-      if (error.message === "CATEGORY_NOT_FOUND") {
-        return res.status(404).json({
-          message: "La categoría no existe",
-        });
-      }
       if (error.message === "CATEGORY_HAS_PRODUCTS") {
         return res.status(400).json({
           message:
             "No puedes eliminar una categoría que tiene productos asociados",
         });
       }
-      console.error(error);
       res.status(500).json({ message: "Error al eliminar la categoría" });
     }
   }

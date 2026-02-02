@@ -9,6 +9,14 @@ export const CategoryModel = {
     return categories;
   },
 
+  async getById({ id }) {
+    const category = await prisma.categories.findUnique({
+      where: { id: id },
+    });
+
+    return category;
+  },
+
   async create({ name, description, isActive, icon }) {
     const categoryExist = await prisma.categories.findUnique({
       where: { name: name },
