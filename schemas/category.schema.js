@@ -29,3 +29,7 @@ export const updateCategory = z.object({
 
   isActive: z.boolean().optional(),
 });
+
+export const categoryId = z.object({
+  productId: z.coerce.number().int().positive("ID de la categoría inválido"),
+});
