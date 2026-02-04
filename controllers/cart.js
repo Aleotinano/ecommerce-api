@@ -7,15 +7,15 @@ export class cartController {
 
       const cart = await CartModel.getCart({ id });
 
-      if (!cart) {
-        return res
-          .status(400)
-          .json({ message: "No hay productos en el carro" });
+      if (!cart || !cart.items || cart.items.length === 0) {
+        return res.status(404).json({
+          message: "No hay productos en el carrito",
+        });
       }
 
       const cartInfo = {
         created: cart.createdAt,
-        update: cart.updatedAt,
+        updated: cart.updatedAt,
       };
 
       const productsInCart = cart.items.map((i) => ({
@@ -23,9 +23,11 @@ export class cartController {
         quantity: i.quantity,
       }));
 
-      return res.json({ Cart: cartInfo, products: productsInCart });
+      return res.json({ cart: cartInfo, products: productsInCart });
     } catch (error) {
-      return res.status(500).json({ message: "Error al cargar carro" });
+      return res.status(500).json({
+        message: "Error al cargar carrito",
+      });
     }
   }
 
@@ -36,27 +38,35 @@ export class cartController {
 
       const cartItem = await CartModel.add({ id, productId });
 
-      const quantity = cartItem.quantity;
-      const stock = cartItem.product.stock;
-
-      const info = {
-        producto: cartItem.product.name,
-        stock: stock,
-        quantity: quantity,
-      };
-
-      if (quantity > stock) {
-        return res.status(400).json({ message: "Producto sin stock", info });
-      }
+      const { quantity } = cartItem;
+      const { stock } = cartItem.product;
 
       return res.status(201).json({
-        message: "Producto agregado al carro",
-        data: cartItem,
+        message: "Producto agregado al carrito",
+        data: {
+          producto: cartItem.product.name,
+          cantidad: quantity,
+          stockRestante: stock - quantity,
+        },
       });
     } catch (error) {
-      return res.status(500).json({
-        message: "Error al agregar producto",
-      });
+      switch (error.code) {
+        case "PRODUCT_NOT_FOUND":
+          return res.status(404).json({
+            message: "Producto no encontrado o no disponible",
+          });
+
+        case "INSUFFICIENT_STOCK":
+          return res.status(400).json({
+            message: "Stock insuficiente",
+            data: error.details,
+          });
+
+        default:
+          return res.status(500).json({
+            message: "Error al agregar producto",
+          });
+      }
     }
   }
 
@@ -65,28 +75,27 @@ export class cartController {
       const { productId } = req.params;
       const { id } = req.user;
 
-      const product = await CartModel.remove({ id, productId });
+      const result = await CartModel.remove({ id, productId });
 
-      if (product.deleted) {
-        return res.json({
-          message: "Producto eliminado del carrito",
+      if (!result) {
+        return res.status(404).json({
+          message: "Producto no encontrado en el carrito",
         });
       }
 
-      const quantity = Number(product.cartItem.quantity);
-
-      if (!quantity) {
+      if (result.deleted) {
         return res.json({
-          message: "No hay productos en el carro",
+          message: "Producto eliminado del carrito completamente",
         });
       }
+
+      const quantity = result.cartItem.quantity;
 
       return res.json({
-        message: "Producto quitado",
-        quantity: quantity,
+        message: "Cantidad reducida en 1",
+        cantidadRestante: quantity,
       });
     } catch (error) {
-      console.error(error);
       return res.status(500).json({
         message: "Error al eliminar producto",
       });
@@ -94,17 +103,25 @@ export class cartController {
   }
 
   static async clear(req, res) {
-    const { productId } = req.params;
-    const { id } = req.user;
+    try {
+      const { id } = req.user;
 
-    const product = await CartModel.clear({ id, productId });
+      const result = await CartModel.clear({ id });
 
-    if (product.count === 0) {
-      return res
-        .status(404)
-        .json({ message: "Producto no encontrado en el carrito" });
+      if (!result || result.count === 0) {
+        return res.status(404).json({
+          message: "El carrito ya está vacío",
+        });
+      }
+
+      return res.json({
+        message: "Carrito vaciado completamente",
+        productosEliminados: result.count,
+      });
+    } catch (error) {
+      return res.status(500).json({
+        message: "Error al vaciar carrito",
+      });
     }
-
-    return res.json({ message: "Producto eliminado del carrito" });
   }
 }
