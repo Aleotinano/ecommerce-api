@@ -28,19 +28,25 @@ export class productsController {
   }
 
   static async create(req, res) {
-    const { name, description, price, stock, img } = req.body;
+    try {
+      const { name, description, price, stock, img } = req.body;
 
-    const newProduct = await ProductModel.create({
-      name,
-      description,
-      price,
-      stock,
-      img,
-    });
+      const newProduct = await ProductModel.create({
+        name,
+        description,
+        price,
+        stock,
+        img,
+      });
 
-    return res
-      .status(201)
-      .json({ message: "producto creado", producto: newProduct });
+      return res
+        .status(201)
+        .json({ message: "producto creado", producto: newProduct });
+    } catch (error) {
+      return res.status(500).json({
+        message: "Errro al crear producto",
+      });
+    }
   }
 
   static async edit(req, res) {
@@ -88,7 +94,7 @@ export class productsController {
         product: deletedProduct,
       });
     } catch (error) {
-      return res.status(500).json({ error: error.message });
+      return res.status(500).json({ message: "Error al eliminar el producto" });
     }
   }
 }
