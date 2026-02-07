@@ -61,23 +61,24 @@ export const CategoryModel = {
 
     return updatedCategory;
   },
-
   async delete({ id }) {
-    const category = await prisma.categories.findUnique({
-      where: { id: id },
-      include: { products: true },
+    return prisma.$transaction(async (tx) => {
+      const category = await tx.categories.findUnique({
+        where: { id },
+        include: { products: true },
+      });
+
+      if (!category) {
+        return null;
+      }
+
+      if (category.products.length > 0) {
+        throw new Error("CATEGORY_HAS_PRODUCTS");
+      }
+
+      return tx.categories.delete({
+        where: { id },
+      });
     });
-
-    if (!category) return null;
-
-    if (category.products.length > 0) {
-      throw new Error("CATEGORY_HAS_PRODUCTS");
-    }
-
-    const deletedCategory = await prisma.categories.delete({
-      where: { id: id },
-    });
-
-    return deletedCategory;
   },
 };
