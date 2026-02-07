@@ -74,7 +74,11 @@ export class categoriesController {
 
       res.json({ message: "Categoría editada", category });
     } catch (error) {
-      console.error(error);
+      if (error.message === "NO_FIELDS_TO_UPDATE") {
+        return res.status(400).json({
+          message: "No hay campos modificadoss",
+        });
+      }
       res.status(500).json({ message: "Error al editar categoría" });
     }
   }

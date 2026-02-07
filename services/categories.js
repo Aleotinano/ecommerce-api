@@ -40,19 +40,17 @@ export const CategoryModel = {
 
   async edit({ id, name, description, isActive, icon }) {
     const category = await prisma.categories.findUnique({
-      where: { id: parseInt(id) },
+      where: { id: id },
     });
 
     if (!category) return null;
 
     if (!name && !description && isActive === undefined && !icon) {
-      return res.status(400).json({
-        message: "Debes enviar al menos un campo para actualizar",
-      });
+      throw new Error("NO_FIELDS_TO_UPDATE");
     }
 
     const updatedCategory = await prisma.categories.update({
-      where: { id: parseInt(id) },
+      where: { id: id },
       data: {
         ...(name !== undefined && { name }),
         ...(description !== undefined && { description }),
@@ -66,7 +64,7 @@ export const CategoryModel = {
 
   async delete({ id }) {
     const category = await prisma.categories.findUnique({
-      where: { id: parseInt(id) },
+      where: { id: id },
       include: { products: true },
     });
 
@@ -77,7 +75,7 @@ export const CategoryModel = {
     }
 
     const deletedCategory = await prisma.categories.delete({
-      where: { id: parseInt(id) },
+      where: { id: id },
     });
 
     return deletedCategory;
