@@ -1,4 +1,5 @@
 .env
 node_modules
-generated/
+pnpm-lock.yaml
 nota.md
+.vscode
