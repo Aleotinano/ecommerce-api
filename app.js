@@ -6,6 +6,7 @@ import cookieParser from "cookie-parser";
 import { DEFAULTS } from "./config.js";
 
 // rutas
+import { ordersRouter } from "./routes/orders.js";
 import { productosRouter } from "./routes/productos.js";
 import { roleRouter } from "./routes/role.js";
 import { usersRouter } from "./routes/users.js";
@@ -23,6 +24,7 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(middleWare());
 
+app.use("/orders", ordersRouter);
 app.use("/products", productosRouter);
 app.use("/categories", categoriesRouter);
 app.use("/cart", cartRouter);
