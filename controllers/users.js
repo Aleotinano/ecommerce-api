@@ -3,7 +3,7 @@ import { DEFAULTS } from "../config.js";
 import jwt from "jsonwebtoken";
 
 export class usersController {
-  static async register(req, res) {
+  static async register(req, res, next) {
     try {
       const { username, password, email, role } = req.body;
       const user = await UserModel.register({
@@ -24,21 +24,11 @@ export class usersController {
         usuario: dataPublic,
       });
     } catch (error) {
-      console.error("Error en registro:", error);
-
-      if (error.message === "USERNAME_EXISTS") {
-        return res.status(409).json({
-          message: "El usuario ya existe",
-        });
-      }
-
-      return res.status(500).json({
-        message: "Error al registrar usuario",
-      });
+      next(error);
     }
   }
 
-  static async login(req, res) {
+  static async login(req, res, next) {
     try {
       const { username, password } = req.body;
 
@@ -46,18 +36,6 @@ export class usersController {
         username,
         password,
       });
-
-      if (user === null) {
-        return res.status(401).json({
-          message: "El usuario no existe",
-        });
-      }
-
-      if (user.isValid === false) {
-        return res.status(404).json({
-          message: "Contraseña incorrecta",
-        });
-      }
 
       const dataPublic = {
         username: user.username,
@@ -86,15 +64,11 @@ export class usersController {
           usuario: dataPublic,
         });
     } catch (error) {
-      console.error("Error en login:", error);
-
-      return res.status(500).json({
-        message: "Error al iniciar sesión",
-      });
+      next(error);
     }
   }
 
   static async logout(req, res) {
-    return res.clearCookie("access_token").json({ message: "Sesión cerrada" });
+    return res.clearCookie("access_token").json({ message: "SesiÃ³n cerrada" });
   }
 }

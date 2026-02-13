@@ -1,30 +1,21 @@
 import { roleModel } from "../services/role.js";
+import { createError } from "../helpers/error.js";
 
 export class roleController {
-  static async edit(req, res) {
+  static async edit(req, res, next) {
     try {
       const { id } = req.params;
       const { role } = req.body;
 
       if (!id || !role) {
-        return res.status(400).json({
-          message: "Faltan datos",
-        });
+        return next(createError("Faltan datos", "MISSING_DATA", 400));
       }
 
       if (!["USER", "ADMIN"].includes(role)) {
-        return res.status(400).json({
-          message: "Rol inválido",
-        });
+        return next(createError("Rol invÃ¡lido", "INVALID_ROLE", 400));
       }
 
       const updatedUser = await roleModel.edit(id, role);
-
-      if (!updatedUser) {
-        return res.status(404).json({
-          message: "Usuario no encontrado",
-        });
-      }
 
       return res.json({
         message: "Rol actualizado correctamente",
@@ -35,9 +26,7 @@ export class roleController {
         },
       });
     } catch (error) {
-      return res.status(500).json({
-        message: "Error al actualizar rol",
-      });
+      next(error);
     }
   }
 }

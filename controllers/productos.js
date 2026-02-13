@@ -1,33 +1,35 @@
 import { ProductModel } from "../services/productos.js";
 
 export class productsController {
-  static async getAll(req, res) {
-    const { name, price, limit, offset } = req.search;
+  static async getAll(req, res, next) {
+    try {
+      const { name, price, limit, offset } = req.search;
 
-    const pagination = await ProductModel.getAll({
-      name,
-      price,
-      limit,
-      offset,
-    });
-
-    return res.json(pagination);
-  }
-
-  static async getById(req, res) {
-    const { id } = req.params;
-    const product = await ProductModel.getById({ id });
-
-    if (!product) {
-      return res.status(404).json({
-        error: "El producto no existe",
+      const pagination = await ProductModel.getAll({
+        name,
+        price,
+        limit,
+        offset,
       });
-    }
 
-    return res.json(product);
+      return res.json(pagination);
+    } catch (error) {
+      next(error);
+    }
   }
 
-  static async create(req, res) {
+  static async getById(req, res, next) {
+    try {
+      const { id } = req.params;
+      const product = await ProductModel.getById({ id });
+
+      return res.json(product);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async create(req, res, next) {
     try {
       const { name, description, price, stock, img } = req.body;
 
@@ -43,13 +45,11 @@ export class productsController {
         .status(201)
         .json({ message: "producto creado", producto: newProduct });
     } catch (error) {
-      return res.status(500).json({
-        message: "Errro al crear producto",
-      });
+      next(error);
     }
   }
 
-  static async edit(req, res) {
+  static async edit(req, res, next) {
     try {
       const { id } = req.params;
       const { name, description, price, stock, img } = req.body;
@@ -65,36 +65,26 @@ export class productsController {
         }
       );
 
-      if (!updatedProduct) {
-        return res.status(404).json({
-          error: "Producto no encontrado",
-        });
-      }
-
       return res.json({
         message: "Producto actualizado",
         product: updatedProduct,
       });
     } catch (error) {
-      return res.status(500).json({ error: error.message });
+      next(error);
     }
   }
 
-  static async delete(req, res) {
+  static async delete(req, res, next) {
     try {
       const { id } = req.params;
       const deletedProduct = await ProductModel.delete({ id });
-
-      if (!deletedProduct) {
-        return res.status(404).json({ error: "Producto no encontrado" });
-      }
 
       return res.json({
         message: "Producto eliminado correctamente",
         product: deletedProduct,
       });
     } catch (error) {
-      return res.status(500).json({ message: "Error al eliminar el producto" });
+      next(error);
     }
   }
 }

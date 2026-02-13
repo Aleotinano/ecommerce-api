@@ -1,4 +1,5 @@
 import prisma from "../lib/prisma.js";
+import { createError } from "../helpers/error.js";
 
 export const CartModel = {
   async getCart({ id }) {
@@ -11,6 +12,10 @@ export const CartModel = {
       },
     });
 
+    if (!cart || !cart.items || cart.items.length === 0) {
+      throw createError("El carrito esta vacio", "EMPTY_CART", 404);
+    }
+
     return cart;
   },
 
@@ -20,15 +25,11 @@ export const CartModel = {
     });
 
     if (!product) {
-      const error = new Error("Producto no encontrado");
-      error.code = "PRODUCT_NOT_FOUND";
-      throw error;
+      throw createError("Producto no encontrado", "PRODUCT_NOT_FOUND", 404);
     }
 
     if (!product.isActive) {
-      const error = new Error("Producto no disponible");
-      error.code = "PRODUCT_NOT_FOUND";
-      throw error;
+      throw createError("Producto no disponible", "PRODUCT_NOT_FOUND", 404);
     }
 
     const cart = await prisma.cart.upsert({
@@ -49,15 +50,7 @@ export const CartModel = {
     const currentQuantity = existingCartItem?.quantity || 0;
 
     if (currentQuantity + 1 > product.stock) {
-      const error = new Error("Stock insuficiente");
-      error.code = "INSUFFICIENT_STOCK";
-      error.details = {
-        producto: product.name,
-        stockDisponible: product.stock,
-        cantidadEnCarrito: currentQuantity,
-        cantidadSolicitada: currentQuantity + 1,
-      };
-      throw error;
+      throw createError("Stock insuficiente", "INSUFFICIENT_STOCK", 409);
     }
 
     const productAdded = await prisma.cartItem.upsert({
@@ -88,8 +81,8 @@ export const CartModel = {
       where: { userId: id },
     });
 
-    if (!cart) {
-      return null;
+    if (!cart || !cart.items || cart.items.length === 0) {
+      throw createError("El carrito esta vacio", "EMPTY_CART", 404);
     }
 
     const cartItem = await prisma.cartItem.findUnique({
@@ -102,7 +95,7 @@ export const CartModel = {
     });
 
     if (!cartItem) {
-      return null;
+      throw createError("No se encontró el producto", "PRODUCT_NOT_FOUND", 404);
     }
 
     if (cartItem.quantity === 1) {
@@ -142,7 +135,7 @@ export const CartModel = {
     });
 
     if (!cart) {
-      return { count: 0 };
+      throw createError("El carrito esta vacio", "EMPTY_CART", 404);
     }
 
     const deleted = await prisma.cartItem.deleteMany({

@@ -1,4 +1,5 @@
 import prisma from "../lib/prisma.js";
+import { createError } from "../helpers/error.js";
 
 export const OrderModel = {
   async create({ userId }) {
@@ -16,16 +17,14 @@ export const OrderModel = {
 
     // Validar que el carrito exista y tenga productos
     if (!cart || !cart.items || cart.items.length === 0) {
-      const error = new Error("El carrito está vacío");
-      error.code = "EMPTY_CART";
+      const error = createError("El carrito está vacío", "EMPTY_CART", 400);
       throw error;
     }
 
     // Verificar stock de cada producto
     for (const item of cart.items) {
       if (!item.product.isActive) {
-        const error = new Error("Producto no disponible");
-        error.code = "PRODUCT_NOT_AVAILABLE";
+        const error = createError("Producto no disponible", "PRODUCT_NOT_AVAILABLE", 400);
         error.details = {
           producto: item.product.name,
         };
@@ -33,8 +32,7 @@ export const OrderModel = {
       }
 
       if (item.quantity > item.product.stock) {
-        const error = new Error("Stock insuficiente");
-        error.code = "INSUFFICIENT_STOCK";
+        const error = createError("Stock insuficiente", "INSUFFICIENT_STOCK", 409);
         error.details = {
           producto: item.product.name,
           solicitado: item.quantity,
@@ -102,6 +100,10 @@ export const OrderModel = {
       },
     });
 
+    if (!orders || orders.length === 0) {
+      throw createError("No tienes Ã³rdenes todavÃ­a", "ORDERS_NOT_FOUND", 404);
+    }
+
     return orders;
   },
 
@@ -119,6 +121,10 @@ export const OrderModel = {
         },
       },
     });
+
+    if (!order) {
+      throw createError("Orden no encontrada", "ORDER_NOT_FOUND", 404);
+    }
 
     return order;
   },
@@ -143,6 +149,10 @@ export const OrderModel = {
       },
     });
 
+    if (!orders || orders.length === 0) {
+      throw createError("No hay Ã³rdenes registradas", "ORDERS_NOT_FOUND", 404);
+    }
+
     return orders;
   },
 
@@ -160,21 +170,18 @@ export const OrderModel = {
     });
 
     if (!order) {
-      const error = new Error("Orden no encontrada");
-      error.code = "ORDER_NOT_FOUND";
+      const error = createError("Orden no encontrada", "ORDER_NOT_FOUND", 404);
       throw error;
     }
 
     // Validar transiciones de estado
     if (order.status === "COMPLETED") {
-      const error = new Error("No se puede modificar una orden completada");
-      error.code = "ORDER_ALREADY_COMPLETED";
+      const error = createError("No se puede modificar una orden completada", "ORDER_ALREADY_COMPLETED", 409);
       throw error;
     }
 
     if (order.status === "CANCELLED") {
-      const error = new Error("No se puede modificar una orden cancelada");
-      error.code = "ORDER_ALREADY_CANCELLED";
+      const error = createError("No se puede modificar una orden cancelada", "ORDER_ALREADY_CANCELLED", 409);
       throw error;
     }
 
@@ -187,8 +194,7 @@ export const OrderModel = {
       // Verificar que haya stock suficiente
       for (const item of order.orderItems) {
         if (item.quantity > item.product.stock) {
-          const error = new Error("Stock insuficiente para completar la orden");
-          error.code = "INSUFFICIENT_STOCK";
+          const error = createError("Stock insuficiente para completar la orden", "INSUFFICIENT_STOCK", 409);
           error.details = {
             producto: item.product.name,
             solicitado: item.quantity,
@@ -248,8 +254,8 @@ export const OrderModel = {
     }
 
     // por seguridad
-    const error = new Error("Transición de estado no permitida");
-    error.code = "INVALID_STATUS_TRANSITION";
+    const error = createError("Transición de estado no permitida", "INVALID_STATUS_TRANSITION", 400);
     throw error;
   },
 };
+

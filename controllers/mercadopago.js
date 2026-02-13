@@ -1,7 +1,7 @@
 import { mercadopagoModel } from "../services/mercadopago.js";
 
 export class mercadopagoController {
-  static async create(req, res) {
+  static async create(req, res, next) {
     try {
       const { id: userId, email: payerEmail } = req.user;
       const { id: orderId } = req.params;
@@ -17,40 +17,29 @@ export class mercadopagoController {
         init_point: mpOrder.sandbox_init_point,
       });
     } catch (error) {
-      switch (error.code) {
-        case "ORDER_NOT_FOUND":
-          return res.status(404).json({ message: "Orden no encontrada" });
-        case "ORDER_CANCELLED":
-          return res
-            .status(400)
-            .json({ message: "La orden est\u00e1 cancelada" });
-        case "ORDER_ALREADY_PAID":
-          return res.status(400).json({ message: "La orden ya fue pagada" });
-        case "PAYER_EMAIL_REQUIRED":
-          return res
-            .status(400)
-            .json({ message: "Email del pagador requerido" });
-        default:
-          console.error("Error al crear orden de pago:", error);
-          return res
-            .status(500)
-            .json({ message: "Error al crear orden de pago" });
-      }
+      next(error);
     }
   }
 
-  static async getWebhook(req, res) {
+  static async getWebhook(req, res, next) {
     try {
       const paymentId = req.body?.data?.id;
+      const eventType = req.body?.type;
 
-      if (!paymentId) return res.sendStatus(204);
+      if (!paymentId) {
+        return res.sendStatus(204);
+      }
 
-      const orderStatus = await mercadopagoModel.processWebhook({ paymentId });
+      // Solo procesar eventos de payment
+      if (eventType !== "payment") {
+        return res.sendStatus(200);
+      }
 
-      return res.json({ orderStatus: orderStatus });
+      const orderStatus = await mercadopagoModel.getWebhook({ paymentId });
+
+      return res.json({ orderStatus });
     } catch (error) {
-      console.error("Error webhook:", error);
-      return res.sendStatus(500);
+      next(error);
     }
   }
 }

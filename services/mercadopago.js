@@ -1,13 +1,14 @@
 import prisma from "../lib/prisma.js";
 import { preference, payment } from "../config/mercadoPago.js";
-import {
-  createError,
-  getBackUrls,
-  getPaymentMethods,
-} from "../helpers/mercadopago.js";
+import { getBackUrls, getPaymentMethods } from "../helpers/mercadopago.js";
+import { createError } from "../helpers/error.js";
 
 export const mercadopagoModel = {
   async create({ userId, orderId, payerEmail }) {
+    if (!payerEmail) {
+      throw createError("Email requerido", "PAYER_EMAIL_REQUIRED", 400);
+    }
+
     const order = await prisma.order.findFirst({
       where: { id: orderId, userId },
       include: {
@@ -16,14 +17,16 @@ export const mercadopagoModel = {
       },
     });
 
-    if (!order) throw createError("Orden no encontrada", "ORDER_NOT_FOUND");
+    if (!order)
+      throw createError("Orden no encontrada", "ORDER_NOT_FOUND", 404);
     if (order.status === "CANCELLED")
       throw createError(
         "No se puede pagar una orden cancelada",
-        "ORDER_CANCELLED"
+        "ORDER_CANCELLED",
+        409
       );
     if (order.paymentStatus === "APPROVED")
-      throw createError("La orden ya fue pagada", "ORDER_ALREADY_PAID");
+      throw createError("La orden ya fue pagada", "ORDER_ALREADY_PAID", 409);
 
     // Convertimos los items de la orden al formato esperado por Mercado Pago.
     const items = order.orderItems.map((item) => ({
@@ -61,15 +64,16 @@ export const mercadopagoModel = {
 
       return mpResponse;
     } catch (error) {
+      console.log(error);
       throw createError(
         "Error processing payment",
         "PAYMENT_PROCESSING_ERROR",
-        console.log(error)
+        502
       );
     }
   },
 
-  async processWebhook({ paymentId }) {
+  async getWebhook({ paymentId }) {
     const paymentInfo = await payment.get({
       id: paymentId,
     });
@@ -82,7 +86,11 @@ export const mercadopagoModel = {
     const orderId = Number(paymentInfo.external_reference);
 
     if (!orderId) {
-      throw new Error("External reference inválida");
+      throw createError(
+        "External reference inválida",
+        "INVALID_EXTERNAL_REFERENCE",
+        400
+      );
     }
 
     // 4️⃣ Buscar orden
@@ -91,17 +99,17 @@ export const mercadopagoModel = {
     });
 
     if (!order) {
-      throw new Error("Orden no encontrada");
+      throw createError("Orden no encontrada", "ORDER_NOT_FOUND", 404);
     }
 
     // 5️⃣ Idempotencia
     if (order.status === "COMPLETED") {
-      throw new Error("Orden ya pagada");
+      throw createError("Orden ya pagada", "ORDER_ALREADY_PAID", 409);
     }
 
     // 6️⃣ Validación de monto
     if (order.total !== paymentInfo.transaction_amount) {
-      throw new Error("Monto inválido");
+      throw createError("Monto inválido", "AMOUNT_MISMATCH", 409);
     }
 
     // 7️⃣ Actualizar orden

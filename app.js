@@ -16,6 +16,7 @@ import { categoriesRouter } from "./routes/categories.js";
 import { mercadopagoRouter } from "./routes/mercadopago.js";
 
 // Middlewares
+import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { middleWare } from "./middleware/cors.js";
 
 const PORT = DEFAULTS.PORT || 3001;
@@ -34,12 +35,9 @@ app.use("/mercadopago", mercadopagoRouter);
 app.use("/auth", usersRouter);
 app.use("/test", testRouter);
 
-app.use((req, res) => {
-  res.status(404).json({
-    message: "Ruta no encontrada",
-    path: req.path,
-  });
-});
+// Manejo de errores \\
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 app.listen(PORT, () => {
   console.log(`puerto levantado en ${PORT}`);

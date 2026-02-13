@@ -1,4 +1,5 @@
 import prisma from "../lib/prisma.js";
+import { createError } from "../helpers/error.js";
 
 export const CategoryModel = {
   async getAll() {
@@ -14,6 +15,10 @@ export const CategoryModel = {
       where: { id: id },
     });
 
+    if (!category) {
+      throw createError("La categoría no existe", "CATEGORY_NOT_FOUND", 404);
+    }
+
     return category;
   },
 
@@ -23,7 +28,11 @@ export const CategoryModel = {
     });
 
     if (categoryExist) {
-      throw new Error("CATEGORY_ALREADY_EXISTS");
+      throw createError(
+        "la categoria ya existe",
+        "CATEGORY_ALREADY_EXISTS",
+        409
+      );
     }
 
     const category = await prisma.categories.create({
@@ -43,10 +52,16 @@ export const CategoryModel = {
       where: { id: id },
     });
 
-    if (!category) return null;
+    if (!category) {
+      throw createError("La categoría no existe", "CATEGORY_NOT_FOUND", 404);
+    }
 
     if (!name && !description && isActive === undefined && !icon) {
-      throw new Error("NO_FIELDS_TO_UPDATE");
+      throw createError(
+        "No hay campos modificados",
+        "NO_FIELDS_TO_UPDATE",
+        400
+      );
     }
 
     const updatedCategory = await prisma.categories.update({
@@ -61,6 +76,7 @@ export const CategoryModel = {
 
     return updatedCategory;
   },
+
   async delete({ id }) {
     return prisma.$transaction(async (tx) => {
       const category = await tx.categories.findUnique({
@@ -69,11 +85,15 @@ export const CategoryModel = {
       });
 
       if (!category) {
-        return null;
+        throw createError("La categoría no existe", "CATEGORY_NOT_FOUND", 404);
       }
 
       if (category.products.length > 0) {
-        throw new Error("CATEGORY_HAS_PRODUCTS");
+        throw createError(
+          "CATEGORY_HAS_PRODUCTS",
+          "CATEGORY_HAS_PRODUCTS",
+          409
+        );
       }
 
       return tx.categories.delete({

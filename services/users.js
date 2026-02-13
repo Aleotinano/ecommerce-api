@@ -1,5 +1,6 @@
 import prisma from "../lib/prisma.js";
 import { hashPassword, verifyPassword } from "../helpers/password.js";
+import { createError } from "../helpers/error.js";
 
 export const UserModel = {
   async register({ username, password, email, role }) {
@@ -8,7 +9,7 @@ export const UserModel = {
     });
 
     if (existingUser) {
-      throw new Error("USERNAME_EXISTS");
+      throw createError("El usuario ya existe", "USERNAME_EXISTS", 409);
     }
 
     const hashedPassword = await hashPassword(password);
@@ -27,10 +28,14 @@ export const UserModel = {
       where: { username },
     });
 
-    if (!user) return null;
+    if (!user) {
+      throw createError("El usuario no existe", "USER_NOT_FOUND", 401);
+    }
 
     const isValid = await verifyPassword(password, user.password);
-    if (!isValid) return { isValid: false };
+    if (!isValid) {
+      throw createError("ContraseÃ±a incorrecta", "INVALID_PASSWORD", 401);
+    }
     return user;
   },
 };

@@ -1,4 +1,5 @@
 import prisma from "../lib/prisma.js";
+import { createError } from "../helpers/error.js";
 
 export const ProductModel = {
   async getAll({ name, price, limit, offset }) {
@@ -27,6 +28,9 @@ export const ProductModel = {
     const product = await prisma.product.findUnique({
       where: { id: id, isActive: true },
     });
+    if (!product) {
+      throw createError("Producto no encontrado", "PRODUCT_NOT_FOUND", 404);
+    }
     return product;
   },
 
@@ -43,6 +47,13 @@ export const ProductModel = {
   },
 
   async edit({ id }, { name, description, price, stock, img }) {
+    const existing = await prisma.product.findUnique({
+      where: { id },
+    });
+    if (!existing) {
+      throw createError("Producto no encontrado", "PRODUCT_NOT_FOUND", 404);
+    }
+
     const data = {
       name: name,
       description: description,
@@ -62,6 +73,13 @@ export const ProductModel = {
   },
 
   async delete({ id }) {
+    const existing = await prisma.product.findUnique({
+      where: { id },
+    });
+    if (!existing) {
+      throw createError("Producto no encontrado", "PRODUCT_NOT_FOUND", 404);
+    }
+
     return prisma.product.delete({
       where: { id: id },
     });

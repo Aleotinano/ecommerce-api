@@ -2,7 +2,7 @@ import { OrderModel } from "../services/orders.js";
 
 export class OrderController {
   // CREAR ORDEN
-  static async create(req, res) {
+  static async create(req, res, next) {
     try {
       const { id, username } = req.user;
 
@@ -25,45 +25,16 @@ export class OrderController {
         },
       });
     } catch (error) {
-      switch (error.code) {
-        case "EMPTY_CART":
-          return res.status(400).json({
-            message: "No hay productos en el carrito",
-          });
-
-        case "PRODUCT_NOT_AVAILABLE":
-          return res.status(400).json({
-            message: "Producto/s no disponible/s",
-            data: error.details,
-          });
-
-        case "INSUFFICIENT_STOCK":
-          return res.status(400).json({
-            message: "Producto/s sin stock",
-            data: error.details,
-          });
-
-        default:
-          console.error("Error al crear orden:", error);
-          return res.status(500).json({
-            message: "Error al crear la orden",
-          });
-      }
+      next(error);
     }
   }
 
-  // VER ÓRDENES
-  static async getAll(req, res) {
+  // VER Ã“RDENES
+  static async getAll(req, res, next) {
     try {
       const { id } = req.user;
 
       const orders = await OrderModel.getAll({ id });
-
-      if (!orders || orders.length === 0) {
-        return res.status(404).json({
-          message: "No tienes órdenes todavía",
-        });
-      }
 
       const formattedOrders = orders.map((order) => ({
         id: order.id,
@@ -79,23 +50,14 @@ export class OrderController {
 
       return res.json({ orders: formattedOrders });
     } catch (error) {
-      console.error("Error al obtener órdenes:", error);
-      return res.status(500).json({
-        message: "Error al obtener las órdenes",
-      });
+      next(error);
     }
   }
 
   // TODAS LAS ORDENES DE USUARIOS
-  static async getUserOrders(req, res) {
+  static async getUserOrders(req, res, next) {
     try {
       const orders = await OrderModel.getUserOrders();
-
-      if (!orders || orders.length === 0) {
-        return res.status(404).json({
-          message: "No hay órdenes registradas",
-        });
-      }
 
       const formattedOrders = orders.map((order) => ({
         id: order.id,
@@ -115,15 +77,12 @@ export class OrderController {
 
       return res.json({ orders: formattedOrders });
     } catch (error) {
-      console.error("Error al obtener todas las órdenes:", error);
-      return res.status(500).json({
-        message: "Error al obtener las órdenes",
-      });
+      next(error);
     }
   }
 
   // VER ORDEN POR ID
-  static async getById(req, res) {
+  static async getById(req, res, next) {
     try {
       const { id: userId } = req.user;
       const { id: orderId } = req.params;
@@ -132,12 +91,6 @@ export class OrderController {
         userId,
         orderId,
       });
-
-      if (!order) {
-        return res.status(404).json({
-          message: "Orden no encontrada",
-        });
-      }
 
       return res.json({
         order: {
@@ -156,15 +109,12 @@ export class OrderController {
         },
       });
     } catch (error) {
-      console.error("Error al obtener orden:", error);
-      return res.status(500).json({
-        message: "Error al obtener la orden",
-      });
+      next(error);
     }
   }
 
   // ACTUALIZAR STATUS DE ORDEN
-  static async update(req, res) {
+  static async update(req, res, next) {
     try {
       const { id: orderId } = req.params;
       const { status } = req.body;
@@ -173,7 +123,7 @@ export class OrderController {
         orderId,
         status,
       });
-      // Mensajes dinámicos correctos
+      // Mensajes dinÃ¡micos correctos
       const statusMessages = {
         COMPLETED: "completada",
         CANCELLED: "cancelada",
@@ -191,39 +141,7 @@ export class OrderController {
         },
       });
     } catch (error) {
-      switch (error.code) {
-        case "ORDER_NOT_FOUND":
-          return res.status(404).json({
-            message: "Orden no encontrada",
-          });
-
-        case "ORDER_ALREADY_COMPLETED":
-          return res.status(400).json({
-            message: "No se puede modificar una orden ya completada",
-          });
-
-        case "ORDER_ALREADY_CANCELLED":
-          return res.status(400).json({
-            message: "No se puede modificar una orden ya cancelada",
-          });
-
-        case "INSUFFICIENT_STOCK":
-          return res.status(400).json({
-            message: "No hay stock suficiente para completar esta orden",
-            data: error.details,
-          });
-
-        case "INVALID_STATUS_TRANSITION":
-          return res.status(400).json({
-            message: "Transición de estado no permitida",
-          });
-
-        default:
-          console.error("Error al actualizar orden:", error);
-          return res.status(500).json({
-            message: "Error al actualizar el estado de la orden",
-          });
-      }
+      next(error);
     }
   }
 }

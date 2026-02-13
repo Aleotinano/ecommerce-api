@@ -6,7 +6,7 @@ import { validateId } from "../schemas/id.schema.js";
 
 export const mercadopagoRouter = Router();
 
-const validated = {
+const validation = {
   id: validate({ params: validateId }),
 };
 
@@ -60,6 +60,6 @@ mercadopagoRouter.post("/webhook", mercadopagoController.getWebhook);
 mercadopagoRouter.post(
   "/:id",
   verifyToken,
-  validated.id,
+  validation.id,
   mercadopagoController.create
 );

@@ -2,34 +2,28 @@ import { CategoryModel } from "../services/categories.js";
 
 export class categoriesController {
   static async getAll(req, res) {
-    const categories = await CategoryModel.getAll();
-    res.json({ message: "categorías disponibles:", categories });
+    try {
+      const categories = await CategoryModel.getAll();
+      res.json({ categories: categories });
+    } catch (error) {
+      next(error);
+    }
   }
 
   static async getById(req, res) {
     try {
       const { id } = req.params;
-
-      if (!id) {
-        res.status(404).json({ error: "El producto no existe" });
-      }
-
       const category = await CategoryModel.getById({ id });
-      res.json({ message: "categoría", category });
+
+      res.json({ message: "categoría", category: category });
     } catch (error) {
-      res.status(500).json({ error: "Producto no encontrado" });
+      next(error);
     }
   }
 
   static async create(req, res) {
     try {
       const { name, description, isActive, icon } = req.body;
-
-      if (!name) {
-        return res.status(400).json({
-          message: "El nombre es obligatorio",
-        });
-      }
 
       const category = await CategoryModel.create({
         name,
@@ -40,16 +34,10 @@ export class categoriesController {
 
       res.status(201).json({
         message: "Categoría creada",
-        category,
+        category: category,
       });
     } catch (error) {
-      if (error.message === "CATEGORY_ALREADY_EXISTS") {
-        return res.status(409).json({
-          message: "La categoría ya existe",
-        });
-      }
-      console.error(error);
-      res.status(500).json({ message: "Error al crear la categoría" });
+      next(error);
     }
   }
 
@@ -66,20 +54,9 @@ export class categoriesController {
         icon,
       });
 
-      if (category === null) {
-        return res.status(404).json({
-          message: "La categoría no existe",
-        });
-      }
-
-      res.json({ message: "Categoría editada", category });
+      res.json({ message: "Categoría editada", category: category });
     } catch (error) {
-      if (error.message === "NO_FIELDS_TO_UPDATE") {
-        return res.status(400).json({
-          message: "No hay campos modificadoss",
-        });
-      }
-      res.status(500).json({ message: "Error al editar categoría" });
+      next(error);
     }
   }
 
@@ -88,20 +65,9 @@ export class categoriesController {
       const { id } = req.params;
 
       const category = await CategoryModel.delete({ id });
-
-      if (!category) {
-        return res.status(404).json({ error: "El producto no existe" });
-      }
-
       res.json({ message: "Categoría eliminada", category });
     } catch (error) {
-      if (error.message === "CATEGORY_HAS_PRODUCTS") {
-        return res.status(400).json({
-          message:
-            "No puedes eliminar una categoría que tiene productos asociados",
-        });
-      }
-      res.status(500).json({ message: "Error al eliminar la categoría" });
+      next(error);
     }
   }
 }

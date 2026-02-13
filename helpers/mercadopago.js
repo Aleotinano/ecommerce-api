@@ -1,3 +1,5 @@
+export { createError } from "./error.js";
+
 export function createError(message, code) {
   const error = new Error(message);
   error.code = code;
