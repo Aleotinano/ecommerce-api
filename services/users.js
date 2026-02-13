@@ -2,7 +2,7 @@ import prisma from "../lib/prisma.js";
 import { hashPassword, verifyPassword } from "../helpers/password.js";
 
 export const UserModel = {
-  async register({ username, password, role }) {
+  async register({ username, password, email, role }) {
     const existingUser = await prisma.user.findUnique({
       where: { username },
     });
@@ -15,6 +15,7 @@ export const UserModel = {
     const data = {
       username: username,
       password: hashedPassword,
+      email: email,
       role: role,
     };
 

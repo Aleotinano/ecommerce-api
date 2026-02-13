@@ -11,6 +11,8 @@ export const registerSchema = z.object({
     .string({ required_error: "La contraseña es requerida" })
     .min(6, "La contraseña debe tener al menos 6 caracteres")
     .max(100, "La contraseña es demasiado larga"),
+
+  email: z.string({ required_error: "El email es requerido" }),
 });
 
 export const loginSchema = z.object({

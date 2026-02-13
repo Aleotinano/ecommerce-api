@@ -13,6 +13,7 @@ import { usersRouter } from "./routes/users.js";
 import { testRouter } from "./routes/test.js";
 import { cartRouter } from "./routes/cart.js";
 import { categoriesRouter } from "./routes/categories.js";
+import { mercadopagoRouter } from "./routes/mercadopago.js";
 
 // Middlewares
 import { middleWare } from "./middleware/cors.js";
@@ -29,6 +30,7 @@ app.use("/products", productosRouter);
 app.use("/categories", categoriesRouter);
 app.use("/cart", cartRouter);
 app.use("/users", roleRouter);
+app.use("/mercadopago", mercadopagoRouter);
 app.use("/auth", usersRouter);
 app.use("/test", testRouter);
 

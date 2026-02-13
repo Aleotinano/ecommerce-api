@@ -10,6 +10,7 @@ datasource db {
 model User {
   id       Int     @id @default(autoincrement())
   username String  @unique
+  email String @unique
   password String
   role     Role    @default(USER)
   cart     Cart?
@@ -69,6 +70,11 @@ model Order {
   updatedAt  DateTime    @updatedAt
   user       User        @relation(fields: [userId], references: [id])
   orderItems OrderItem[]
+
+  paymentStatus   PaymentStatus @default(PENDING)
+  paymentMethod   String?
+  mercadoPagoId   String?       @unique
+  preferenceId    String?
 }
 
 model OrderItem {
@@ -85,8 +91,17 @@ model OrderItem {
 
 enum OrderStatus {
   PENDING
+  PROCESSING
   COMPLETED
   CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING      
+  APPROVED     
+  REJECTED     
+  IN_PROCESS    
+  REFUNDED     
 }
 
 enum Role {
