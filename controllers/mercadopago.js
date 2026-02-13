@@ -39,38 +39,18 @@ export class mercadopagoController {
     }
   }
 
-  static async get(req, res) {
+  static async getWebhook(req, res) {
     try {
-      const { id } = req.params;
-      const { id: userId } = req.user;
+      const paymentId = req.body?.data?.id;
 
-      const payment = await mercadopagoModel.get({ id, userId });
+      if (!paymentId) return res.sendStatus(204);
 
-      if (!payment) {
-        return res.status(404).json({
-          success: false,
-          message: "No se encontró la orden",
-        });
-      }
+      const orderStatus = await mercadopagoModel.processWebhook({ paymentId });
 
-      return res.json({
-        success: true,
-        orden: {
-          id: payment.id,
-          status: payment.status,
-          paymentStatus: payment.paymentStatus,
-          total: payment.total,
-          mercadoPagoId: payment.mercadoPagoId,
-          preferenceId: payment.preferenceId,
-          createdAt: payment.createdAt,
-        },
-      });
+      return res.json({ orderStatus: orderStatus });
     } catch (error) {
-      console.error("❌ Error obteniendo orden:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Error al obtener la orden",
-      });
+      console.error("Error webhook:", error);
+      return res.sendStatus(500);
     }
   }
 }

@@ -1,5 +1,5 @@
 import prisma from "../lib/prisma.js";
-import { preference } from "../config/mercadoPago.js";
+import { preference, payment } from "../config/mercadoPago.js";
 import {
   createError,
   getBackUrls,
@@ -8,7 +8,7 @@ import {
 
 export const mercadopagoModel = {
   async create({ userId, orderId, payerEmail }) {
-    const cartOrder = await prisma.order.findFirst({
+    const order = await prisma.order.findFirst({
       where: { id: orderId, userId },
       include: {
         user: { select: { email: true } },
@@ -16,17 +16,17 @@ export const mercadopagoModel = {
       },
     });
 
-    if (!cartOrder) throw createError("Orden no encontrada", "ORDER_NOT_FOUND");
-    if (cartOrder.status === "CANCELLED")
+    if (!order) throw createError("Orden no encontrada", "ORDER_NOT_FOUND");
+    if (order.status === "CANCELLED")
       throw createError(
         "No se puede pagar una orden cancelada",
         "ORDER_CANCELLED"
       );
-    if (cartOrder.paymentStatus === "APPROVED")
+    if (order.paymentStatus === "APPROVED")
       throw createError("La orden ya fue pagada", "ORDER_ALREADY_PAID");
 
     // Convertimos los items de la orden al formato esperado por Mercado Pago.
-    const items = cartOrder.orderItems.map((item) => ({
+    const items = order.orderItems.map((item) => ({
       title: item.product.name,
       description: item.product.description,
       quantity: item.quantity,
@@ -40,10 +40,9 @@ export const mercadopagoModel = {
       auto_return: "approved",
       back_urls: getBackUrls(),
       payment_methods: getPaymentMethods(),
-      external_reference: String(cartOrder.id),
+      external_reference: Number(order.id),
+      notification_url: `${process.env.BASE_URL}/mercadopago/webhook`,
     };
-
-    console.log("MP body:", JSON.stringify(bodyMp, null, 2));
 
     try {
       const mpResponse = await preference.create({
@@ -52,7 +51,7 @@ export const mercadopagoModel = {
 
       // Guardamos el id de MP y dejamos la orden en proceso.
       await prisma.order.update({
-        where: { id: cartOrder.id },
+        where: { id: order.id },
         data: {
           mercadoPagoId: mpResponse?.id ? String(mpResponse.id) : null,
           preferenceId: mpResponse?.id ? String(mpResponse.id) : null,
@@ -70,21 +69,51 @@ export const mercadopagoModel = {
     }
   },
 
-  async get({ id, userId }) {
-    const order = await prisma.order.findFirst({
-      where: {
-        id: id,
-        userId: userId,
-      },
-      include: {
-        orderItems: {
-          include: {
-            product: true,
-          },
-        },
+  async processWebhook({ paymentId }) {
+    const paymentInfo = await payment.get({
+      id: paymentId,
+    });
+
+    if (paymentInfo.status !== "approved") {
+      console.log("Pago no aprobado todavía");
+      return;
+    }
+
+    const orderId = Number(paymentInfo.external_reference);
+
+    if (!orderId) {
+      throw new Error("External reference inválida");
+    }
+
+    // 4️⃣ Buscar orden
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+    });
+
+    if (!order) {
+      throw new Error("Orden no encontrada");
+    }
+
+    // 5️⃣ Idempotencia
+    if (order.status === "COMPLETED") {
+      throw new Error("Orden ya pagada");
+    }
+
+    // 6️⃣ Validación de monto
+    if (order.total !== paymentInfo.transaction_amount) {
+      throw new Error("Monto inválido");
+    }
+
+    // 7️⃣ Actualizar orden
+    await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        status: "COMPLETED",
+        paymentStatus: "APPROVED",
+        paymentId: String(paymentInfo.id),
       },
     });
 
-    return order;
+    return order.status;
   },
 };

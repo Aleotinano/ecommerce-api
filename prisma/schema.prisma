@@ -73,6 +73,7 @@ model Order {
 
   paymentStatus   PaymentStatus @default(PENDING)
   paymentMethod   String?
+  paymentId       String?
   mercadoPagoId   String?       @unique
   preferenceId    String?
 }
