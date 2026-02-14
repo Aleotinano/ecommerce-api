@@ -1,7 +1,7 @@
 import { CartModel } from "../services/cart.js";
 
 export class cartController {
-  static async getCart(req, res) {
+  static async getCart(req, res, next) {
     try {
       const { id } = req.user;
 
@@ -27,7 +27,7 @@ export class cartController {
     }
   }
 
-  static async add(req, res) {
+  static async add(req, res, next) {
     try {
       const { productId } = req.params;
       const { id } = req.user;
@@ -50,7 +50,7 @@ export class cartController {
     }
   }
 
-  static async remove(req, res) {
+  static async remove(req, res, next) {
     try {
       const { productId } = req.params;
       const { id } = req.user;
@@ -74,7 +74,7 @@ export class cartController {
     }
   }
 
-  static async clear(req, res) {
+  static async clear(req, res, next) {
     try {
       const { id } = req.user;
       const result = await CartModel.clear({ id });

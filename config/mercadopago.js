@@ -1,6 +1,7 @@
 import { MercadoPagoConfig, Preference, Payment } from "mercadopago";
+import { DEFAULTS } from "../config.js";
 
-const accessToken = process.env.ACCESS_TOKEN;
+const accessToken = DEFAULTS.ACCESS_TOKEN;
 
 if (!accessToken) {
   throw new Error("ACCESS_TOKEN no configurado en el entorno");

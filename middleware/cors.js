@@ -1,7 +1,7 @@
 import cors from "cors";
 import { DEFAULTS } from "../config.js";
 
-const ACCEPTED_ORIGINS = DEFAULTS.ORIGINS || ["*"];
+const ACCEPTED_ORIGINS = DEFAULTS.ORIGINS;
 
 export const middleWare = ({ acceptedOrigins = ACCEPTED_ORIGINS } = {}) => {
   return cors({
@@ -12,7 +12,7 @@ export const middleWare = ({ acceptedOrigins = ACCEPTED_ORIGINS } = {}) => {
         return callback(null, true);
       }
 
-      return callback(new Error("El origen no está permitido"));
+      return callback(new Error("El origen no esta permitido"));
     },
   });
 };

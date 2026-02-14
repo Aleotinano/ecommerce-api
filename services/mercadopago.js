@@ -2,6 +2,7 @@ import prisma from "../lib/prisma.js";
 import { preference, payment } from "../config/mercadoPago.js";
 import { getBackUrls, getPaymentMethods } from "../helpers/mercadopago.js";
 import { createError } from "../helpers/error.js";
+import { DEFAULTS } from "../config.js";
 
 export const mercadopagoModel = {
   async create({ userId, orderId, payerEmail }) {
@@ -44,7 +45,7 @@ export const mercadopagoModel = {
       back_urls: getBackUrls(),
       payment_methods: getPaymentMethods(),
       external_reference: Number(order.id),
-      notification_url: `${process.env.BASE_URL}/mercadopago/webhook`,
+      notification_url: `${DEFAULTS.BASE_URL}/mercadopago/webhook`,
     };
 
     try {

@@ -1,16 +1,10 @@
-export { createError } from "./error.js";
-
-export function createError(message, code) {
-  const error = new Error(message);
-  error.code = code;
-  return error;
-}
+import { DEFAULTS } from "../config.js";
 
 export function getBackUrls() {
   return {
-    success: `${process.env.BASE_URL}/mercadopago/success`,
-    failure: `${process.env.BASE_URL}/mercadopago/failure`,
-    pending: `${process.env.BASE_URL}/mercadopago/pending`,
+    success: `${DEFAULTS.BASE_URL}/mercadopago/success`,
+    failure: `${DEFAULTS.BASE_URL}/mercadopago/failure`,
+    pending: `${DEFAULTS.BASE_URL}/mercadopago/pending`,
   };
 }
 

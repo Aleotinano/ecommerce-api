@@ -2,7 +2,11 @@ import prisma from "../lib/prisma.js";
 import { hashPassword } from "../helpers/password.js";
 
 async function main() {
-  const { USERNAME, PASSWORD, EMAIL } = process.env;
+  const {
+    _USERNAME: USERNAME,
+    _PASSWORD: PASSWORD,
+    _EMAIL: EMAIL,
+  } = process.env;
 
   if (!USERNAME || !PASSWORD || !EMAIL) {
     throw new Error(

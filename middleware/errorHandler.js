@@ -1,7 +1,9 @@
+import { DEFAULTS } from "../config.js";
+
 export function errorHandler(err, req, res, next) {
   const statusCode = err.statusCode || 500;
   const code = err.code || "INTERNAL_ERROR";
-  const isProd = process.env.NODE_ENV === "production";
+  const isProd = DEFAULTS.NODE_ENV === "production";
 
   console.error("Error:", {
     message: err.message,
@@ -20,4 +22,14 @@ export function errorHandler(err, req, res, next) {
       ...(err.details !== undefined ? { details: err.details } : {}),
     },
   });
+}
+
+export function notFoundHandler(req, res, next) {
+  const error = new Error("Ruta no encontrada");
+  const { path } = req.originalUrl;
+
+  error.statusCode = 404;
+  error.code = "NOT_FOUND";
+  error.message = `ruta: ${path} `;
+  next(error);
 }
