@@ -1,6 +1,8 @@
 import prisma from "../lib/prisma.js";
 import { hashPassword, verifyPassword } from "../helpers/password.js";
 import { createError } from "../helpers/error.js";
+import jwt from "jsonwebtoken";
+import { DEFAULTS } from "../config.js";
 
 export const UserModel = {
   async register({ username, password, email, role }) {
@@ -37,5 +39,24 @@ export const UserModel = {
       throw createError("ContraseÃ±a incorrecta", "INVALID_PASSWORD", 401);
     }
     return user;
+  },
+
+  async me({ token }) {
+    if (!token) {
+      throw createError("No autenticado", "UNAUTHORIZED", 401);
+    }
+
+    try {
+      const data = jwt.verify(token, DEFAULTS.SECRET_JWT_KEY);
+
+      return {
+        id: data.id,
+        username: data.username,
+        email: data.email,
+        role: data.role,
+      };
+    } catch (error) {
+      throw createError("Token invalido", "INVALID_TOKEN", 401);
+    }
   },
 };

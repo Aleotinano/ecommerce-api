@@ -68,7 +68,29 @@ export class usersController {
     }
   }
 
+  static async me(req, res, next) {
+    try {
+      const token = req.cookies?.access_token;
+      const data = await UserModel.me({ token });
+
+      return res.json({
+        usuario: {
+          id: data.id,
+          username: data.username,
+          email: data.email,
+          role: data.role,
+        },
+      });
+    } catch (error) {
+      if (error.code === "UNAUTHORIZED" || error.code === "INVALID_TOKEN") {
+        return res.status(401).json({ message: error.message });
+      }
+
+      return next(error);
+    }
+  }
+
   static async logout(req, res) {
-    return res.clearCookie("access_token").json({ message: "SesiÃ³n cerrada" });
+    return res.clearCookie("access_token").json({ message: "Sesion cerrada" });
   }
 }
