@@ -3,6 +3,7 @@ import "dotenv/config";
 import express from "express";
 import helmet from "helmet";
 import compression from "compression";
+import morgan from "morgan";
 import cookieParser from "cookie-parser";
 
 import { DEFAULTS } from "./config.js";
@@ -29,6 +30,7 @@ app.use(cookieParser());
 app.use(middleWare());
 app.use(helmet());
 app.use(compression());
+app.use(morgan("tiny"));
 
 app.use("/orders", ordersRouter);
 app.use("/products", productosRouter);

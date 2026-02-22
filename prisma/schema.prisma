@@ -31,7 +31,7 @@ model Product {
   img         String?
   name        String
   description String?
-  price       Float?
+  price       Float
   stock       Int
   categoryId  Int?
   isActive    Boolean     @default(true)

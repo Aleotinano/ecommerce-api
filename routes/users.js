@@ -13,3 +13,4 @@ const validation = {
 usersRouter.post("/register", validation.register, usersController.register);
 usersRouter.post("/login", validation.login, usersController.login);
 usersRouter.post("/logout", usersController.logout);
+usersRouter.post("/me", usersController.me);

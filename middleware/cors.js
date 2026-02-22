@@ -14,5 +14,6 @@ export const middleWare = ({ acceptedOrigins = ACCEPTED_ORIGINS } = {}) => {
 
       return callback(new Error("El origen no esta permitido"));
     },
+    credentials: true,
   });
 };
