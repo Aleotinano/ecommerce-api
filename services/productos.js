@@ -2,7 +2,7 @@ import prisma from "../lib/prisma.js";
 import { createError } from "../helpers/error.js";
 
 export const ProductModel = {
-  async getAll({ name, price, categoryId, limit, offset }) {
+  async getAll({ name, price, categoryId, size, limit, offset }) {
     const where = {
       isActive: true,
     };
@@ -17,6 +17,10 @@ export const ProductModel = {
 
     if (categoryId !== undefined) {
       where.categoryId = { equals: categoryId };
+    }
+
+    if (size) {
+      where.size = size;
     }
 
     const search = {
@@ -41,12 +45,23 @@ export const ProductModel = {
     return product;
   },
 
-  async create({ name, description, categoryId, price, stock, img }) {
+  async create({
+    name,
+    description,
+    categoryId,
+    size,
+    color,
+    price,
+    stock,
+    img,
+  }) {
     const data = {
       name: name,
       description: description ?? null,
       price: price,
       categoryId: categoryId ?? null,
+      size: size ?? null,
+      color: color ?? null,
       stock: stock,
       img: img ?? null,
     };
@@ -54,7 +69,10 @@ export const ProductModel = {
     return prisma.product.create({ data });
   },
 
-  async edit({ id }, { name, description, categoryId, price, stock, img }) {
+  async edit(
+    { id },
+    { name, description, categoryId, size, color, price, stock, img }
+  ) {
     const existing = await prisma.product.findUnique({
       where: { id },
     });
@@ -66,6 +84,8 @@ export const ProductModel = {
       name: name,
       description: description,
       categoryId: categoryId,
+      size: size,
+      color: color,
       price: price,
       stock: stock,
       img: img,

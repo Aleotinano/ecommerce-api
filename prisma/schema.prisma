@@ -34,6 +34,8 @@ model Product {
   price       Float
   stock       Int
   categoryId  Int?
+  color       String?
+  size        String?
   isActive    Boolean     @default(true)
   cartItems   CartItem[]
   orderItems  OrderItem[]
