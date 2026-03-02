@@ -30,7 +30,7 @@ app.use(cookieParser());
 app.use(middleWare());
 app.use(helmet());
 app.use(compression());
-app.use(morgan("tiny"));
+app.use(morgan("dev"));
 
 app.use("/orders", ordersRouter);
 app.use("/products", productosRouter);

@@ -15,6 +15,8 @@ export const createProduct = z.object({
     .number({ required_error: "El precio es requerido" })
     .positive("El precio debe ser mayor a 0"),
 
+  categoryId: z.number().optional(),
+
   stock: z
     .number({ required_error: "El stock es requerido" })
     .int("El stock debe ser un número entero")
@@ -33,6 +35,7 @@ export const updateProduct = z
     name: z.string().min(1).max(100).optional(),
     description: z.string().max(400).optional(),
     price: z.number().positive().optional(),
+    categoryId: z.number().optional(),
     stock: z.number().int().min(0).optional(),
     img: z.string().optional(),
     isActive: z.boolean().optional(),
@@ -44,6 +47,7 @@ export const updateProduct = z
 export const productQuery = z.object({
   name: z.string().optional(),
   price: z.coerce.number().positive().optional(),
+  categoryId: z.coerce.number().int().positive().optional(),
   limit: z.coerce.number().int().positive().max(100).default(10),
   offset: z.coerce.number().int().min(0).default(0),
 });

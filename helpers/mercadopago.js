@@ -1,4 +1,30 @@
+import crypto from "node:crypto";
 import { DEFAULTS } from "../config.js";
+
+export function validateWebhookSignature({
+  signature,
+  requestId,
+  dataId,
+  secret,
+}) {
+  if (!signature || !secret) return false;
+
+  const parts = Object.fromEntries(
+    signature.split(",").map((p) => p.split("="))
+  );
+  const ts = parts["ts"];
+  const v1 = parts["v1"];
+
+  if (!ts || !v1) return false;
+
+  const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`;
+  const hash = crypto
+    .createHmac("sha256", secret)
+    .update(manifest)
+    .digest("hex");
+
+  return hash === v1;
+}
 
 export function getBackUrls() {
   return {

@@ -22,19 +22,9 @@ const validation = {
   id: validate({ params: validateId }),
 };
 
-productosRouter.get(
-  "/",
-  verifyToken,
-  validation.query,
-  productsController.getAll
-);
+productosRouter.get("/", validation.query, productsController.getAll);
 
-productosRouter.get(
-  "/:id",
-  verifyToken,
-  validation.id,
-  productsController.getById
-);
+productosRouter.get("/:id", validation.id, productsController.getById);
 
 productosRouter.post(
   "/",

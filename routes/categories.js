@@ -16,14 +16,9 @@ const validation = {
   id: validate({ params: validateId }),
 };
 
-categoriesRouter.get("/", verifyToken, categoriesController.getAll);
+categoriesRouter.get("/", categoriesController.getAll);
 
-categoriesRouter.get(
-  "/:id",
-  validation.id,
-  verifyToken,
-  categoriesController.getById
-);
+categoriesRouter.get("/:id", validation.id, categoriesController.getById);
 
 categoriesRouter.post(
   "/",

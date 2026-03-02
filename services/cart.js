@@ -12,8 +12,12 @@ export const CartModel = {
       },
     });
 
-    if (!cart || !cart.items || cart.items.length === 0) {
-      throw createError("El carrito esta vacio", "EMPTY_CART", 404);
+    if (!cart) {
+      return {
+        createdAt: null,
+        updatedAt: null,
+        items: [],
+      };
     }
 
     return cart;
@@ -79,9 +83,10 @@ export const CartModel = {
   async remove({ id, productId }) {
     const cart = await prisma.cart.findUnique({
       where: { userId: id },
+      select: { id: true },
     });
 
-    if (!cart || !cart.items || cart.items.length === 0) {
+    if (!cart) {
       throw createError("El carrito esta vacio", "EMPTY_CART", 404);
     }
 

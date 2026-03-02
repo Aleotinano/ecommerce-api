@@ -21,9 +21,6 @@ ordersRouter.post("/", verifyToken, OrderController.create);
 // Obtener todas órdenes de usuario
 ordersRouter.get("/", verifyToken, OrderController.getAll);
 
-// Obtener una orden específica del usuario
-ordersRouter.get("/:id", verifyToken, validation.id, OrderController.getById);
-
 // Obtener todas las órdenes
 ordersRouter.get(
   "/all",
@@ -31,6 +28,9 @@ ordersRouter.get(
   requireRole(roleRequired),
   OrderController.getUserOrders
 );
+
+// Obtener una orden específica del usuario
+ordersRouter.get("/:id", verifyToken, validation.id, OrderController.getById);
 
 // Actualizar el status de una orden
 ordersRouter.patch(

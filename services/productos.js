@@ -2,7 +2,7 @@ import prisma from "../lib/prisma.js";
 import { createError } from "../helpers/error.js";
 
 export const ProductModel = {
-  async getAll({ name, price, limit, offset }) {
+  async getAll({ name, price, categoryId, limit, offset }) {
     const where = {
       isActive: true,
     };
@@ -15,17 +15,24 @@ export const ProductModel = {
       where.price = { lte: price };
     }
 
+    if (categoryId !== undefined) {
+      where.categoryId = { equals: categoryId };
+    }
+
     const search = {
       where,
       take: limit,
       skip: offset,
+      orderBy: {
+        id: "asc",
+      },
     };
 
     return prisma.product.findMany(search);
   },
 
   async getById({ id }) {
-    const product = await prisma.product.findUnique({
+    const product = await prisma.product.findFirst({
       where: { id: id, isActive: true },
     });
     if (!product) {
@@ -34,11 +41,12 @@ export const ProductModel = {
     return product;
   },
 
-  async create({ name, description, price, stock, img }) {
+  async create({ name, description, categoryId, price, stock, img }) {
     const data = {
       name: name,
       description: description ?? null,
       price: price,
+      categoryId: categoryId ?? null,
       stock: stock,
       img: img ?? null,
     };
@@ -46,7 +54,7 @@ export const ProductModel = {
     return prisma.product.create({ data });
   },
 
-  async edit({ id }, { name, description, price, stock, img }) {
+  async edit({ id }, { name, description, categoryId, price, stock, img }) {
     const existing = await prisma.product.findUnique({
       where: { id },
     });
@@ -57,6 +65,7 @@ export const ProductModel = {
     const data = {
       name: name,
       description: description,
+      categoryId: categoryId,
       price: price,
       stock: stock,
       img: img,

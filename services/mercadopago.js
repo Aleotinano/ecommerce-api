@@ -109,7 +109,7 @@ export const mercadopagoModel = {
     }
 
     // 6️⃣ Validación de monto
-    if (order.total !== paymentInfo.transaction_amount) {
+    if (Number(order.total) !== Number(paymentInfo.transaction_amount)) {
       throw createError("Monto inválido", "AMOUNT_MISMATCH", 409);
     }
 

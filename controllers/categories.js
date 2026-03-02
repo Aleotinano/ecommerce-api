@@ -4,7 +4,7 @@ export class categoriesController {
   static async getAll(req, res) {
     try {
       const categories = await CategoryModel.getAll();
-      res.json({ categories: categories });
+      res.json(categories);
     } catch (error) {
       next(error);
     }

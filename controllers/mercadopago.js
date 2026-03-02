@@ -1,4 +1,5 @@
 import { mercadopagoModel } from "../services/mercadopago.js";
+import { validateWebhookSignature } from "../helpers/mercadopago.js";
 
 export class mercadopagoController {
   static async create(req, res, next) {
@@ -14,29 +15,36 @@ export class mercadopagoController {
 
       return res.status(201).json({
         message: "Link de pago creado",
-        init_point: mpOrder.sandbox_init_point,
+        init_point: mpOrder.init_point,
       });
     } catch (error) {
       next(error);
     }
   }
-
   static async getWebhook(req, res, next) {
     try {
       const paymentId = req.body?.data?.id;
       const eventType = req.body?.type;
 
-      if (!paymentId) {
-        return res.sendStatus(204);
-      }
+      if (!paymentId) return res.sendStatus(204);
+      if (eventType !== "payment") return res.sendStatus(200);
 
-      // Solo procesar eventos de payment
-      if (eventType !== "payment") {
-        return res.sendStatus(200);
+      // Validar firma en producción
+      if (process.env.MP_WEBHOOK_SECRET) {
+        const isValid = validateWebhookSignature({
+          signature: req.headers["x-signature"],
+          requestId: req.headers["x-request-id"],
+          dataId: paymentId,
+          secret: process.env.MP_WEBHOOK_SECRET,
+        });
+
+        if (!isValid) {
+          console.warn("[MP][webhook] Firma inválida");
+          return res.sendStatus(401);
+        }
       }
 
       const orderStatus = await mercadopagoModel.getWebhook({ paymentId });
-
       return res.json({ orderStatus });
     } catch (error) {
       next(error);

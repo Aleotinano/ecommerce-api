@@ -14,6 +14,7 @@ export class OrderController {
           id: order.id,
           user: username,
           status: order.status,
+          paymentStatus: order.paymentStatus,
           total: order.total,
           createdAt: order.createdAt,
           productos: order.orderItems.map((item) => ({
@@ -39,6 +40,7 @@ export class OrderController {
       const formattedOrders = orders.map((order) => ({
         id: order.id,
         status: order.status,
+        paymentStatus: order.paymentStatus,
         total: order.total,
         createdAt: order.createdAt,
         productos: order.orderItems.map((item) => ({
@@ -66,6 +68,7 @@ export class OrderController {
           username: order.user.username,
         },
         status: order.status,
+        paymentStatus: order.paymentStatus,
         total: order.total,
         createdAt: order.createdAt,
         productos: order.orderItems.map((item) => ({
@@ -96,6 +99,7 @@ export class OrderController {
         order: {
           id: order.id,
           status: order.status,
+          paymentStatus: order.paymentStatus,
           total: order.total,
           createdAt: order.createdAt,
           updatedAt: order.updatedAt,
@@ -136,6 +140,7 @@ export class OrderController {
         order: {
           id: order.id,
           status: order.status,
+          paymentStatus: order.paymentStatus,
           total: order.total,
           updatedAt: order.updatedAt,
         },
