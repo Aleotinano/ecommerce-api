@@ -7,7 +7,13 @@ export const CartModel = {
       where: { userId: id },
       include: {
         items: {
-          include: { product: true },
+          include: {
+            variant: {
+              include: {
+                product: true,
+              },
+            },
+          },
         },
       },
     });
@@ -23,17 +29,18 @@ export const CartModel = {
     return cart;
   },
 
-  async add({ id, productId }) {
-    const product = await prisma.product.findUnique({
-      where: { id: productId },
+  async add({ id, variantId }) {
+    const variant = await prisma.productVariant.findUnique({
+      where: { id: variantId },
+      include: { product: true },
     });
 
-    if (!product) {
-      throw createError("Producto no encontrado", "PRODUCT_NOT_FOUND", 404);
+    if (!variant) {
+      throw createError("Variante no encontrada", "VARIANT_NOT_FOUND", 404);
     }
 
-    if (!product.isActive) {
-      throw createError("Producto no disponible", "PRODUCT_NOT_FOUND", 404);
+    if (!variant.isActive || !variant.product?.isActive) {
+      throw createError("Variante no disponible", "VARIANT_NOT_AVAILABLE", 404);
     }
 
     const cart = await prisma.cart.upsert({
@@ -44,24 +51,24 @@ export const CartModel = {
 
     const existingCartItem = await prisma.cartItem.findUnique({
       where: {
-        cartId_productId: {
+        cartId_variantId: {
           cartId: cart.id,
-          productId: productId,
+          variantId,
         },
       },
     });
 
     const currentQuantity = existingCartItem?.quantity || 0;
 
-    if (currentQuantity + 1 > product.stock) {
+    if (currentQuantity + 1 > variant.stock) {
       throw createError("Stock insuficiente", "INSUFFICIENT_STOCK", 409);
     }
 
-    const productAdded = await prisma.cartItem.upsert({
+    const cartItem = await prisma.cartItem.upsert({
       where: {
-        cartId_productId: {
+        cartId_variantId: {
           cartId: cart.id,
-          productId: productId,
+          variantId,
         },
       },
       update: {
@@ -69,46 +76,61 @@ export const CartModel = {
       },
       create: {
         cartId: cart.id,
-        productId: productId,
+        variantId,
         quantity: 1,
       },
       include: {
-        product: true,
+        variant: {
+          include: {
+            product: true,
+          },
+        },
       },
     });
 
-    return productAdded;
+    return cartItem;
   },
 
-  async remove({ id, productId }) {
+  async remove({ id, variantId }) {
     const cart = await prisma.cart.findUnique({
       where: { userId: id },
       select: { id: true },
     });
 
     if (!cart) {
-      throw createError("El carrito esta vacio", "EMPTY_CART", 404);
+      throw createError("El carrito está vacío", "EMPTY_CART", 404);
     }
 
     const cartItem = await prisma.cartItem.findUnique({
       where: {
-        cartId_productId: {
+        cartId_variantId: {
           cartId: cart.id,
-          productId: productId,
+          variantId,
+        },
+      },
+      include: {
+        variant: {
+          include: {
+            product: true,
+          },
         },
       },
     });
 
     if (!cartItem) {
-      throw createError("No se encontrÃ³ el producto", "PRODUCT_NOT_FOUND", 404);
+      throw createError(
+        "No se encontró la variante en el carrito",
+        "VARIANT_NOT_FOUND",
+        404
+      );
     }
 
     if (cartItem.quantity === 1) {
       await prisma.cartItem.delete({
         where: {
-          cartId_productId: {
+          cartId_variantId: {
             cartId: cart.id,
-            productId: productId,
+            variantId,
           },
         },
       });
@@ -118,16 +140,20 @@ export const CartModel = {
 
     const updated = await prisma.cartItem.update({
       where: {
-        cartId_productId: {
+        cartId_variantId: {
           cartId: cart.id,
-          productId: productId,
+          variantId,
         },
       },
       data: {
         quantity: { decrement: 1 },
       },
       include: {
-        product: true,
+        variant: {
+          include: {
+            product: true,
+          },
+        },
       },
     });
 
@@ -140,7 +166,7 @@ export const CartModel = {
     });
 
     if (!cart) {
-      throw createError("El carrito esta vacio", "EMPTY_CART", 404);
+      throw createError("El carrito está vacío", "EMPTY_CART", 404);
     }
 
     const deleted = await prisma.cartItem.deleteMany({

@@ -1,7 +1,7 @@
 import { CategoryModel } from "../services/categories.js";
 
 export class categoriesController {
-  static async getAll(req, res) {
+  static async getAll(req, res, next) {
     try {
       const categories = await CategoryModel.getAll();
       res.json(categories);
@@ -10,7 +10,7 @@ export class categoriesController {
     }
   }
 
-  static async getById(req, res) {
+  static async getById(req, res, next) {
     try {
       const { id } = req.params;
       const category = await CategoryModel.getById({ id });
@@ -21,7 +21,7 @@ export class categoriesController {
     }
   }
 
-  static async create(req, res) {
+  static async create(req, res, next) {
     try {
       const { name, description, isActive, icon } = req.body;
 
@@ -41,7 +41,7 @@ export class categoriesController {
     }
   }
 
-  static async edit(req, res) {
+  static async edit(req, res, next) {
     try {
       const { id } = req.params;
       const { name, description, isActive, icon } = req.body;

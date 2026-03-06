@@ -1,7 +1,6 @@
 import { OrderModel } from "../services/orders.js";
 
 export class OrderController {
-  // CREAR ORDEN
   static async create(req, res, next) {
     try {
       const { id, username } = req.user;
@@ -18,10 +17,12 @@ export class OrderController {
           total: order.total,
           createdAt: order.createdAt,
           productos: order.orderItems.map((item) => ({
-            nombre: item.product.name,
+            nombre: item.variant.product?.name ?? item.variant.sku,
             cantidad: item.quantity,
             precio: item.price,
             subtotal: item.price * item.quantity,
+            color: item.variant.color,
+            size: item.variant.size,
           })),
         },
       });
@@ -30,7 +31,6 @@ export class OrderController {
     }
   }
 
-  // VER Ã“RDENES
   static async getAll(req, res, next) {
     try {
       const { id } = req.user;
@@ -44,9 +44,11 @@ export class OrderController {
         total: order.total,
         createdAt: order.createdAt,
         productos: order.orderItems.map((item) => ({
-          nombre: item.product.name,
+          nombre: item.variant.product?.name ?? item.variant.sku,
           cantidad: item.quantity,
           precio: item.price,
+          color: item.variant.color,
+          size: item.variant.size,
         })),
       }));
 
@@ -56,7 +58,6 @@ export class OrderController {
     }
   }
 
-  // TODAS LAS ORDENES DE USUARIOS
   static async getUserOrders(req, res, next) {
     try {
       const orders = await OrderModel.getUserOrders();
@@ -72,9 +73,11 @@ export class OrderController {
         total: order.total,
         createdAt: order.createdAt,
         productos: order.orderItems.map((item) => ({
-          nombre: item.product.name,
+          nombre: item.variant.product?.name ?? item.variant.sku,
           cantidad: item.quantity,
           precio: item.price,
+          color: item.variant.color,
+          size: item.variant.size,
         })),
       }));
 
@@ -84,7 +87,6 @@ export class OrderController {
     }
   }
 
-  // VER ORDEN POR ID
   static async getById(req, res, next) {
     try {
       const { id: userId } = req.user;
@@ -104,11 +106,14 @@ export class OrderController {
           createdAt: order.createdAt,
           updatedAt: order.updatedAt,
           productos: order.orderItems.map((item) => ({
-            nombre: item.product.name,
-            description: item.product.description,
+            nombre: item.variant.product?.name ?? item.variant.sku,
+            description: item.variant.product?.description,
             cantidad: item.quantity,
             precioUnitario: item.price,
             subtotal: item.price * item.quantity,
+            color: item.variant.color,
+            size: item.variant.size,
+            image: item.variant.img ?? item.variant.product?.img ?? null,
           })),
         },
       });
@@ -117,7 +122,6 @@ export class OrderController {
     }
   }
 
-  // ACTUALIZAR STATUS DE ORDEN
   static async update(req, res, next) {
     try {
       const { id: orderId } = req.params;
@@ -127,7 +131,7 @@ export class OrderController {
         orderId,
         status,
       });
-      // Mensajes dinÃ¡micos correctos
+
       const statusMessages = {
         COMPLETED: "completada",
         CANCELLED: "cancelada",
@@ -136,7 +140,6 @@ export class OrderController {
 
       return res.json({
         message: `Orden ${statusMessages[status]} exitosamente`,
-
         order: {
           id: order.id,
           status: order.status,

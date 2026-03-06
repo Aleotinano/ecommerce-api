@@ -3,13 +3,24 @@ import { ProductModel } from "../services/productos.js";
 export class productsController {
   static async getAll(req, res, next) {
     try {
-      const { name, price, categoryId, size, limit, offset } = req.search;
+      const {
+        name,
+        categoryId,
+        variantColor,
+        variantSize,
+        minPrice,
+        maxPrice,
+        limit,
+        offset,
+      } = req.search;
 
       const pagination = await ProductModel.getAll({
         name,
-        price,
         categoryId,
-        size,
+        variantColor,
+        variantSize,
+        minPrice,
+        maxPrice,
         limit,
         offset,
       });
@@ -33,18 +44,22 @@ export class productsController {
 
   static async create(req, res, next) {
     try {
-      const { name, description, categoryId, size, color, price, stock, img } =
-        req.body;
+      const {
+        name,
+        description,
+        categoryId,
+        img,
+        isActive,
+        variants,
+      } = req.body;
 
       const newProduct = await ProductModel.create({
         name,
         description,
         categoryId,
-        size,
-        color,
-        price,
-        stock,
         img,
+        isActive,
+        variants,
       });
 
       return res
@@ -58,20 +73,16 @@ export class productsController {
   static async edit(req, res, next) {
     try {
       const { id } = req.params;
-      const { name, description, categoryId, size, color, price, stock, img } =
-        req.body;
+      const { name, description, categoryId, img, isActive } = req.body;
 
       const updatedProduct = await ProductModel.edit(
         { id },
         {
           name,
           description,
-          price,
           categoryId,
-          size,
-          color,
-          stock,
           img,
+          isActive,
         }
       );
 

@@ -6,3 +6,4 @@ nota.md
 .vscode
 .agents
 ngrok.exe
+pnpm-workspace.yaml

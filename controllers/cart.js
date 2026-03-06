@@ -12,9 +12,24 @@ export class cartController {
         updated: cart.updatedAt,
       };
 
-      const productsInCart = cart.items.map((i) => ({
-        product: i.product,
-        quantity: i.quantity,
+      const productsInCart = cart.items.map((item) => ({
+        variant: {
+          id: item.variant.id,
+          color: item.variant.color,
+          size: item.variant.size,
+          price: item.variant.price,
+          stock: item.variant.stock,
+          sku: item.variant.sku,
+          img: item.variant.img ?? item.variant.product?.img ?? null,
+          product: item.variant.product
+            ? {
+                id: item.variant.product.id,
+                name: item.variant.product.name,
+                img: item.variant.product.img,
+              }
+            : null,
+        },
+        quantity: item.quantity,
       }));
 
       return res.json({
@@ -29,18 +44,24 @@ export class cartController {
 
   static async add(req, res, next) {
     try {
-      const { productId } = req.params;
+      const { variantId } = req.params;
       const { id } = req.user;
 
-      const cartItem = await CartModel.add({ id, productId });
+      const cartItem = await CartModel.add({ id, variantId });
 
       const { quantity } = cartItem;
-      const { stock } = cartItem.product;
+      const { stock } = cartItem.variant;
 
       return res.status(201).json({
-        message: "Producto agregado al carrito",
+        message: "Variante agregada al carrito",
         data: {
-          producto: cartItem.product.name,
+          producto: cartItem.variant.product?.name,
+          variant: {
+            id: cartItem.variant.id,
+            color: cartItem.variant.color,
+            size: cartItem.variant.size,
+            sku: cartItem.variant.sku,
+          },
           cantidad: quantity,
           stockRestante: stock - quantity,
         },
@@ -52,14 +73,14 @@ export class cartController {
 
   static async remove(req, res, next) {
     try {
-      const { productId } = req.params;
+      const { variantId } = req.params;
       const { id } = req.user;
 
-      const result = await CartModel.remove({ id, productId });
+      const result = await CartModel.remove({ id, variantId });
 
       if (result.deleted) {
         return res.json({
-          message: "Producto eliminado del carrito completamente",
+          message: "Variante eliminada del carrito completamente",
         });
       }
 

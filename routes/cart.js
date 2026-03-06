@@ -2,27 +2,27 @@ import { Router } from "express";
 import { cartController } from "../controllers/cart.js";
 import { verifyToken } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
-import { productId } from "../schemas/product.schema.js";
+import { variantId } from "../schemas/variant.schema.js";
 
 export const cartRouter = Router();
 
 const validation = {
-  productId: validate({ params: productId }),
+  variantId: validate({ params: variantId }),
 };
 
 cartRouter.get("/", verifyToken, cartController.getCart);
 
 cartRouter.post(
-  "/:productId",
+  "/:variantId",
   verifyToken,
-  validation.productId,
+  validation.variantId,
   cartController.add
 );
 
 cartRouter.patch(
-  "/:productId",
+  "/:variantId",
   verifyToken,
-  validation.productId,
+  validation.variantId,
   cartController.remove
 );
 

@@ -27,19 +27,29 @@ model Categories {
 }
 
 model Product {
-  id          Int         @id @default(autoincrement())
+  id          Int              @id @default(autoincrement())
   img         String?
   name        String
   description String?
-  price       Float
-  stock       Int
   categoryId  Int?
-  color       String?
-  size        String?
-  isActive    Boolean     @default(true)
-  cartItems   CartItem[]
-  orderItems  OrderItem[]
-  category    Categories? @relation(fields: [categoryId], references: [id])
+  isActive    Boolean          @default(true)
+  variants    ProductVariant[]
+  category    Categories?      @relation(fields: [categoryId], references: [id])
+}
+
+model ProductVariant {
+  id        Int        @id @default(autoincrement())
+  productId Int
+  color     String?
+  size      String?
+  price     Float
+  stock     Int
+  sku       String     @unique
+  img       String?
+  isActive  Boolean    @default(true)
+  product   Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  cartItems CartItem[]
+  orderItems OrderItem[]
 }
 
 model Cart {
@@ -52,15 +62,15 @@ model Cart {
 }
 
 model CartItem {
-  id        Int      @id @default(autoincrement())
+  id        Int             @id @default(autoincrement())
   cartId    Int
-  productId Int
-  quantity  Int      @default(1)
-  createdAt DateTime @default(now())
-  cart      Cart     @relation(fields: [cartId], references: [id])
-  product   Product  @relation(fields: [productId], references: [id])
+  variantId Int
+  quantity  Int             @default(1)
+  createdAt DateTime        @default(now())
+  cart      Cart            @relation(fields: [cartId], references: [id])
+  variant   ProductVariant  @relation(fields: [variantId], references: [id])
 
-  @@unique([cartId, productId])
+  @@unique([cartId, variantId])
 }
 
 model Order {
@@ -81,15 +91,15 @@ model Order {
 }
 
 model OrderItem {
-  id        Int     @id @default(autoincrement())
+  id        Int             @id @default(autoincrement())
   orderId   Int
-  productId Int
+  variantId Int
   quantity  Int
   price     Float
-  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product   Product @relation(fields: [productId], references: [id])
+  order     Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variant   ProductVariant  @relation(fields: [variantId], references: [id])
 
-  @@unique([orderId, productId])
+  @@unique([orderId, variantId])
 }
 
 enum OrderStatus {

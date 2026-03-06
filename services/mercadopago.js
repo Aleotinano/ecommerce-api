@@ -3,6 +3,14 @@ import { preference, payment } from "../config/mercadoPago.js";
 import { getBackUrls, getPaymentMethods } from "../helpers/mercadopago.js";
 import { createError } from "../helpers/error.js";
 import { DEFAULTS } from "../config.js";
+import { OrderModel } from "./orders.js";
+
+const buildMpItemTitle = ({ productName, color, size }) => {
+  const descriptors = [productName].filter(Boolean);
+  if (color) descriptors.push(color);
+  if (size) descriptors.push(size);
+  return descriptors.join(" - ") || "Variante";
+};
 
 export const mercadopagoModel = {
   async create({ userId, orderId, payerEmail }) {
@@ -14,7 +22,15 @@ export const mercadopagoModel = {
       where: { id: orderId, userId },
       include: {
         user: { select: { email: true } },
-        orderItems: { include: { product: true } },
+        orderItems: {
+          include: {
+            variant: {
+              include: {
+                product: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -29,14 +45,24 @@ export const mercadopagoModel = {
     if (order.paymentStatus === "APPROVED")
       throw createError("La orden ya fue pagada", "ORDER_ALREADY_PAID", 409);
 
-    // Convertimos los items de la orden al formato esperado por Mercado Pago.
-    const items = order.orderItems.map((item) => ({
-      title: item.product.name,
-      description: item.product.description,
-      quantity: item.quantity,
-      unit_price: Number(item.product.price.toFixed(2)),
-      currency_id: "ARS",
-    }));
+    const items = order.orderItems.map((item) => {
+      const variant = item.variant;
+      const productName = variant.product?.name ?? variant.sku;
+
+      return {
+        title: buildMpItemTitle({
+          productName,
+          color: variant.color,
+          size: variant.size,
+        }),
+        description: variant.product?.description ?? productName,
+        quantity: item.quantity,
+        unit_price: Number(item.price.toFixed(2)),
+        currency_id: "ARS",
+        sku: variant.sku,
+        picture_url: variant.img ?? variant.product?.img ?? undefined,
+      };
+    });
 
     const bodyMp = {
       items,
@@ -53,7 +79,6 @@ export const mercadopagoModel = {
         body: bodyMp,
       });
 
-      // Guardamos el id de MP y dejamos la orden en proceso.
       await prisma.order.update({
         where: { id: order.id },
         data: {
@@ -80,7 +105,7 @@ export const mercadopagoModel = {
     });
 
     if (paymentInfo.status !== "approved") {
-      console.log("Pago no aprobado todavía");
+      console.log("Pago no aprobado todav�a");
       return;
     }
 
@@ -88,13 +113,12 @@ export const mercadopagoModel = {
 
     if (!orderId) {
       throw createError(
-        "External reference inválida",
+        "External reference inv�lida",
         "INVALID_EXTERNAL_REFERENCE",
         400
       );
     }
 
-    // 4️⃣ Buscar orden
     const order = await prisma.order.findUnique({
       where: { id: orderId },
     });
@@ -103,26 +127,23 @@ export const mercadopagoModel = {
       throw createError("Orden no encontrada", "ORDER_NOT_FOUND", 404);
     }
 
-    // 5️⃣ Idempotencia
     if (order.status === "COMPLETED") {
       throw createError("Orden ya pagada", "ORDER_ALREADY_PAID", 409);
     }
 
-    // 6️⃣ Validación de monto
     if (Number(order.total) !== Number(paymentInfo.transaction_amount)) {
-      throw createError("Monto inválido", "AMOUNT_MISMATCH", 409);
+      throw createError("Monto inv�lido", "AMOUNT_MISMATCH", 409);
     }
 
-    // 7️⃣ Actualizar orden
-    await prisma.order.update({
-      where: { id: orderId },
-      data: {
-        status: "COMPLETED",
+    await OrderModel.updateOrderStatus({
+      orderId,
+      status: "COMPLETED",
+      extraData: {
         paymentStatus: "APPROVED",
         paymentId: String(paymentInfo.id),
       },
     });
 
-    return order.status;
+    return "COMPLETED";
   },
 };
