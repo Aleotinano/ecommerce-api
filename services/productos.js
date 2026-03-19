@@ -53,12 +53,14 @@ export const ProductModel = {
       where.categoryId = categoryId;
     }
 
-    const { filter: variantFilter, hasAdditionalCriteria } = buildVariantFilter({
-      color: variantColor,
-      size: variantSize,
-      minPrice,
-      maxPrice,
-    });
+    const { filter: variantFilter, hasAdditionalCriteria } = buildVariantFilter(
+      {
+        color: variantColor,
+        size: variantSize,
+        minPrice,
+        maxPrice,
+      }
+    );
 
     if (hasAdditionalCriteria) {
       where.variants = { some: variantFilter };
@@ -76,6 +78,28 @@ export const ProductModel = {
       skip: offset,
       orderBy: { id: "asc" },
     });
+  },
+
+  async getVariantOptions() {
+    const [colors, sizes] = await Promise.all([
+      prisma.productVariant.findMany({
+        where: { isActive: true, color: { not: null } },
+        select: { color: true },
+        distinct: ["color"],
+        orderBy: { color: "asc" },
+      }),
+      prisma.productVariant.findMany({
+        where: { isActive: true, size: { not: null } },
+        select: { size: true },
+        distinct: ["size"],
+        orderBy: { size: "asc" },
+      }),
+    ]);
+
+    return {
+      colors: colors.map((v) => v.color),
+      sizes: sizes.map((v) => v.size),
+    };
   },
 
   async getById({ id }) {
@@ -96,14 +120,7 @@ export const ProductModel = {
     return product;
   },
 
-  async create({
-    name,
-    description,
-    categoryId,
-    img,
-    isActive,
-    variants,
-  }) {
+  async create({ name, description, categoryId, img, isActive, variants }) {
     const data = {
       name,
       description: description ?? null,
@@ -135,10 +152,7 @@ export const ProductModel = {
     });
   },
 
-  async edit(
-    { id },
-    { name, description, categoryId, img, isActive }
-  ) {
+  async edit({ id }, { name, description, categoryId, img, isActive }) {
     const existing = await prisma.product.findUnique({
       where: { id },
     });

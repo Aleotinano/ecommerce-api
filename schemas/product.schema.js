@@ -1,37 +1,27 @@
 import { z } from "zod";
 
 const variantSchema = z.object({
-  size: z.string().min(1, "El tamaÒo es requerido"),
-  color: z.string().min(1, "El color es requerido"),
-  price: z
+  size: z.string().nullable().optional(),
+  color: z.string().nullable().optional(),
+  price: z.coerce
     .number({ required_error: "El precio es requerido" })
     .positive("El precio debe ser mayor a 0"),
-  stock: z
+  stock: z.coerce
     .number({ required_error: "El stock es requerido" })
-    .int("El stock debe ser un n˙mero entero")
-    .min(0, "El stock no puede ser negativo"),
+    .int()
+    .min(0),
   sku: z.string().min(1, "El SKU es requerido"),
-  img: z.string().optional(),
+  img: z.string().nullable().optional(),
   isActive: z.boolean().optional(),
 });
 
 export const createProduct = z.object({
-  name: z
-    .string({ required_error: "El nombre es requerido" })
-    .min(1, "El nombre no puede estar vacÌo")
-    .max(100, "El nombre es demasiado largo"),
-  description: z
-    .string()
-    .max(400, "La descripciÛn es demasiado larga")
-    .optional(),
-  categoryId: z.number().int().positive().optional(),
-  img: z.string().optional(),
-  isActive: z
-    .boolean({ invalid_type_error: "El valor debe ser booleano" })
-    .optional(),
-  variants: z
-    .array(variantSchema)
-    .min(1, "Debe incluir al menos una variante"),
+  name: z.string({ required_error: "El nombre es requerido" }).min(1).max(100),
+  description: z.string().max(400).nullable().optional(),
+  categoryId: z.coerce.number().int().positive().nullable().optional(),
+  img: z.string().nullable().optional(),
+  isActive: z.boolean().optional(),
+  variants: z.array(variantSchema).min(1, "Debe incluir al menos una variante"),
 });
 
 export const updateProduct = z
@@ -46,25 +36,30 @@ export const updateProduct = z
     message: "Debe proporcionar al menos un campo para actualizar",
   });
 
-export const productQuery = z.object({
-  name: z.string().optional(),
-  categoryId: z.coerce.number().int().positive().optional(),
-  variantColor: z.string().optional(),
-  variantSize: z.string().optional(),
-  minPrice: z.coerce.number().positive().optional(),
-  maxPrice: z.coerce.number().positive().optional(),
-  limit: z.coerce.number().int().positive().max(100).default(10),
-  offset: z.coerce.number().int().min(0).default(0),
-}).refine((data) => {
-  if (
-    data.minPrice !== undefined &&
-    data.maxPrice !== undefined &&
-    data.minPrice > data.maxPrice
-  ) {
-    return false;
-  }
-  return true;
-}, {
-  message: "El precio mÌnimo no puede ser mayor al m·ximo",
-  path: ["maxPrice"],
-});
+export const productQuery = z
+  .object({
+    name: z.string().optional(),
+    categoryId: z.coerce.number().int().positive().optional(),
+    variantColor: z.string().optional(),
+    variantSize: z.string().optional(),
+    minPrice: z.coerce.number().positive().optional(),
+    maxPrice: z.coerce.number().positive().optional(),
+    limit: z.coerce.number().int().positive().max(100).default(10),
+    offset: z.coerce.number().int().min(0).default(0),
+  })
+  .refine(
+    (data) => {
+      if (
+        data.minPrice !== undefined &&
+        data.maxPrice !== undefined &&
+        data.minPrice > data.maxPrice
+      ) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: "El precio m√≠nimo no puede ser mayor al m√°ximo",
+      path: ["maxPrice"],
+    }
+  );

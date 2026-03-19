@@ -24,6 +24,8 @@ const validation = {
 
 productosRouter.get("/", validation.query, productsController.getAll);
 
+productosRouter.get("/options", productsController.getVariantOptions);
+
 productosRouter.get("/:id", validation.id, productsController.getById);
 
 productosRouter.post(

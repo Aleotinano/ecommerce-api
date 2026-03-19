@@ -11,6 +11,7 @@ import { DEFAULTS } from "./config.js";
 // rutas
 import { ordersRouter } from "./routes/orders.js";
 import { productosRouter } from "./routes/productos.js";
+import { variantRouter } from "./routes/variants.js";
 import { roleRouter } from "./routes/role.js";
 import { usersRouter } from "./routes/users.js";
 import { testRouter } from "./routes/test.js";
@@ -33,7 +34,8 @@ app.use(compression());
 app.use(morgan("dev"));
 
 app.use("/orders", ordersRouter);
-app.use("/products", productosRouter);
+app.use("/products/", productosRouter);
+app.use("/variants", variantRouter);
 app.use("/categories", categoriesRouter);
 app.use("/cart", cartRouter);
 app.use("/users", roleRouter);

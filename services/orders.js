@@ -16,11 +16,7 @@ const orderItemsInclude = {
 const ensureHasVariants = (items) => {
   for (const item of items) {
     if (!item.variant) {
-      throw createError(
-        "Variante no encontrada",
-        "VARIANT_NOT_FOUND",
-        404,
-      );
+      throw createError("Variante no encontrada", "VARIANT_NOT_FOUND", 404);
     }
   }
 };
@@ -53,7 +49,7 @@ export const OrderModel = {
         const error = createError(
           "Variante no disponible",
           "VARIANT_NOT_AVAILABLE",
-          400,
+          400
         );
         error.details = {
           variant: item.variant.id,
@@ -65,7 +61,7 @@ export const OrderModel = {
         const error = createError(
           "Producto no disponible",
           "PRODUCT_NOT_AVAILABLE",
-          400,
+          400
         );
         error.details = {
           product: item.variant.product?.name ?? null,
@@ -77,7 +73,7 @@ export const OrderModel = {
         const error = createError(
           "Stock insuficiente",
           "INSUFFICIENT_STOCK",
-          409,
+          409
         );
         error.details = {
           variant: item.variant.id,
@@ -130,10 +126,6 @@ export const OrderModel = {
       },
     });
 
-    if (!orders || orders.length === 0) {
-      throw createError("No tienes �rdenes todav�a", "ORDERS_NOT_FOUND", 404);
-    }
-
     return orders;
   },
 
@@ -170,7 +162,7 @@ export const OrderModel = {
     });
 
     if (!orders || orders.length === 0) {
-      throw createError("No hay �rdenes registradas", "ORDERS_NOT_FOUND", 404);
+      return [];
     }
 
     return orders;
@@ -187,11 +179,19 @@ export const OrderModel = {
     }
 
     if (order.status === "COMPLETED") {
-      throw createError("No se puede modificar una orden completada", "ORDER_ALREADY_COMPLETED", 409);
+      throw createError(
+        "No se puede modificar una orden completada",
+        "ORDER_ALREADY_COMPLETED",
+        409
+      );
     }
 
     if (order.status === "CANCELLED") {
-      throw createError("No se puede modificar una orden cancelada", "ORDER_ALREADY_CANCELLED", 409);
+      throw createError(
+        "No se puede modificar una orden cancelada",
+        "ORDER_ALREADY_CANCELLED",
+        409
+      );
     }
 
     if (order.status === status) {
@@ -201,7 +201,11 @@ export const OrderModel = {
     if (status === "COMPLETED") {
       for (const item of order.orderItems) {
         if (item.quantity > item.variant.stock) {
-          const error = createError("Stock insuficiente", "INSUFFICIENT_STOCK", 409);
+          const error = createError(
+            "Stock insuficiente",
+            "INSUFFICIENT_STOCK",
+            409
+          );
           error.details = {
             variant: item.variant.id,
             solicitado: item.quantity,
@@ -248,6 +252,10 @@ export const OrderModel = {
       return updatedOrder;
     }
 
-    throw createError("Transici�n de estado no permitida", "INVALID_STATUS_TRANSITION", 400);
+    throw createError(
+      "Transici�n de estado no permitida",
+      "INVALID_STATUS_TRANSITION",
+      400
+    );
   },
 };

@@ -31,6 +31,15 @@ export class productsController {
     }
   }
 
+  static async getVariantOptions(req, res, next) {
+    try {
+      const options = await ProductModel.getVariantOptions();
+      return res.json(options);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async getById(req, res, next) {
     try {
       const { id } = req.params;
@@ -44,14 +53,8 @@ export class productsController {
 
   static async create(req, res, next) {
     try {
-      const {
-        name,
-        description,
-        categoryId,
-        img,
-        isActive,
-        variants,
-      } = req.body;
+      const { name, description, categoryId, img, isActive, variants } =
+        req.body;
 
       const newProduct = await ProductModel.create({
         name,

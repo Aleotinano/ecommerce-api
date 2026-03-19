@@ -21,7 +21,7 @@ model Categories {
   id          Int       @id @default(autoincrement())
   name        String    @unique
   description String?
-  icon        Boolean?
+  icon        String?
   isActive    Boolean   @default(true)
   products    Product[]
 }
