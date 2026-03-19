@@ -1,46 +1,46 @@
+import { cleanupUploadedImage } from "./upload.js";
+
 export const validate = (schemas) => {
   return (req, res, next) => {
+    const fail = (status, message, errors) => {
+      void cleanupUploadedImage(req);
+      return res.status(status).json({ message, errors });
+    };
+
     try {
-      // Validar body
       if (schemas.body) {
         const result = schemas.body.safeParse(req.body);
         if (!result.success) {
-          return res.status(400).json({
-            message: "Error de validación",
-            errors: result.error.flatten().fieldErrors,
-          });
+          return fail(400, "Error de validacion", result.error.flatten().fieldErrors);
         }
         req.body = result.data;
       }
 
-      // Validar params
       if (schemas.params) {
         const result = schemas.params.safeParse(req.params);
         if (!result.success) {
-          return res.status(400).json({
-            message: "Error de validación en parámetros",
-            errors: result.error.flatten().fieldErrors,
-          });
+          return fail(
+            400,
+            "Error de validacion en parametros",
+            result.error.flatten().fieldErrors
+          );
         }
         req.params = result.data;
       }
 
-      // Validar query
       if (schemas.query) {
         const result = schemas.query.safeParse(req.query);
         if (!result.success) {
-          return res.status(400).json({
-            message: "Error de validación en query",
-            errors: result.error.flatten().fieldErrors,
-          });
+          return fail(400, "Error de validacion en query", result.error.flatten().fieldErrors);
         }
         req.search = result.data;
       }
 
       next();
     } catch (error) {
+      void cleanupUploadedImage(req);
       return res.status(500).json({
-        message: "Error interno de validación",
+        message: "Error interno de validacion",
         error: error.message,
       });
     }

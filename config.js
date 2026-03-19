@@ -1,3 +1,5 @@
+import "dotenv/config";
+
 import { envSchema } from "./schemas/env.schema.js";
 
 const env = envSchema.parse(process.env);
@@ -11,6 +13,7 @@ export const DEFAULTS = {
   DATABASE_URL: env.DATABASE_URL,
   PUBLIC_KEY: env.PUBLIC_KEY,
   ACCESS_TOKEN: env.ACCESS_TOKEN,
+  CLOUDINARY_FOLDER: env.CLOUDINARY_FOLDER,
   SALT_ROUNDS: 10,
   LIMIT: 10,
   OFFSET: 0,

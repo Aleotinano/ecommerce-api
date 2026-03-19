@@ -1,3 +1,6 @@
+import prisma from "../lib/prisma.js";
+import { createError } from "../helpers/error.js";
+
 export const VariantModel = {
   async getVariants({ productId }) {
     const product = await prisma.product.findUnique({
@@ -14,6 +17,18 @@ export const VariantModel = {
     });
   },
 
+  async getByIdForManagement({ productId, variantId }) {
+    const variant = await prisma.productVariant.findFirst({
+      where: { id: variantId, productId },
+    });
+
+    if (!variant) {
+      throw createError("Variante no encontrada", "VARIANT_NOT_FOUND", 404);
+    }
+
+    return variant;
+  },
+
   async createVariant({
     productId,
     color,
@@ -22,6 +37,7 @@ export const VariantModel = {
     stock,
     sku,
     img,
+    imgPublicId,
     isActive,
   }) {
     const product = await prisma.product.findUnique({
@@ -37,11 +53,7 @@ export const VariantModel = {
     });
 
     if (existing) {
-      throw createError(
-        "Ya existe una variante con ese SKU",
-        "SKU_DUPLICATE",
-        409
-      );
+      throw createError("Ya existe una variante con ese SKU", "SKU_DUPLICATE", 409);
     }
 
     return prisma.productVariant.create({
@@ -53,6 +65,7 @@ export const VariantModel = {
         stock,
         sku,
         img: img ?? null,
+        imgPublicId: imgPublicId ?? null,
         isActive: isActive ?? true,
       },
     });
@@ -60,32 +73,23 @@ export const VariantModel = {
 
   async editVariant(
     { productId, variantId },
-    { color, size, price, stock, sku, img, isActive }
+    { color, size, price, stock, sku, img, imgPublicId, isActive }
   ) {
-    const variant = await prisma.productVariant.findFirst({
-      where: { id: variantId, productId },
-    });
-
-    if (!variant) {
-      throw createError("Variante no encontrada", "VARIANT_NOT_FOUND", 404);
-    }
+    const variant = await this.getByIdForManagement({ productId, variantId });
 
     if (sku && sku !== variant.sku) {
       const duplicate = await prisma.productVariant.findFirst({
         where: { productId, sku, NOT: { id: variantId } },
       });
+
       if (duplicate) {
-        throw createError(
-          "Ya existe una variante con ese SKU",
-          "SKU_DUPLICATE",
-          409
-        );
+        throw createError("Ya existe una variante con ese SKU", "SKU_DUPLICATE", 409);
       }
     }
 
-    const data = { color, size, price, stock, sku, img, isActive };
+    const data = { color, size, price, stock, sku, img, imgPublicId, isActive };
     const updateData = Object.fromEntries(
-      Object.entries(data).filter(([_, v]) => v !== undefined)
+      Object.entries(data).filter(([, value]) => value !== undefined)
     );
 
     return prisma.productVariant.update({
@@ -95,13 +99,7 @@ export const VariantModel = {
   },
 
   async deleteVariant({ productId, variantId }) {
-    const variant = await prisma.productVariant.findFirst({
-      where: { id: variantId, productId },
-    });
-
-    if (!variant) {
-      throw createError("Variante no encontrada", "VARIANT_NOT_FOUND", 404);
-    }
+    await this.getByIdForManagement({ productId, variantId });
 
     return prisma.productVariant.delete({
       where: { id: variantId },

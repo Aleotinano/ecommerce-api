@@ -11,7 +11,7 @@ const variantSchema = z.object({
     .int()
     .min(0),
   sku: z.string().min(1, "El SKU es requerido"),
-  img: z.string().nullable().optional(),
+  img: z.string().url().nullable().optional(),
   isActive: z.boolean().optional(),
 });
 
@@ -19,22 +19,18 @@ export const createProduct = z.object({
   name: z.string({ required_error: "El nombre es requerido" }).min(1).max(100),
   description: z.string().max(400).nullable().optional(),
   categoryId: z.coerce.number().int().positive().nullable().optional(),
-  img: z.string().nullable().optional(),
+  img: z.string().url().nullable().optional(),
   isActive: z.boolean().optional(),
-  variants: z.array(variantSchema).min(1, "Debe incluir al menos una variante"),
+  variants: z.array(variantSchema).default([]).optional(),
 });
 
-export const updateProduct = z
-  .object({
-    name: z.string().min(1).max(100).optional(),
-    description: z.string().max(400).optional(),
-    categoryId: z.number().int().positive().optional(),
-    img: z.string().optional(),
-    isActive: z.boolean().optional(),
-  })
-  .refine((data) => Object.keys(data).length > 0, {
-    message: "Debe proporcionar al menos un campo para actualizar",
-  });
+export const updateProduct = z.object({
+  name: z.string().min(1).max(100).optional(),
+  description: z.string().max(400).nullable().optional(),
+  categoryId: z.coerce.number().int().positive().nullable().optional(),
+  img: z.string().url().nullable().optional(),
+  isActive: z.boolean().optional(),
+});
 
 export const productQuery = z
   .object({
@@ -59,7 +55,7 @@ export const productQuery = z
       return true;
     },
     {
-      message: "El precio mínimo no puede ser mayor al máximo",
+      message: "El precio minimo no puede ser mayor al maximo",
       path: ["maxPrice"],
     }
   );

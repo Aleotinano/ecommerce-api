@@ -4,11 +4,15 @@ import { requireRole } from "../middleware/role.js";
 import { verifyToken } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
 import {
+  normalizeMultipartBody,
+  requireBodyOrImage,
+  uploadImage,
+} from "../middleware/upload.js";
+import {
   createProduct,
   productQuery,
   updateProduct,
 } from "../schemas/product.schema.js";
-
 import { validateId } from "../schemas/id.schema.js";
 
 export const productosRouter = Router();
@@ -23,15 +27,15 @@ const validation = {
 };
 
 productosRouter.get("/", validation.query, productsController.getAll);
-
 productosRouter.get("/options", productsController.getVariantOptions);
-
 productosRouter.get("/:id", validation.id, productsController.getById);
 
 productosRouter.post(
   "/",
   verifyToken,
   requireRole(roleRequired),
+  uploadImage,
+  normalizeMultipartBody,
   validation.create,
   productsController.create
 );
@@ -40,6 +44,9 @@ productosRouter.patch(
   "/:id",
   verifyToken,
   requireRole(roleRequired),
+  uploadImage,
+  normalizeMultipartBody,
+  requireBodyOrImage,
   validation.update,
   productsController.edit
 );

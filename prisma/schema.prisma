@@ -29,6 +29,7 @@ model Categories {
 model Product {
   id          Int              @id @default(autoincrement())
   img         String?
+  imgPublicId String?
   name        String
   description String?
   categoryId  Int?
@@ -38,18 +39,19 @@ model Product {
 }
 
 model ProductVariant {
-  id        Int        @id @default(autoincrement())
-  productId Int
-  color     String?
-  size      String?
-  price     Float
-  stock     Int
-  sku       String     @unique
-  img       String?
-  isActive  Boolean    @default(true)
-  product   Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
-  cartItems CartItem[]
-  orderItems OrderItem[]
+  id          Int             @id @default(autoincrement())
+  productId   Int
+  color       String?
+  size        String?
+  price       Float
+  stock       Int
+  sku         String          @unique
+  img         String?
+  imgPublicId String?
+  isActive    Boolean         @default(true)
+  product     Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
 }
 
 model Cart {
@@ -110,11 +112,11 @@ enum OrderStatus {
 }
 
 enum PaymentStatus {
-  PENDING      
-  APPROVED     
-  REJECTED     
-  IN_PROCESS    
-  REFUNDED     
+  PENDING
+  APPROVED
+  REJECTED
+  IN_PROCESS
+  REFUNDED
 }
 
 enum Role {

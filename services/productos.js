@@ -53,14 +53,12 @@ export const ProductModel = {
       where.categoryId = categoryId;
     }
 
-    const { filter: variantFilter, hasAdditionalCriteria } = buildVariantFilter(
-      {
-        color: variantColor,
-        size: variantSize,
-        minPrice,
-        maxPrice,
-      }
-    );
+    const { filter: variantFilter, hasAdditionalCriteria } = buildVariantFilter({
+      color: variantColor,
+      size: variantSize,
+      minPrice,
+      maxPrice,
+    });
 
     if (hasAdditionalCriteria) {
       where.variants = { some: variantFilter };
@@ -97,8 +95,8 @@ export const ProductModel = {
     ]);
 
     return {
-      colors: colors.map((v) => v.color),
-      sizes: sizes.map((v) => v.size),
+      colors: colors.map((variant) => variant.color),
+      sizes: sizes.map((variant) => variant.size),
     };
   },
 
@@ -120,29 +118,59 @@ export const ProductModel = {
     return product;
   },
 
-  async create({ name, description, categoryId, img, isActive, variants }) {
+  async getByIdForManagement({ id }) {
+    const product = await prisma.product.findUnique({
+      where: { id },
+      include: {
+        variants: {
+          orderBy: { id: "asc" },
+        },
+      },
+    });
+
+    if (!product) {
+      throw createError("Producto no encontrado", "PRODUCT_NOT_FOUND", 404);
+    }
+
+    return product;
+  },
+
+  async create({
+    name,
+    description,
+    categoryId,
+    img,
+    imgPublicId,
+    isActive,
+    variants = [],
+  }) {
     const data = {
       name,
       description: description ?? null,
       categoryId: categoryId ?? null,
       img: img ?? null,
+      imgPublicId: imgPublicId ?? null,
       isActive: isActive ?? true,
     };
 
     return prisma.product.create({
       data: {
         ...data,
-        variants: {
-          create: variants.map((variant) => ({
-            color: variant.color,
-            size: variant.size,
-            price: variant.price,
-            stock: variant.stock,
-            sku: variant.sku,
-            img: variant.img ?? null,
-            isActive: variant.isActive ?? true,
-          })),
-        },
+        variants:
+          variants.length > 0
+            ? {
+                create: variants.map((variant) => ({
+                  color: variant.color ?? null,
+                  size: variant.size ?? null,
+                  price: variant.price,
+                  stock: variant.stock,
+                  sku: variant.sku,
+                  img: variant.img ?? null,
+                  imgPublicId: variant.imgPublicId ?? null,
+                  isActive: variant.isActive ?? true,
+                })),
+              }
+            : undefined,
       },
       include: {
         variants: {
@@ -152,25 +180,23 @@ export const ProductModel = {
     });
   },
 
-  async edit({ id }, { name, description, categoryId, img, isActive }) {
-    const existing = await prisma.product.findUnique({
-      where: { id },
-    });
-
-    if (!existing) {
-      throw createError("Producto no encontrado", "PRODUCT_NOT_FOUND", 404);
-    }
+  async edit(
+    { id },
+    { name, description, categoryId, img, imgPublicId, isActive }
+  ) {
+    await this.getByIdForManagement({ id });
 
     const data = {
       name,
       description,
       categoryId,
       img,
+      imgPublicId,
       isActive,
     };
 
     const updateData = Object.fromEntries(
-      Object.entries(data).filter(([_, value]) => value !== undefined)
+      Object.entries(data).filter(([, value]) => value !== undefined)
     );
 
     return prisma.product.update({
@@ -186,13 +212,7 @@ export const ProductModel = {
   },
 
   async delete({ id }) {
-    const existing = await prisma.product.findUnique({
-      where: { id },
-    });
-
-    if (!existing) {
-      throw createError("Producto no encontrado", "PRODUCT_NOT_FOUND", 404);
-    }
+    await this.getByIdForManagement({ id });
 
     return prisma.product.delete({
       where: { id },
