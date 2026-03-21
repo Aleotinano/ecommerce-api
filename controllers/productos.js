@@ -3,7 +3,10 @@ import {
   deleteCloudinaryImage,
   uploadImageToCloudinary,
 } from "../lib/imageManager.js";
-import { cleanupUploadedImage, getUploadedImageFile } from "../middleware/upload.js";
+import {
+  cleanupUploadedImage,
+  getUploadedImageFile,
+} from "../middleware/upload.js";
 
 const PRODUCT_IMAGE_ENTITY = "products";
 
@@ -21,6 +24,8 @@ export class productsController {
         offset,
       } = req.search;
 
+      const isAdmin = req.user?.role === "ADMIN";
+
       const pagination = await ProductModel.getAll({
         name,
         categoryId,
@@ -30,6 +35,7 @@ export class productsController {
         maxPrice,
         limit,
         offset,
+        includeInactive: isAdmin,
       });
 
       return res.json(pagination);

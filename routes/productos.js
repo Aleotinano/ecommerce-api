@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { productsController } from "../controllers/productos.js";
 import { requireRole } from "../middleware/role.js";
-import { verifyToken } from "../middleware/auth.js";
+import { verifyToken, attachUser } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
 import {
   normalizeMultipartBody,
@@ -26,7 +26,12 @@ const validation = {
   id: validate({ params: validateId }),
 };
 
-productosRouter.get("/", validation.query, productsController.getAll);
+productosRouter.get(
+  "/",
+  attachUser,
+  validation.query,
+  productsController.getAll
+);
 productosRouter.get("/options", productsController.getVariantOptions);
 productosRouter.get("/:id", validation.id, productsController.getById);
 

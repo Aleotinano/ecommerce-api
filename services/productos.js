@@ -42,9 +42,13 @@ export const ProductModel = {
     maxPrice,
     limit,
     offset,
+    includeInactive = false,
   }) {
-    const where = { isActive: true };
+    const where = {};
 
+    if (!includeInactive) {
+      where.isActive = true;
+    }
     if (name) {
       where.name = { contains: name, mode: "insensitive" };
     }
@@ -53,12 +57,14 @@ export const ProductModel = {
       where.categoryId = categoryId;
     }
 
-    const { filter: variantFilter, hasAdditionalCriteria } = buildVariantFilter({
-      color: variantColor,
-      size: variantSize,
-      minPrice,
-      maxPrice,
-    });
+    const { filter: variantFilter, hasAdditionalCriteria } = buildVariantFilter(
+      {
+        color: variantColor,
+        size: variantSize,
+        minPrice,
+        maxPrice,
+      }
+    );
 
     if (hasAdditionalCriteria) {
       where.variants = { some: variantFilter };
@@ -102,7 +108,7 @@ export const ProductModel = {
 
   async getById({ id }) {
     const product = await prisma.product.findFirst({
-      where: { id, isActive: true },
+      where: { id: id },
       include: {
         variants: {
           where: { isActive: true },

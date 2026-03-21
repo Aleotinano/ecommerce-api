@@ -22,3 +22,21 @@ export const verifyToken = (req, res, next) => {
     });
   }
 };
+
+export const attachUser = (req, res, next) => {
+  const token = req.cookies?.access_token;
+
+  if (!token) {
+    req.user = null;
+    return next();
+  }
+
+  try {
+    const decoded = jwt.verify(token, DEFAULTS.SECRET_JWT_KEY);
+    req.user = decoded;
+  } catch {
+    req.user = null;
+  }
+
+  next();
+};

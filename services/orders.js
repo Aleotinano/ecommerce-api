@@ -253,7 +253,7 @@ export const OrderModel = {
     }
 
     throw createError(
-      "Transici�n de estado no permitida",
+      "Transición de estado no permitida",
       "INVALID_STATUS_TRANSITION",
       400
     );

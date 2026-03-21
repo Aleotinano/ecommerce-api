@@ -3,7 +3,10 @@ import {
   deleteCloudinaryImage,
   uploadImageToCloudinary,
 } from "../lib/imageManager.js";
-import { cleanupUploadedImage, getUploadedImageFile } from "../middleware/upload.js";
+import {
+  cleanupUploadedImage,
+  getUploadedImageFile,
+} from "../middleware/upload.js";
 
 const VARIANT_IMAGE_ENTITY = "variants";
 
@@ -27,7 +30,7 @@ export class variantsController {
 
     try {
       const { productId } = req.params;
-      const { color, size, price, stock, sku, img, isActive } = req.body;
+      const { color, size, price, stock, img, isActive } = req.body;
 
       if (uploadedFile) {
         uploadedImage = await uploadImageToCloudinary(uploadedFile.path, {
@@ -41,7 +44,6 @@ export class variantsController {
         size,
         price,
         stock,
-        sku,
         img: uploadedImage?.img ?? img,
         imgPublicId: uploadedImage?.imgPublicId ?? null,
         isActive,
@@ -68,7 +70,7 @@ export class variantsController {
         productId: Number(productId),
         variantId: Number(variantId),
       });
-      const { color, size, price, stock, sku, img, isActive } = req.body;
+      const { color, size, price, stock, img, isActive } = req.body;
 
       const imageData = {};
       let shouldDeletePreviousImage = false;

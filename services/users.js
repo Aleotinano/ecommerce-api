@@ -36,7 +36,7 @@ export const UserModel = {
 
     const isValid = await verifyPassword(password, user.password);
     if (!isValid) {
-      throw createError("ContraseÃ±a incorrecta", "INVALID_PASSWORD", 401);
+      throw createError("Contraseña incorrecta", "INVALID_PASSWORD", 401);
     }
     return user;
   },

@@ -1,5 +1,6 @@
 import prisma from "../lib/prisma.js";
 import { createError } from "../helpers/error.js";
+import { generateSku } from "../utils/sku.js";
 
 export const VariantModel = {
   async getVariants({ productId }) {
@@ -48,12 +49,32 @@ export const VariantModel = {
       throw createError("Producto no encontrado", "PRODUCT_NOT_FOUND", 404);
     }
 
+    const resolvedSku =
+      sku?.trim() || generateSku({ productName: product.name });
+
     const existing = await prisma.productVariant.findFirst({
-      where: { productId, sku },
+      where: { productId, sku: resolvedSku },
     });
 
     if (existing) {
-      throw createError("Ya existe una variante con ese SKU", "SKU_DUPLICATE", 409);
+      if (sku?.trim()) {
+        throw createError(
+          "Ya existe una variante con ese SKU",
+          "SKU_DUPLICATE",
+          409
+        );
+      }
+      return this.createVariant({
+        productId,
+        color,
+        size,
+        price,
+        stock,
+        sku: generateSku({ productName: product.name }),
+        img,
+        imgPublicId,
+        isActive,
+      });
     }
 
     return prisma.productVariant.create({
@@ -63,7 +84,7 @@ export const VariantModel = {
         size: size ?? null,
         price,
         stock,
-        sku,
+        sku: resolvedSku,
         img: img ?? null,
         imgPublicId: imgPublicId ?? null,
         isActive: isActive ?? true,
@@ -83,7 +104,11 @@ export const VariantModel = {
       });
 
       if (duplicate) {
-        throw createError("Ya existe una variante con ese SKU", "SKU_DUPLICATE", 409);
+        throw createError(
+          "Ya existe una variante con ese SKU",
+          "SKU_DUPLICATE",
+          409
+        );
       }
     }
 
