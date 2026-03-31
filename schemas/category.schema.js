@@ -3,12 +3,12 @@ import { z } from "zod";
 export const createCategory = z.object({
   name: z
     .string({ required_error: "El nombre es requerido" })
-    .min(1, "El nombre no puede estar vacío")
+    .min(1, "El nombre no puede estar vacio")
     .max(50, "El nombre es demasiado largo"),
 
   description: z
     .string()
-    .max(400, "La descripción es demasiado larga")
+    .max(400, "La descripcion es demasiado larga")
     .optional(),
 
   icon: z.string().optional(),
@@ -18,6 +18,8 @@ export const createCategory = z.object({
       invalid_type_error: "El valor debe ser booleano",
     })
     .optional(),
+
+  parentId: z.coerce.number().int().positive("ID de la categoria invalido").nullable().optional(),
 });
 
 export const updateCategory = z.object({
@@ -28,8 +30,10 @@ export const updateCategory = z.object({
   icon: z.string().optional(),
 
   isActive: z.boolean().optional(),
+
+  parentId: z.coerce.number().int().positive("ID de la categoria invalido").nullable().optional(),
 });
 
 export const categoryId = z.object({
-  id: z.coerce.number().int().positive("ID de la categoría inválido"),
+  id: z.coerce.number().int().positive("ID de la categoria invalido"),
 });

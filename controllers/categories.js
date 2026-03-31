@@ -3,7 +3,17 @@ import { CategoryModel } from "../services/categories.js";
 export class categoriesController {
   static async getAll(req, res, next) {
     try {
-      const categories = await CategoryModel.getAll();
+      const includeChildren = req.query.includeChildren === "true";
+      const categories = await CategoryModel.getAll({ includeChildren });
+      res.json(categories);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getTree(req, res, next) {
+    try {
+      const categories = await CategoryModel.getTree();
       res.json(categories);
     } catch (error) {
       next(error);
@@ -15,7 +25,7 @@ export class categoriesController {
       const { id } = req.params;
       const category = await CategoryModel.getById({ id });
 
-      res.json({ message: "categoría", category: category });
+      res.json({ message: "categoria", category: category });
     } catch (error) {
       next(error);
     }
@@ -23,17 +33,18 @@ export class categoriesController {
 
   static async create(req, res, next) {
     try {
-      const { name, description, isActive, icon } = req.body;
+      const { name, description, isActive, icon, parentId } = req.body;
 
       const category = await CategoryModel.create({
         name,
         description,
         isActive,
         icon,
+        parentId,
       });
 
       res.status(201).json({
-        message: "Categoría creada",
+        message: "Categoria creada",
         category: category,
       });
     } catch (error) {
@@ -44,7 +55,7 @@ export class categoriesController {
   static async edit(req, res, next) {
     try {
       const { id } = req.params;
-      const { name, description, isActive, icon } = req.body;
+      const { name, description, isActive, icon, parentId } = req.body;
 
       const category = await CategoryModel.edit({
         id,
@@ -52,20 +63,21 @@ export class categoriesController {
         description,
         isActive,
         icon,
+        parentId,
       });
 
-      res.json({ message: "Categoría editada", category: category });
+      res.json({ message: "Categoria editada", category: category });
     } catch (error) {
       next(error);
     }
   }
 
-  static async delete(req, res) {
+  static async delete(req, res, next) {
     try {
       const { id } = req.params;
 
       const category = await CategoryModel.delete({ id });
-      res.json({ message: "Categoría eliminada", category });
+      res.json({ message: "Categoria eliminada", category });
     } catch (error) {
       next(error);
     }

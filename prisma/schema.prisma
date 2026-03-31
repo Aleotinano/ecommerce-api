@@ -18,11 +18,14 @@ model User {
 }
 
 model Categories {
-  id          Int       @id @default(autoincrement())
-  name        String    @unique
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
   description String?
   icon        String?
-  isActive    Boolean   @default(true)
+  isActive    Boolean      @default(true)
+  parentId    Int?
+  parent      Categories?  @relation("CategoryToSubcategories", fields: [parentId], references: [id])
+  children    Categories[] @relation("CategoryToSubcategories")
   products    Product[]
 }
 

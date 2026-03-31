@@ -18,6 +18,8 @@ const validation = {
 
 categoriesRouter.get("/", categoriesController.getAll);
 
+categoriesRouter.get("/tree", categoriesController.getTree);
+
 categoriesRouter.get("/:id", validation.id, categoriesController.getById);
 
 categoriesRouter.post(
