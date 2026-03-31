@@ -2,6 +2,23 @@ import prisma from "../lib/prisma.js";
 import { createError } from "../helpers/error.js";
 import { generateSku } from "../utils/sku.js";
 
+const generateUniqueVariantSku = async ({ productName, reservedSkus = new Set() }) => {
+  let sku;
+
+  do {
+    sku = generateSku({ productName });
+  } while (
+    reservedSkus.has(sku) ||
+    (await prisma.productVariant.findUnique({
+      where: { sku },
+      select: { id: true },
+    }))
+  );
+
+  reservedSkus.add(sku);
+  return sku;
+};
+
 export const VariantModel = {
   async getVariants({ productId }) {
     const product = await prisma.product.findUnique({
@@ -36,7 +53,6 @@ export const VariantModel = {
     size,
     price,
     stock,
-    sku,
     img,
     imgPublicId,
     isActive,
@@ -49,33 +65,9 @@ export const VariantModel = {
       throw createError("Producto no encontrado", "PRODUCT_NOT_FOUND", 404);
     }
 
-    const resolvedSku =
-      sku?.trim() || generateSku({ productName: product.name });
-
-    const existing = await prisma.productVariant.findFirst({
-      where: { productId, sku: resolvedSku },
+    const resolvedSku = await generateUniqueVariantSku({
+      productName: product.name,
     });
-
-    if (existing) {
-      if (sku?.trim()) {
-        throw createError(
-          "Ya existe una variante con ese SKU",
-          "SKU_DUPLICATE",
-          409
-        );
-      }
-      return this.createVariant({
-        productId,
-        color,
-        size,
-        price,
-        stock,
-        sku: generateSku({ productName: product.name }),
-        img,
-        imgPublicId,
-        isActive,
-      });
-    }
 
     return prisma.productVariant.create({
       data: {
@@ -94,25 +86,11 @@ export const VariantModel = {
 
   async editVariant(
     { productId, variantId },
-    { color, size, price, stock, sku, img, imgPublicId, isActive }
+    { color, size, price, stock, img, imgPublicId, isActive }
   ) {
-    const variant = await this.getByIdForManagement({ productId, variantId });
+    await this.getByIdForManagement({ productId, variantId });
 
-    if (sku && sku !== variant.sku) {
-      const duplicate = await prisma.productVariant.findFirst({
-        where: { productId, sku, NOT: { id: variantId } },
-      });
-
-      if (duplicate) {
-        throw createError(
-          "Ya existe una variante con ese SKU",
-          "SKU_DUPLICATE",
-          409
-        );
-      }
-    }
-
-    const data = { color, size, price, stock, sku, img, imgPublicId, isActive };
+    const data = { color, size, price, stock, img, imgPublicId, isActive };
     const updateData = Object.fromEntries(
       Object.entries(data).filter(([, value]) => value !== undefined)
     );

@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 export const createVariant = z.object({
-  sku: z.string().min(1, "El SKU es requerido"),
   color: z.string().nullable().optional(),
   size: z.string().nullable().optional(),
   price: z.coerce
@@ -16,7 +15,6 @@ export const createVariant = z.object({
 });
 
 export const updateVariant = z.object({
-  sku: z.string().min(1).optional(),
   color: z.string().nullable().optional(),
   size: z.string().nullable().optional(),
   price: z.coerce.number().positive().optional(),

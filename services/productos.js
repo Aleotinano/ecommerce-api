@@ -1,5 +1,6 @@
 import prisma from "../lib/prisma.js";
 import { createError } from "../helpers/error.js";
+import { generateSku } from "../utils/sku.js";
 
 const buildVariantFilter = ({ color, size, minPrice, maxPrice }) => {
   const filter = { isActive: true };
@@ -30,6 +31,23 @@ const buildVariantFilter = ({ color, size, minPrice, maxPrice }) => {
   }
 
   return { filter, hasAdditionalCriteria };
+};
+
+const generateUniqueVariantSku = async ({ productName, reservedSkus = new Set() }) => {
+  let sku;
+
+  do {
+    sku = generateSku({ productName });
+  } while (
+    reservedSkus.has(sku) ||
+    (await prisma.productVariant.findUnique({
+      where: { sku },
+      select: { id: true },
+    }))
+  );
+
+  reservedSkus.add(sku);
+  return sku;
 };
 
 export const ProductModel = {
@@ -150,6 +168,17 @@ export const ProductModel = {
     isActive,
     variants = [],
   }) {
+    const reservedSkus = new Set();
+    const variantsWithSku = await Promise.all(
+      variants.map(async (variant) => ({
+        ...variant,
+        sku: await generateUniqueVariantSku({
+          productName: name,
+          reservedSkus,
+        }),
+      }))
+    );
+
     const data = {
       name,
       description: description ?? null,
@@ -163,9 +192,9 @@ export const ProductModel = {
       data: {
         ...data,
         variants:
-          variants.length > 0
+          variantsWithSku.length > 0
             ? {
-                create: variants.map((variant) => ({
+                create: variantsWithSku.map((variant) => ({
                   color: variant.color ?? null,
                   size: variant.size ?? null,
                   price: variant.price,

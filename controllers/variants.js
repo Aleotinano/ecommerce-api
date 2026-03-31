@@ -95,7 +95,6 @@ export class variantsController {
           size,
           price,
           stock,
-          sku,
           isActive,
           ...imageData,
         }

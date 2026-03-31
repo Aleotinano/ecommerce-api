@@ -10,7 +10,6 @@ const variantSchema = z.object({
     .number({ required_error: "El stock es requerido" })
     .int()
     .min(0),
-  sku: z.string().min(1, "El SKU es requerido"),
   img: z.string().url().nullable().optional(),
   isActive: z.boolean().optional(),
 });
