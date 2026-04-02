@@ -1,6 +1,4 @@
 import { Router } from "express";
-import { z } from "zod";
-
 import { variantsController } from "../controllers/variants.js";
 import { requireRole } from "../middleware/role.js";
 import { verifyToken } from "../middleware/auth.js";
@@ -10,29 +8,21 @@ import {
   requireBodyOrImage,
   uploadImage,
 } from "../middleware/upload.js";
-import { createVariant, updateVariant } from "../schemas/variant.schema.js";
-
-const productIdSchema = z.object({
-  productId: z.coerce.number().int().positive(),
-});
-
-const productAndVariantId = z.object({
-  productId: z.coerce.number().int().positive(),
-  id: z.coerce.number().int().positive(),
-});
+import {
+  createVariant,
+  updateVariant,
+  variantParams,
+} from "../schemas/variant.schema.js";
 
 export const variantRouter = Router();
 
 const roleRequired = "ADMIN";
 
 const validation = {
-  productId: validate({ params: productIdSchema }),
-  create: validate({
-    params: productIdSchema,
-    body: createVariant,
-  }),
-  update: validate({ params: productAndVariantId, body: updateVariant }),
-  id: validate({ params: productAndVariantId }),
+  productId: validate({ params: variantParams }),
+  create: validate({ params: variantParams, body: createVariant }),
+  update: validate({ params: variantParams, body: updateVariant }),
+  id: validate({ params: variantParams }),
 };
 
 variantRouter.get(

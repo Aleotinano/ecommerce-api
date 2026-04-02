@@ -2,7 +2,10 @@ import prisma from "../lib/prisma.js";
 import { createError } from "../helpers/error.js";
 import { generateSku } from "../utils/sku.js";
 
-const generateUniqueVariantSku = async ({ productName, reservedSkus = new Set() }) => {
+const generateUniqueVariantSku = async ({
+  productName,
+  reservedSkus = new Set(),
+}) => {
   let sku;
 
   do {
@@ -23,16 +26,16 @@ export const VariantModel = {
   async getVariants({ productId }) {
     const product = await prisma.product.findUnique({
       where: { id: productId },
+      include: {
+        variants: { orderBy: { id: "asc" } },
+      },
     });
 
     if (!product) {
       throw createError("Producto no encontrado", "PRODUCT_NOT_FOUND", 404);
     }
 
-    return prisma.productVariant.findMany({
-      where: { productId },
-      orderBy: { id: "asc" },
-    });
+    return product.variants;
   },
 
   async getByIdForManagement({ productId, variantId }) {
@@ -59,15 +62,14 @@ export const VariantModel = {
   }) {
     const product = await prisma.product.findUnique({
       where: { id: productId },
+      select: { name: true },
     });
 
     if (!product) {
       throw createError("Producto no encontrado", "PRODUCT_NOT_FOUND", 404);
     }
 
-    const resolvedSku = await generateUniqueVariantSku({
-      productName: product.name,
-    });
+    const sku = await generateUniqueVariantSku({ productName: product.name });
 
     return prisma.productVariant.create({
       data: {
@@ -76,7 +78,7 @@ export const VariantModel = {
         size: size ?? null,
         price,
         stock,
-        sku: resolvedSku,
+        sku,
         img: img ?? null,
         imgPublicId: imgPublicId ?? null,
         isActive: isActive ?? true,
@@ -90,9 +92,16 @@ export const VariantModel = {
   ) {
     await this.getByIdForManagement({ productId, variantId });
 
-    const data = { color, size, price, stock, img, imgPublicId, isActive };
     const updateData = Object.fromEntries(
-      Object.entries(data).filter(([, value]) => value !== undefined)
+      Object.entries({
+        color,
+        size,
+        price,
+        stock,
+        img,
+        imgPublicId,
+        isActive,
+      }).filter(([, value]) => value !== undefined)
     );
 
     return prisma.productVariant.update({
@@ -103,9 +112,6 @@ export const VariantModel = {
 
   async deleteVariant({ productId, variantId }) {
     await this.getByIdForManagement({ productId, variantId });
-
-    return prisma.productVariant.delete({
-      where: { id: variantId },
-    });
+    return prisma.productVariant.delete({ where: { id: variantId } });
   },
 };

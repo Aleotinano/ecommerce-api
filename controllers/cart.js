@@ -4,38 +4,33 @@ export class cartController {
   static async getCart(req, res, next) {
     try {
       const { id } = req.user;
-
       const cart = await CartModel.getCart({ id });
-
-      const cartInfo = {
-        created: cart.createdAt,
-        updated: cart.updatedAt,
-      };
-
-      const productsInCart = cart.items.map((item) => ({
-        variant: {
-          id: item.variant.id,
-          color: item.variant.color,
-          size: item.variant.size,
-          price: item.variant.price,
-          stock: item.variant.stock,
-          sku: item.variant.sku,
-          img: item.variant.img ?? item.variant.product?.img ?? null,
-          product: item.variant.product
-            ? {
-                id: item.variant.product.id,
-                name: item.variant.product.name,
-                img: item.variant.product.img,
-              }
-            : null,
-        },
-        quantity: item.quantity,
-      }));
 
       return res.json({
         message: "Tu carrito de compras",
-        cart: cartInfo,
-        products: productsInCart,
+        cart: {
+          created: cart.createdAt,
+          updated: cart.updatedAt,
+        },
+        products: cart.items.map((item) => ({
+          variant: {
+            id: item.variant.id,
+            color: item.variant.color,
+            size: item.variant.size,
+            price: item.variant.price,
+            stock: item.variant.stock,
+            sku: item.variant.sku,
+            img: item.variant.img ?? item.variant.product?.img ?? null,
+            product: item.variant.product
+              ? {
+                  id: item.variant.product.id,
+                  name: item.variant.product.name,
+                  img: item.variant.product.img,
+                }
+              : null,
+          },
+          quantity: item.quantity,
+        })),
       });
     } catch (error) {
       next(error);
@@ -44,13 +39,10 @@ export class cartController {
 
   static async add(req, res, next) {
     try {
-      const { variantId } = req.params;
       const { id } = req.user;
+      const variantId = req.params.variantId;
 
       const cartItem = await CartModel.add({ id, variantId });
-
-      const { quantity } = cartItem;
-      const { stock } = cartItem.variant;
 
       return res.status(201).json({
         message: "Variante agregada al carrito",
@@ -62,8 +54,8 @@ export class cartController {
             size: cartItem.variant.size,
             sku: cartItem.variant.sku,
           },
-          cantidad: quantity,
-          stockRestante: stock - quantity,
+          cantidad: cartItem.quantity,
+          stockRestante: cartItem.variant.stock - cartItem.quantity,
         },
       });
     } catch (error) {
@@ -73,22 +65,18 @@ export class cartController {
 
   static async remove(req, res, next) {
     try {
-      const { variantId } = req.params;
       const { id } = req.user;
+      const variantId = req.params.variantId;
 
       const result = await CartModel.remove({ id, variantId });
 
       if (result.deleted) {
-        return res.json({
-          message: "Variante eliminada del carrito completamente",
-        });
+        return res.json({ message: "Variante eliminada del carrito" });
       }
-
-      const quantity = result.cartItem.quantity;
 
       return res.json({
         message: "Cantidad reducida en 1",
-        cantidadRestante: quantity,
+        cantidadRestante: result.cartItem.quantity,
       });
     } catch (error) {
       next(error);

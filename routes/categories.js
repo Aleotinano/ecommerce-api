@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { categoriesController } from "../controllers/categories.js";
+import { CategoryController } from "../controllers/categories.js";
 import { verifyToken } from "../middleware/auth.js";
 import { requireRole } from "../middleware/role.js";
 import { validate } from "../middleware/validate.js";
@@ -16,18 +16,18 @@ const validation = {
   id: validate({ params: validateId }),
 };
 
-categoriesRouter.get("/", categoriesController.getAll);
+categoriesRouter.get("/", CategoryController.getAll);
 
-categoriesRouter.get("/tree", categoriesController.getTree);
+categoriesRouter.get("/tree", CategoryController.getTree);
 
-categoriesRouter.get("/:id", validation.id, categoriesController.getById);
+categoriesRouter.get("/:id", validation.id, CategoryController.getById);
 
 categoriesRouter.post(
   "/",
   verifyToken,
   requireRole(roleRequired),
   validation.create,
-  categoriesController.create
+  CategoryController.create
 );
 
 categoriesRouter.patch(
@@ -35,7 +35,7 @@ categoriesRouter.patch(
   verifyToken,
   requireRole(roleRequired),
   validation.update,
-  categoriesController.edit
+  CategoryController.edit
 );
 
 categoriesRouter.delete(
@@ -43,5 +43,5 @@ categoriesRouter.delete(
   verifyToken,
   requireRole(roleRequired),
   validation.id,
-  categoriesController.delete
+  CategoryController.delete
 );

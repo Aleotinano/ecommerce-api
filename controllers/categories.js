@@ -1,6 +1,6 @@
 import { CategoryModel } from "../services/categories.js";
 
-export class categoriesController {
+export class CategoryController {
   static async getAll(req, res, next) {
     try {
       const includeChildren = req.query.includeChildren === "true";

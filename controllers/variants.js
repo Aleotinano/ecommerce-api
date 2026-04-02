@@ -14,10 +14,7 @@ export class variantsController {
   static async getAll(req, res, next) {
     try {
       const { productId } = req.params;
-      const variants = await VariantModel.getVariants({
-        productId: Number(productId),
-      });
-
+      const variants = await VariantModel.getVariants({ productId });
       return res.json({ variants });
     } catch (error) {
       next(error);
@@ -39,7 +36,7 @@ export class variantsController {
       }
 
       const variant = await VariantModel.createVariant({
-        productId: Number(productId),
+        productId,
         color,
         size,
         price,
@@ -67,8 +64,8 @@ export class variantsController {
     try {
       const { productId, id: variantId } = req.params;
       const existing = await VariantModel.getByIdForManagement({
-        productId: Number(productId),
-        variantId: Number(variantId),
+        productId,
+        variantId,
       });
       const { color, size, price, stock, img, isActive } = req.body;
 
@@ -89,15 +86,8 @@ export class variantsController {
       }
 
       const variant = await VariantModel.editVariant(
-        { productId: Number(productId), variantId: Number(variantId) },
-        {
-          color,
-          size,
-          price,
-          stock,
-          isActive,
-          ...imageData,
-        }
+        { productId, variantId },
+        { color, size, price, stock, isActive, ...imageData }
       );
 
       if (shouldDeletePreviousImage) {
@@ -119,18 +109,15 @@ export class variantsController {
     try {
       const { productId, id: variantId } = req.params;
       const existing = await VariantModel.getByIdForManagement({
-        productId: Number(productId),
-        variantId: Number(variantId),
+        productId,
+        variantId,
       });
 
       if (existing.imgPublicId) {
         await deleteCloudinaryImage(existing.imgPublicId);
       }
 
-      await VariantModel.deleteVariant({
-        productId: Number(productId),
-        variantId: Number(variantId),
-      });
+      await VariantModel.deleteVariant({ productId, variantId });
 
       return res.json({ message: "Variante eliminada" });
     } catch (error) {
