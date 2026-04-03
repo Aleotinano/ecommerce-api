@@ -8,3 +8,9 @@ nota.md
 ngrok.exe
 pnpm-workspace.yaml
 tmp
+
+# seeds prisma
+
+prisma/demo-catalog.js
+prisma/seed-catalog.js
+prisma/seed-stats.js
