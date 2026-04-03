@@ -1,4 +1,4 @@
-import "dotenv/config";
+﻿import "dotenv/config";
 
 import express from "express";
 import helmet from "helmet";
@@ -18,6 +18,7 @@ import { testRouter } from "./routes/test.js";
 import { cartRouter } from "./routes/cart.js";
 import { categoriesRouter } from "./routes/categories.js";
 import { mercadopagoRouter } from "./routes/mercadopago.js";
+import { statsRouter } from "./routes/stats.js";
 
 // Middlewares
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
@@ -40,6 +41,7 @@ app.use("/categories", categoriesRouter);
 app.use("/cart", cartRouter);
 app.use("/users", roleRouter);
 app.use("/mercadopago", mercadopagoRouter);
+app.use("/stats", statsRouter);
 app.use("/auth", usersRouter);
 app.use("/test", testRouter);
 
