@@ -26,10 +26,8 @@ export function errorHandler(err, req, res, next) {
 
 export function notFoundHandler(req, res, next) {
   const error = new Error("Ruta no encontrada");
-  const { path } = req.originalUrl;
-
   error.statusCode = 404;
   error.code = "NOT_FOUND";
-  error.message = `ruta: ${path} `;
+  error.message = `ruta: ${req.originalUrl}`;
   next(error);
 }
