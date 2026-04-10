@@ -29,19 +29,23 @@ export class mercadopagoController {
       if (!paymentId) return res.sendStatus(204);
       if (eventType !== "payment") return res.sendStatus(200);
 
-      // Validar firma en producción
-      if (process.env.MP_WEBHOOK_SECRET) {
-        const isValid = validateWebhookSignature({
-          signature: req.headers["x-signature"],
-          requestId: req.headers["x-request-id"],
-          dataId: paymentId,
-          secret: process.env.MP_WEBHOOK_SECRET,
-        });
+      const webhookSecret = process.env.MP_WEBHOOK_SECRET;
 
-        if (!isValid) {
-          console.warn("[MP][webhook] Firma inválida");
-          return res.sendStatus(401);
-        }
+      if (!webhookSecret) {
+        console.error("[MP][webhook] MP_WEBHOOK_SECRET no configurado");
+        return res.sendStatus(500);
+      }
+
+      const isValid = validateWebhookSignature({
+        signature: req.headers["x-signature"],
+        requestId: req.headers["x-request-id"],
+        dataId: paymentId,
+        secret: webhookSecret,
+      });
+
+      if (!isValid) {
+        console.warn("[MP][webhook] Firma inválida");
+        return res.sendStatus(401);
       }
 
       const orderStatus = await mercadopagoModel.getWebhook({ paymentId });
