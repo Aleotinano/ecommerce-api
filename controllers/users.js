@@ -5,12 +5,11 @@ import jwt from "jsonwebtoken";
 export class usersController {
   static async register(req, res, next) {
     try {
-      const { username, password, email, role } = req.body;
+      const { username, password, email } = req.body;
       const user = await UserModel.register({
         username,
         password,
         email,
-        role,
       });
 
       const dataPublic = {
@@ -49,15 +48,15 @@ export class usersController {
       };
 
       const token = jwt.sign(tokenData, DEFAULTS.SECRET_JWT_KEY, {
-        expiresIn: "1h",
+        expiresIn: "8h",
       });
 
       return res
         .cookie("access_token", token, {
           httpOnly: true,
-          secure: DEFAULTS.NODE_ENV === "production", // Solo se puede acceder en https,
+          secure: DEFAULTS.NODE_ENV === "production",
           sameSite: "strict",
-          maxAge: 1000 * 60 * 60,
+          maxAge: 1000 * 60 * 60 * 8,
         })
         .json({
           message: `Bienvenido ${dataPublic.username}`,

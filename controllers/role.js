@@ -11,10 +11,6 @@ export class roleController {
         return next(createError("Faltan datos", "MISSING_DATA", 400));
       }
 
-      if (!["USER", "ADMIN"].includes(role)) {
-        return next(createError("Rol invÃ¡lido", "INVALID_ROLE", 400));
-      }
-
       const updatedUser = await roleModel.edit(id, role);
 
       return res.json({
