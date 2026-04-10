@@ -1,10 +1,18 @@
 import { Router } from "express";
+import { rateLimit } from "express-rate-limit";
 import { mercadopagoController } from "../controllers/mercadopago.js";
 import { verifyToken } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
 import { validateId } from "../schemas/id.schema.js";
 
 export const mercadopagoRouter = Router();
+
+const webhookLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minuto
+  limit: 30,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+});
 
 const validation = {
   id: validate({ params: validateId }),
@@ -25,7 +33,7 @@ mercadopagoRouter.get("/pending", (req, res) => {
   return res.status(200).send("Pago pendiente.");
 });
 
-mercadopagoRouter.post("/webhook", mercadopagoController.getWebhook);
+mercadopagoRouter.post("/webhook", webhookLimiter, mercadopagoController.getWebhook);
 
 mercadopagoRouter.post(
   "/:id",

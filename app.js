@@ -5,6 +5,7 @@ import helmet from "helmet";
 import compression from "compression";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
+import { rateLimit } from "express-rate-limit";
 
 import { DEFAULTS } from "./config.js";
 
@@ -25,14 +26,31 @@ import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { middleWare } from "./middleware/cors.js";
 
 const PORT = DEFAULTS.PORT || 3001;
+const isProd = DEFAULTS.NODE_ENV === "production";
 const app = express();
 
-app.use(express.json());
-app.use(cookieParser());
-app.use(middleWare());
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  limit: 100,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+});
+
 app.use(helmet());
+app.use(middleWare());
+app.use(express.json({ limit: "10kb" }));
+app.use(cookieParser());
 app.use(compression());
-app.use(morgan("dev"));
+app.use(morgan(isProd ? "combined" : "dev"));
+
+app.use(generalLimiter);
 
 app.use("/orders", ordersRouter);
 app.use("/products/", productosRouter);
@@ -42,7 +60,7 @@ app.use("/cart", cartRouter);
 app.use("/users", roleRouter);
 app.use("/mercadopago", mercadopagoRouter);
 app.use("/stats", statsRouter);
-app.use("/auth", usersRouter);
+app.use("/auth", authLimiter, usersRouter);
 app.use("/test", testRouter);
 
 // Manejo de errores \\
