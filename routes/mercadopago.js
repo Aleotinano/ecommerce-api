@@ -1,18 +1,11 @@
 import { Router } from "express";
-import { rateLimit } from "express-rate-limit";
 import { mercadopagoController } from "../controllers/mercadopago.js";
 import { verifyToken } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
+import { webhookLimiter } from "../middleware/rateLimit.js";
 import { validateId } from "../schemas/id.schema.js";
 
 export const mercadopagoRouter = Router();
-
-const webhookLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minuto
-  limit: 30,
-  standardHeaders: "draft-8",
-  legacyHeaders: false,
-});
 
 const validation = {
   id: validate({ params: validateId }),

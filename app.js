@@ -5,7 +5,6 @@ import helmet from "helmet";
 import compression from "compression";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
-import { rateLimit } from "express-rate-limit";
 
 import { DEFAULTS } from "./config.js";
 
@@ -24,24 +23,11 @@ import { statsRouter } from "./routes/stats.js";
 // Middlewares
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { middleWare } from "./middleware/cors.js";
+import { authLimiter, generalLimiter } from "./middleware/rateLimit.js";
 
 const PORT = DEFAULTS.PORT || 3001;
 const isProd = DEFAULTS.NODE_ENV === "production";
 const app = express();
-
-const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  limit: 100,
-  standardHeaders: "draft-8",
-  legacyHeaders: false,
-});
-
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 10,
-  standardHeaders: "draft-8",
-  legacyHeaders: false,
-});
 
 app.use(helmet());
 app.use(middleWare());
