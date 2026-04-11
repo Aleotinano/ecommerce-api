@@ -9,6 +9,7 @@ import {
   uploadImage,
 } from "../middleware/upload.js";
 import {
+  assignProductCategory,
   createProduct,
   productQuery,
   updateProduct,
@@ -22,6 +23,10 @@ const roleRequired = "ADMIN";
 const validation = {
   create: validate({ body: createProduct }),
   update: validate({ params: validateId, body: updateProduct }),
+  assignCategory: validate({
+    params: validateId,
+    body: assignProductCategory,
+  }),
   query: validate({ query: productQuery }),
   id: validate({ params: validateId }),
 };
@@ -43,6 +48,14 @@ productosRouter.post(
   normalizeMultipartBody,
   validation.create,
   productsController.create
+);
+
+productosRouter.patch(
+  "/:id/category",
+  verifyToken,
+  requireRole(roleRequired),
+  validation.assignCategory,
+  productsController.assignCategory
 );
 
 productosRouter.patch(

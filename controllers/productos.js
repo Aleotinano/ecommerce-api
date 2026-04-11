@@ -162,6 +162,25 @@ export class productsController {
     }
   }
 
+  static async assignCategory(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { categoryId } = req.body;
+
+      const updatedProduct = await ProductModel.assignCategory({
+        id,
+        categoryId,
+      });
+
+      return res.json({
+        message: "Categoría del producto actualizada",
+        product: updatedProduct,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async delete(req, res, next) {
     try {
       const { id } = req.params;

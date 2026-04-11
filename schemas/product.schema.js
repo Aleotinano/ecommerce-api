@@ -66,6 +66,14 @@ export const updateProduct = z
     message: "Debes enviar al menos un campo para actualizar",
   });
 
+export const assignProductCategory = z.object({
+  categoryId: z.coerce
+    .number({ invalid_type_error: "El ID de categoría debe ser un número" })
+    .int("El ID de categoría debe ser un número entero")
+    .positive("El ID de categoría es inválido")
+    .nullable(),
+});
+
 export const productId = z.object({
   id: z.coerce
     .number({ invalid_type_error: "El ID debe ser un número" })

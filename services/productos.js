@@ -246,6 +246,36 @@ export const ProductModel = {
     });
   },
 
+  async assignCategory({ id, categoryId }) {
+    await this.getByIdForManagement({ id });
+
+    if (categoryId !== null) {
+      const category = await prisma.categories.findUnique({
+        where: { id: categoryId },
+        select: { id: true },
+      });
+
+      if (!category) {
+        throw createError(
+          "La categoría no existe",
+          "CATEGORY_NOT_FOUND",
+          404
+        );
+      }
+    }
+
+    return prisma.product.update({
+      where: { id },
+      data: { categoryId },
+      include: {
+        variants: {
+          where: { isActive: true },
+          orderBy: { id: "asc" },
+        },
+      },
+    });
+  },
+
   async delete({ id }) {
     await this.getByIdForManagement({ id });
 
