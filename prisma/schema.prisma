@@ -7,19 +7,96 @@ datasource db {
   provider = "postgresql"
 }
 
+model Tenant {
+  id        Int      @id @default(autoincrement())
+  slug      String   @unique
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users      User[]
+  categories Categories[]
+  products   Product[]
+  variants   ProductVariant[]
+  carts      Cart[]
+  orders     Order[]
+  config     TenantConfig?
+}
+
+model TenantConfig {
+  id               Int       @id @default(autoincrement())
+  tenantId         Int       @unique
+
+  // Branding
+  logoUrl          String?
+  logoPublicId     String?
+  storeName        String?
+  storeDescription String?
+  storeTagline     String?
+
+  // Contacto
+  contactEmail     String?
+  contactPhone     String?
+  contactAddress   String?
+
+  // Social media
+  socialInstagram  String?
+  socialTiktok     String?
+  socialFacebook   String?
+  socialTwitter    String?
+  socialYoutube    String?
+  socialPinterest  String?
+  socialWhatsapp   String?
+
+  // SEO
+  seoTitle         String?
+  seoDescription   String?
+  seoKeywords      String?
+
+  // Políticas
+  shippingPolicy   String?
+  returnsPolicy    String?
+  privacyPolicy    String?
+
+  // Configuración de tienda
+  currency         String?   @default("ARS")
+  locale           String?   @default("es-AR")
+  showOutOfStock   Boolean   @default(false)
+  allowCartGuest   Boolean   @default(true)
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  tenant           Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
 model User {
-  id       Int     @id @default(autoincrement())
-  username String  @unique
-  email String @unique
+  id       Int    @id @default(autoincrement())
+  tenantId Int
+  username String
+  email    String @unique
   password String
-  role     Role    @default(USER)
+  role     Role   @default(USER)
+
+  emailVerified                Boolean   @default(false)
+  emailVerificationTokenHash   String?
+  emailVerificationExpiresAt   DateTime?
+
   cart     Cart?
   orders   Order[]
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, username])
+  @@index([tenantId])
 }
 
 model Categories {
   id          Int          @id @default(autoincrement())
-  name        String       @unique
+  tenantId    Int
+  name        String
   description String?
   icon        String?
   isActive    Boolean      @default(true)
@@ -27,10 +104,15 @@ model Categories {
   parent      Categories?  @relation("CategoryToSubcategories", fields: [parentId], references: [id])
   children    Categories[] @relation("CategoryToSubcategories")
   products    Product[]
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
 }
 
 model Product {
   id          Int              @id @default(autoincrement())
+  tenantId    Int
   img         String?
   imgPublicId String?
   name        String
@@ -39,31 +121,43 @@ model Product {
   isActive    Boolean          @default(true)
   variants    ProductVariant[]
   category    Categories?      @relation(fields: [categoryId], references: [id])
+  tenant      Tenant           @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
 }
 
 model ProductVariant {
   id          Int             @id @default(autoincrement())
+  tenantId    Int
   productId   Int
   color       String?
   size        String?
   price       Float
   stock       Int
-  sku         String          @unique
+  sku         String
   img         String?
   imgPublicId String?
   isActive    Boolean         @default(true)
   product     Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tenant      Tenant          @relation(fields: [tenantId], references: [id])
   cartItems   CartItem[]
   orderItems  OrderItem[]
+
+  @@unique([tenantId, sku])
+  @@index([tenantId])
 }
 
 model Cart {
   id        Int        @id @default(autoincrement())
+  tenantId  Int
   userId    Int        @unique
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
   user      User       @relation(fields: [userId], references: [id])
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
   items     CartItem[]
+
+  @@index([tenantId])
 }
 
 model CartItem {
@@ -80,12 +174,14 @@ model CartItem {
 
 model Order {
   id         Int         @id @default(autoincrement())
+  tenantId   Int
   userId     Int
   status     OrderStatus @default(PENDING)
   total      Float
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
   user       User        @relation(fields: [userId], references: [id])
+  tenant     Tenant      @relation(fields: [tenantId], references: [id])
   orderItems OrderItem[]
 
   paymentStatus   PaymentStatus @default(PENDING)
@@ -93,6 +189,8 @@ model Order {
   paymentId       String?
   mercadoPagoId   String?       @unique
   preferenceId    String?
+
+  @@index([tenantId])
 }
 
 model OrderItem {

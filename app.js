@@ -25,6 +25,7 @@ import { statsRouter } from "./routes/stats.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { middleWare } from "./middleware/cors.js";
 import { generalLimiter } from "./middleware/rateLimit.js";
+import { tenantConfigRouter } from "./routes/tenant-config.js";
 
 const PORT = DEFAULTS.PORT || 3001;
 const app = express();
@@ -48,6 +49,7 @@ app.use("/mercadopago", mercadopagoRouter);
 app.use("/stats", statsRouter);
 app.use("/auth", usersRouter);
 app.use("/test", testRouter);
+app.use("/tenant-config", tenantConfigRouter);
 
 // Manejo de errores \\
 app.use(notFoundHandler);
