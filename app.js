@@ -3,10 +3,11 @@
 import express from "express";
 import helmet from "helmet";
 import compression from "compression";
-import morgan from "morgan";
 import cookieParser from "cookie-parser";
 
 import { DEFAULTS } from "./config.js";
+import { logger } from "./lib/logger.js";
+import { httpLogger } from "./middleware/httpLogger.js";
 
 // rutas
 import { ordersRouter } from "./routes/orders.js";
@@ -23,10 +24,9 @@ import { statsRouter } from "./routes/stats.js";
 // Middlewares
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { middleWare } from "./middleware/cors.js";
-import { authLimiter, generalLimiter } from "./middleware/rateLimit.js";
+import { generalLimiter } from "./middleware/rateLimit.js";
 
 const PORT = DEFAULTS.PORT || 3001;
-const isProd = DEFAULTS.NODE_ENV === "production";
 const app = express();
 
 app.use(helmet());
@@ -34,25 +34,29 @@ app.use(middleWare());
 app.use(express.json({ limit: "10kb" }));
 app.use(cookieParser());
 app.use(compression());
-app.use(morgan(isProd ? "combined" : "dev"));
+app.use(httpLogger);
 
 app.use(generalLimiter);
 
 app.use("/orders", ordersRouter);
-app.use("/products/", productosRouter);
+app.use("/products", productosRouter);
 app.use("/variants", variantRouter);
 app.use("/categories", categoriesRouter);
 app.use("/cart", cartRouter);
 app.use("/users", roleRouter);
 app.use("/mercadopago", mercadopagoRouter);
 app.use("/stats", statsRouter);
-app.use("/auth", authLimiter, usersRouter);
+app.use("/auth", usersRouter);
 app.use("/test", testRouter);
 
 // Manejo de errores \\
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-  console.log(`puerto levantado en ${PORT}`);
-});
+export { app };
+
+if (DEFAULTS.NODE_ENV !== "test") {
+  app.listen(PORT, () => {
+    logger.info({ port: PORT }, "server listening");
+  });
+}
