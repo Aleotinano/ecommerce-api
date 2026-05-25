@@ -14,7 +14,14 @@ export const verifyToken = (req, res, next) => {
   try {
     const decoded = jwt.verify(token, DEFAULTS.SECRET_JWT_KEY);
 
+    if (!decoded.tenantId) {
+      return res.status(401).json({
+        message: "Token sin tenant",
+      });
+    }
+
     req.user = decoded;
+    req.tenantId = decoded.tenantId;
     next();
   } catch (error) {
     return res.status(401).json({
@@ -28,14 +35,17 @@ export const attachUser = (req, res, next) => {
 
   if (!token) {
     req.user = null;
+    req.tenantId = null;
     return next();
   }
 
   try {
     const decoded = jwt.verify(token, DEFAULTS.SECRET_JWT_KEY);
     req.user = decoded;
+    req.tenantId = decoded.tenantId ?? null;
   } catch {
     req.user = null;
+    req.tenantId = null;
   }
 
   next();

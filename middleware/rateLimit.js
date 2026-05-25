@@ -6,16 +6,22 @@ import { logger } from "../lib/logger.js";
 
 const isProd = DEFAULTS.NODE_ENV === "production";
 
-const createStore = () => {
-  const redis = getRedis();
-  if (!redis) {
-    logger.warn("redis unavailable, rate limiting will use in-memory store");
+const createStore = (prefix = "rl:") => {
+  try {
+    const redis = getRedis();
+    if (!redis) {
+      logger.warn("redis unavailable, rate limiting will use in-memory store");
+      return undefined;
+    }
+
+    return new RedisStore({
+      sendCommand: async (...args) => redis.call(...args),
+      prefix,
+    });
+  } catch (error) {
+    logger.warn({ error: error.message }, "failed to create redis store, using in-memory");
     return undefined;
   }
-  return new RedisStore({
-    sendCommand: async (...args) => redis.call(...args),
-    prefix: "rl:",
-  });
 };
 
 const rateLimitHandler = (req, res, _next, options) => {
@@ -44,6 +50,32 @@ const rateLimitHandler = (req, res, _next, options) => {
   });
 };
 
+let generalStore, loginStore, registerStore, webhookStore;
+
+try {
+  generalStore = createStore("rl:general:");
+} catch {
+  generalStore = undefined;
+}
+
+try {
+  loginStore = createStore("rl:login:");
+} catch {
+  loginStore = undefined;
+}
+
+try {
+  registerStore = createStore("rl:register:");
+} catch {
+  registerStore = undefined;
+}
+
+try {
+  webhookStore = createStore("rl:webhook:");
+} catch {
+  webhookStore = undefined;
+}
+
 export const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 200,
@@ -51,7 +83,7 @@ export const generalLimiter = rateLimit({
   legacyHeaders: false,
   skip: (req) => !isProd,
   keyGenerator: ipKeyGenerator,
-  store: createStore(),
+  store: generalStore,
   handler: rateLimitHandler,
 });
 
@@ -63,7 +95,7 @@ export const loginLimiter = rateLimit({
   skipSuccessfulRequests: true,
   skipFailedRequests: false,
   keyGenerator: (req) => req.body?.email || ipKeyGenerator(req),
-  store: createStore(),
+  store: loginStore,
   handler: rateLimitHandler,
 });
 
@@ -74,7 +106,7 @@ export const registerLimiter = rateLimit({
   legacyHeaders: false,
   skipSuccessfulRequests: false,
   keyGenerator: ipKeyGenerator,
-  store: createStore(),
+  store: registerStore,
   handler: rateLimitHandler,
 });
 
@@ -84,6 +116,6 @@ export const webhookLimiter = rateLimit({
   standardHeaders: "draft-8",
   legacyHeaders: false,
   keyGenerator: ipKeyGenerator,
-  store: createStore(),
+  store: webhookStore,
   handler: rateLimitHandler,
 });

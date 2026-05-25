@@ -1,16 +1,21 @@
 import { DEFAULTS } from "../config.js";
+import { logger } from "../lib/logger.js";
 
 export function errorHandler(err, req, res, next) {
   const statusCode = err.statusCode || 500;
   const code = err.code || "INTERNAL_ERROR";
   const isProd = DEFAULTS.NODE_ENV === "production";
 
-  console.error("Error:", {
-    message: err.message,
-    code: code,
-    path: req.path,
-    stack: err.stack,
-  });
+  const reqLog = req.log ?? logger;
+  reqLog.error(
+    {
+      err,
+      code,
+      path: req.path,
+      statusCode,
+    },
+    "request error"
+  );
 
   const message =
     isProd && statusCode === 500 ? "Error interno del servidor" : err.message;
