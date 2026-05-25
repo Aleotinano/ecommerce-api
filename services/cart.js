@@ -2,9 +2,9 @@ import prisma from "../lib/prisma.js";
 import { createError } from "../helpers/error.js";
 
 export const CartModel = {
-  async getCart({ id }) {
-    const cart = await prisma.cart.findUnique({
-      where: { userId: id },
+  async getCart({ tenantId, id }) {
+    const cart = await prisma.cart.findFirst({
+      where: { userId: id, tenantId },
       include: {
         items: {
           include: {
@@ -23,10 +23,10 @@ export const CartModel = {
     return cart;
   },
 
-  async add({ id, variantId }) {
+  async add({ tenantId, id, variantId }) {
     return prisma.$transaction(async (tx) => {
-      const variant = await tx.productVariant.findUnique({
-        where: { id: variantId },
+      const variant = await tx.productVariant.findFirst({
+        where: { id: variantId, tenantId },
         include: { product: true },
       });
 
@@ -45,7 +45,7 @@ export const CartModel = {
       const cart = await tx.cart.upsert({
         where: { userId: id },
         update: {},
-        create: { userId: id },
+        create: { userId: id, tenantId },
       });
 
       const existingItem = await tx.cartItem.findUnique({
@@ -69,9 +69,9 @@ export const CartModel = {
     });
   },
 
-  async remove({ id, variantId }) {
-    const cart = await prisma.cart.findUnique({
-      where: { userId: id },
+  async remove({ tenantId, id, variantId }) {
+    const cart = await prisma.cart.findFirst({
+      where: { userId: id, tenantId },
       select: { id: true },
     });
 
@@ -107,9 +107,9 @@ export const CartModel = {
     return { deleted: false, cartItem: updated };
   },
 
-  async clear({ id }) {
-    const cart = await prisma.cart.findUnique({
-      where: { userId: id },
+  async clear({ tenantId, id }) {
+    const cart = await prisma.cart.findFirst({
+      where: { userId: id, tenantId },
       select: { id: true },
     });
 

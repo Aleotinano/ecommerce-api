@@ -13,12 +13,13 @@ import {
 import { addDays, buildMetric, round, startOfDay } from "./stats/utils.js";
 
 export const StatsModel = {
-  async getDashboard({ days = 30, lowStockThreshold = 5 }) {
+  async getDashboard({ tenantId, days = 30, lowStockThreshold = 5 }) {
     const now = new Date();
     const currentStart = startOfDay(addDays(now, -(days - 1)));
     const previousStart = addDays(currentStart, -days);
 
     const data = await Data({
+      tenantId,
       currentStart,
       now,
       previousStart,

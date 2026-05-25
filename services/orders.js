@@ -1,5 +1,6 @@
 import prisma from "../lib/prisma.js";
 import { createError } from "../helpers/error.js";
+import { getProductPrice } from "../helpers/price.js";
 
 const orderItemsInclude = {
   include: {
@@ -16,9 +17,9 @@ const orderItemsInclude = {
 };
 
 export const OrderModel = {
-  async create({ userId }) {
-    const cart = await prisma.cart.findUnique({
-      where: { userId },
+  async create({ tenantId, userId }) {
+    const cart = await prisma.cart.findFirst({
+      where: { userId, tenantId },
       include: {
         items: {
           include: {
@@ -37,7 +38,7 @@ export const OrderModel = {
     return prisma.$transaction(async (tx) => {
       const variantIds = cart.items.map((item) => item.variantId);
       const variants = await tx.productVariant.findMany({
-        where: { id: { in: variantIds } },
+        where: { id: { in: variantIds }, tenantId },
         include: { product: true },
       });
 
@@ -87,11 +88,22 @@ export const OrderModel = {
 
       const total = cart.items.reduce((sum, item) => {
         const variant = variantMap.get(item.variantId);
-        return sum + Number(variant.price) * item.quantity;
+        const price = getProductPrice(variant, variant.product);
+        if (price == null) {
+          const error = createError(
+            "Producto o variante sin precio",
+            "PRODUCT_NO_PRICE",
+            400
+          );
+          error.details = { variant: variant.id };
+          throw error;
+        }
+        return sum + Number(price) * item.quantity;
       }, 0);
 
       const newOrder = await tx.order.create({
         data: {
+          tenantId,
           userId,
           total,
           status: "PENDING",
@@ -112,17 +124,17 @@ export const OrderModel = {
     });
   },
 
-  async getAll({ userId }) {
+  async getAll({ tenantId, userId }) {
     return prisma.order.findMany({
-      where: { userId },
+      where: { userId, tenantId },
       ...orderItemsInclude,
       orderBy: { createdAt: "desc" },
     });
   },
 
-  async getUserOrderById({ userId, orderId }) {
+  async getUserOrderById({ tenantId, userId, orderId }) {
     const order = await prisma.order.findFirst({
-      where: { id: orderId, userId },
+      where: { id: orderId, userId, tenantId },
       ...orderItemsInclude,
     });
 
@@ -133,8 +145,9 @@ export const OrderModel = {
     return order;
   },
 
-  async getUserOrders() {
+  async getUserOrders({ tenantId }) {
     return prisma.order.findMany({
+      where: { tenantId },
       include: {
         user: {
           select: { id: true, username: true },
@@ -145,9 +158,9 @@ export const OrderModel = {
     });
   },
 
-  async updateOrderStatus({ orderId, status, extraData = {} }) {
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
+  async updateOrderStatus({ tenantId, orderId, status, extraData = {} }) {
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, tenantId },
       ...orderItemsInclude,
     });
 

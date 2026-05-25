@@ -1,11 +1,22 @@
 import prisma from "../lib/prisma.js";
 import { createError } from "../helpers/error.js";
+import { wrap, delPattern, tenantNs } from "../lib/cache.js";
 
-async function ensureParentExists(tx, parentId) {
+const CATEGORIES_TREE_TTL = 300;
+
+function categoriesTreeKey(tenantId) {
+  return `${tenantNs(tenantId)}:cat:tree`;
+}
+
+async function invalidateCategoriesCache(tenantId) {
+  await delPattern(`${tenantNs(tenantId)}:cat:*`);
+}
+
+async function ensureParentExists(tx, tenantId, parentId) {
   if (parentId === undefined || parentId === null) return null;
 
-  const parent = await tx.categories.findUnique({
-    where: { id: parentId },
+  const parent = await tx.categories.findFirst({
+    where: { id: parentId, tenantId },
     select: { id: true, parentId: true },
   });
 
@@ -20,7 +31,7 @@ async function ensureParentExists(tx, parentId) {
   return parent;
 }
 
-async function ensureNoCircularHierarchy(tx, categoryId, parentId) {
+async function ensureNoCircularHierarchy(tx, tenantId, categoryId, parentId) {
   if (parentId === undefined || parentId === null) return;
 
   if (categoryId === parentId) {
@@ -42,8 +53,8 @@ async function ensureNoCircularHierarchy(tx, categoryId, parentId) {
       );
     }
 
-    const current = await tx.categories.findUnique({
-      where: { id: currentParentId },
+    const current = await tx.categories.findFirst({
+      where: { id: currentParentId, tenantId },
       select: { parentId: true },
     });
 
@@ -69,8 +80,9 @@ function buildCategoryTree(categories, parentId = null) {
 }
 
 export const CategoryModel = {
-  async getAll({ includeChildren = false } = {}) {
+  async getAll({ tenantId, includeChildren = false } = {}) {
     return prisma.categories.findMany({
+      where: { tenantId },
       orderBy: { id: "asc" },
       include: includeChildren
         ? { children: { orderBy: { id: "asc" } } }
@@ -78,9 +90,9 @@ export const CategoryModel = {
     });
   },
 
-  async getById({ id }) {
-    const category = await prisma.categories.findUnique({
-      where: { id },
+  async getById({ tenantId, id }) {
+    const category = await prisma.categories.findFirst({
+      where: { id, tenantId },
       include: {
         parent: true,
         children: { orderBy: { id: "asc" } },
@@ -94,9 +106,11 @@ export const CategoryModel = {
     return category;
   },
 
-  async create({ name, description, isActive, icon, parentId }) {
-    return prisma.$transaction(async (tx) => {
-      const exists = await tx.categories.findUnique({ where: { name } });
+  async create({ tenantId, name, description, isActive, icon, parentId }) {
+    const result = await prisma.$transaction(async (tx) => {
+      const exists = await tx.categories.findFirst({
+        where: { tenantId, name },
+      });
 
       if (exists) {
         throw createError(
@@ -106,10 +120,11 @@ export const CategoryModel = {
         );
       }
 
-      await ensureParentExists(tx, parentId);
+      await ensureParentExists(tx, tenantId, parentId);
 
       return tx.categories.create({
         data: {
+          tenantId,
           name,
           description: description ?? null,
           isActive: isActive ?? true,
@@ -118,11 +133,16 @@ export const CategoryModel = {
         },
       });
     });
+
+    await invalidateCategoriesCache(tenantId);
+    return result;
   },
 
-  async edit({ id, name, description, isActive, icon, parentId }) {
-    return prisma.$transaction(async (tx) => {
-      const category = await tx.categories.findUnique({ where: { id } });
+  async edit({ tenantId, id, name, description, isActive, icon, parentId }) {
+    const result = await prisma.$transaction(async (tx) => {
+      const category = await tx.categories.findFirst({
+        where: { id, tenantId },
+      });
 
       if (!category) {
         throw createError("La categoría no existe", "CATEGORY_NOT_FOUND", 404);
@@ -130,7 +150,7 @@ export const CategoryModel = {
 
       if (name !== undefined) {
         const conflict = await tx.categories.findFirst({
-          where: { name, NOT: { id } },
+          where: { tenantId, name, NOT: { id } },
         });
 
         if (conflict) {
@@ -143,8 +163,8 @@ export const CategoryModel = {
       }
 
       if (parentId !== undefined) {
-        await ensureParentExists(tx, parentId);
-        await ensureNoCircularHierarchy(tx, id, parentId);
+        await ensureParentExists(tx, tenantId, parentId);
+        await ensureNoCircularHierarchy(tx, tenantId, id, parentId);
       }
 
       return tx.categories.update({
@@ -162,12 +182,15 @@ export const CategoryModel = {
         },
       });
     });
+
+    await invalidateCategoriesCache(tenantId);
+    return result;
   },
 
-  async delete({ id }) {
-    return prisma.$transaction(async (tx) => {
-      const category = await tx.categories.findUnique({
-        where: { id },
+  async delete({ tenantId, id }) {
+    const result = await prisma.$transaction(async (tx) => {
+      const category = await tx.categories.findFirst({
+        where: { id, tenantId },
         include: {
           products: { select: { id: true } },
           children: { select: { id: true } },
@@ -196,14 +219,20 @@ export const CategoryModel = {
 
       return tx.categories.delete({ where: { id } });
     });
+
+    await invalidateCategoriesCache(tenantId);
+    return result;
   },
 
-  async getTree() {
-    const categories = await prisma.categories.findMany({
-      orderBy: { id: "asc" },
-      include: { parent: true },
-    });
+  async getTree({ tenantId }) {
+    return wrap(categoriesTreeKey(tenantId), CATEGORIES_TREE_TTL, async () => {
+      const categories = await prisma.categories.findMany({
+        where: { tenantId },
+        orderBy: { id: "asc" },
+        include: { parent: true },
+      });
 
-    return buildCategoryTree(categories);
+      return buildCategoryTree(categories);
+    });
   },
 };

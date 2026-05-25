@@ -1,9 +1,10 @@
 ﻿import prisma from "../../lib/prisma.js";
 
-export const Data = async ({ currentStart, now, previousStart }) => {
+export const Data = async ({ tenantId, currentStart, now, previousStart }) => {
   const [currentOrders, previousOrders, allProducts] = await Promise.all([
     prisma.order.findMany({
       where: {
+        tenantId,
         createdAt: {
           gte: currentStart,
           lte: now,
@@ -37,6 +38,7 @@ export const Data = async ({ currentStart, now, previousStart }) => {
     }),
     prisma.order.findMany({
       where: {
+        tenantId,
         createdAt: {
           gte: previousStart,
           lt: currentStart,
@@ -51,6 +53,7 @@ export const Data = async ({ currentStart, now, previousStart }) => {
       },
     }),
     prisma.product.findMany({
+      where: { tenantId },
       include: {
         category: {
           select: {

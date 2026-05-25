@@ -3,6 +3,7 @@ import { createError } from "../helpers/error.js";
 import { generateSku } from "../utils/sku.js";
 
 const generateUniqueVariantSku = async ({
+  tenantId,
   productName,
   reservedSkus = new Set(),
 }) => {
@@ -13,7 +14,7 @@ const generateUniqueVariantSku = async ({
   } while (
     reservedSkus.has(sku) ||
     (await prisma.productVariant.findUnique({
-      where: { sku },
+      where: { tenantId_sku: { tenantId, sku } },
       select: { id: true },
     }))
   );
@@ -23,9 +24,9 @@ const generateUniqueVariantSku = async ({
 };
 
 export const VariantModel = {
-  async getVariants({ productId }) {
-    const product = await prisma.product.findUnique({
-      where: { id: productId },
+  async getVariants({ tenantId, productId }) {
+    const product = await prisma.product.findFirst({
+      where: { id: productId, tenantId },
       include: {
         variants: { orderBy: { id: "asc" } },
       },
@@ -38,9 +39,9 @@ export const VariantModel = {
     return product.variants;
   },
 
-  async getByIdForManagement({ productId, variantId }) {
+  async getByIdForManagement({ tenantId, productId, variantId }) {
     const variant = await prisma.productVariant.findFirst({
-      where: { id: variantId, productId },
+      where: { id: variantId, productId, tenantId },
     });
 
     if (!variant) {
@@ -51,6 +52,7 @@ export const VariantModel = {
   },
 
   async createVariant({
+    tenantId,
     productId,
     color,
     size,
@@ -60,8 +62,8 @@ export const VariantModel = {
     imgPublicId,
     isActive,
   }) {
-    const product = await prisma.product.findUnique({
-      where: { id: productId },
+    const product = await prisma.product.findFirst({
+      where: { id: productId, tenantId },
       select: { name: true },
     });
 
@@ -69,10 +71,14 @@ export const VariantModel = {
       throw createError("Producto no encontrado", "PRODUCT_NOT_FOUND", 404);
     }
 
-    const sku = await generateUniqueVariantSku({ productName: product.name });
+    const sku = await generateUniqueVariantSku({
+      tenantId,
+      productName: product.name,
+    });
 
     return prisma.productVariant.create({
       data: {
+        tenantId,
         productId,
         color: color ?? null,
         size: size ?? null,
@@ -87,10 +93,10 @@ export const VariantModel = {
   },
 
   async editVariant(
-    { productId, variantId },
+    { tenantId, productId, variantId },
     { color, size, price, stock, img, imgPublicId, isActive }
   ) {
-    await this.getByIdForManagement({ productId, variantId });
+    await this.getByIdForManagement({ tenantId, productId, variantId });
 
     const updateData = Object.fromEntries(
       Object.entries({
@@ -110,8 +116,8 @@ export const VariantModel = {
     });
   },
 
-  async deleteVariant({ productId, variantId }) {
-    await this.getByIdForManagement({ productId, variantId });
+  async deleteVariant({ tenantId, productId, variantId }) {
+    await this.getByIdForManagement({ tenantId, productId, variantId });
     return prisma.productVariant.delete({ where: { id: variantId } });
   },
 };

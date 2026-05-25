@@ -1,6 +1,28 @@
 import prisma from "../lib/prisma.js";
 import { createError } from "../helpers/error.js";
 import { generateSku } from "../utils/sku.js";
+import { wrap, delPattern, hashParams, tenantNs } from "../lib/cache.js";
+
+const PRODUCTS_LIST_TTL = 180;
+const PRODUCT_DETAIL_TTL = 300;
+const VARIANT_OPTIONS_TTL = 600;
+
+function productsListKey(tenantId, params, isAdmin) {
+  const filteredParams = { ...params, includeInactive: isAdmin };
+  return `${tenantNs(tenantId)}:prod:list:${hashParams(filteredParams)}`;
+}
+
+function productDetailKey(tenantId, productId) {
+  return `${tenantNs(tenantId)}:prod:detail:${productId}`;
+}
+
+function variantOptionsKey(tenantId) {
+  return `${tenantNs(tenantId)}:prod:options`;
+}
+
+async function invalidateProductsCache(tenantId) {
+  await delPattern(`${tenantNs(tenantId)}:prod:*`);
+}
 
 const buildVariantFilter = ({ color, size, minPrice, maxPrice }) => {
   const filter = { isActive: true };
@@ -33,7 +55,20 @@ const buildVariantFilter = ({ color, size, minPrice, maxPrice }) => {
   return { filter, hasAdditionalCriteria };
 };
 
-const generateUniqueVariantSku = async ({ productName, reservedSkus = new Set() }) => {
+const ensureCategoryExists = async (tenantId, categoryId) => {
+  if (categoryId === undefined || categoryId === null) return;
+
+  const category = await prisma.categories.findFirst({
+    where: { id: categoryId, tenantId },
+    select: { id: true },
+  });
+
+  if (!category) {
+    throw createError("La categoría no existe", "CATEGORY_NOT_FOUND", 404);
+  }
+};
+
+const generateUniqueVariantSku = async ({ tenantId, productName, reservedSkus = new Set() }) => {
   let sku;
 
   do {
@@ -41,7 +76,7 @@ const generateUniqueVariantSku = async ({ productName, reservedSkus = new Set() 
   } while (
     reservedSkus.has(sku) ||
     (await prisma.productVariant.findUnique({
-      where: { sku },
+      where: { tenantId_sku: { tenantId, sku } },
       select: { id: true },
     }))
   );
@@ -52,6 +87,7 @@ const generateUniqueVariantSku = async ({ productName, reservedSkus = new Set() 
 
 export const ProductModel = {
   async getAll({
+    tenantId,
     name,
     categoryId,
     variantColor,
@@ -62,89 +98,111 @@ export const ProductModel = {
     offset,
     includeInactive = false,
   }) {
-    const where = {};
-
-    if (!includeInactive) {
-      where.isActive = true;
-    }
-    if (name) {
-      where.name = { contains: name, mode: "insensitive" };
-    }
-
-    if (categoryId !== undefined) {
-      where.categoryId = categoryId;
-    }
-
-    const { filter: variantFilter, hasAdditionalCriteria } = buildVariantFilter(
-      {
-        color: variantColor,
-        size: variantSize,
-        minPrice,
-        maxPrice,
-      }
-    );
-
-    if (hasAdditionalCriteria) {
-      where.variants = { some: variantFilter };
-    }
-
-    return prisma.product.findMany({
-      where,
-      include: {
-        variants: {
-          where: variantFilter,
-          orderBy: { id: "asc" },
-        },
-      },
-      take: limit,
-      skip: offset,
-      orderBy: { id: "asc" },
-    });
-  },
-
-  async getVariantOptions() {
-    const [colors, sizes] = await Promise.all([
-      prisma.productVariant.findMany({
-        where: { isActive: true, color: { not: null } },
-        select: { color: true },
-        distinct: ["color"],
-        orderBy: { color: "asc" },
-      }),
-      prisma.productVariant.findMany({
-        where: { isActive: true, size: { not: null } },
-        select: { size: true },
-        distinct: ["size"],
-        orderBy: { size: "asc" },
-      }),
-    ]);
-
-    return {
-      colors: colors.map((variant) => variant.color),
-      sizes: sizes.map((variant) => variant.size),
+    const params = {
+      name,
+      categoryId,
+      variantColor,
+      variantSize,
+      minPrice,
+      maxPrice,
+      limit,
+      offset,
     };
-  },
+    const key = productsListKey(tenantId, params, includeInactive);
 
-  async getById({ id }) {
-    const product = await prisma.product.findFirst({
-      where: { id: id },
-      include: {
-        variants: {
-          where: { isActive: true },
-          orderBy: { id: "asc" },
+    return wrap(key, PRODUCTS_LIST_TTL, async () => {
+      const where = { tenantId };
+
+      if (!includeInactive) {
+        where.isActive = true;
+      }
+      if (name) {
+        where.name = { contains: name, mode: "insensitive" };
+      }
+
+      if (categoryId !== undefined) {
+        where.categoryId = categoryId;
+      }
+
+      const { filter: variantFilter, hasAdditionalCriteria } = buildVariantFilter(
+        {
+          color: variantColor,
+          size: variantSize,
+          minPrice,
+          maxPrice,
+        }
+      );
+
+      if (hasAdditionalCriteria) {
+        where.variants = { some: variantFilter };
+      }
+
+      return prisma.product.findMany({
+        where,
+        include: {
+          variants: {
+            where: variantFilter,
+            orderBy: { id: "asc" },
+          },
         },
-      },
+        take: limit,
+        skip: offset,
+        orderBy: { id: "asc" },
+      });
     });
-
-    if (!product) {
-      throw createError("Producto no encontrado", "PRODUCT_NOT_FOUND", 404);
-    }
-
-    return product;
   },
 
-  async getByIdForManagement({ id }) {
-    const product = await prisma.product.findUnique({
-      where: { id },
+  async getVariantOptions({ tenantId }) {
+    const key = variantOptionsKey(tenantId);
+
+    return wrap(key, VARIANT_OPTIONS_TTL, async () => {
+      const [colors, sizes] = await Promise.all([
+        prisma.productVariant.findMany({
+          where: { tenantId, isActive: true, color: { not: null } },
+          select: { color: true },
+          distinct: ["color"],
+          orderBy: { color: "asc" },
+        }),
+        prisma.productVariant.findMany({
+          where: { tenantId, isActive: true, size: { not: null } },
+          select: { size: true },
+          distinct: ["size"],
+          orderBy: { size: "asc" },
+        }),
+      ]);
+
+      return {
+        colors: colors.map((variant) => variant.color),
+        sizes: sizes.map((variant) => variant.size),
+      };
+    });
+  },
+
+  async getById({ tenantId, id }) {
+    const key = productDetailKey(tenantId, id);
+
+    return wrap(key, PRODUCT_DETAIL_TTL, async () => {
+      const product = await prisma.product.findFirst({
+        where: { id, tenantId },
+        include: {
+          variants: {
+            where: { isActive: true },
+            orderBy: { id: "asc" },
+          },
+        },
+      });
+
+      if (!product) {
+        throw createError("Producto no encontrado", "PRODUCT_NOT_FOUND", 404);
+      }
+
+      return product;
+    });
+  },
+
+  async getByIdForManagement({ tenantId, id }) {
+    const product = await prisma.product.findFirst({
+      where: { id, tenantId },
       include: {
         variants: {
           orderBy: { id: "asc" },
@@ -160,6 +218,7 @@ export const ProductModel = {
   },
 
   async create({
+    tenantId,
     name,
     description,
     categoryId,
@@ -168,11 +227,14 @@ export const ProductModel = {
     isActive,
     variants = [],
   }) {
+    await ensureCategoryExists(tenantId, categoryId);
+
     const reservedSkus = new Set();
     const variantsWithSku = await Promise.all(
       variants.map(async (variant) => ({
         ...variant,
         sku: await generateUniqueVariantSku({
+          tenantId,
           productName: name,
           reservedSkus,
         }),
@@ -180,6 +242,7 @@ export const ProductModel = {
     );
 
     const data = {
+      tenantId,
       name,
       description: description ?? null,
       categoryId: categoryId ?? null,
@@ -188,13 +251,14 @@ export const ProductModel = {
       isActive: isActive ?? true,
     };
 
-    return prisma.product.create({
+    const result = await prisma.product.create({
       data: {
         ...data,
         variants:
           variantsWithSku.length > 0
             ? {
                 create: variantsWithSku.map((variant) => ({
+                  tenantId,
                   color: variant.color ?? null,
                   size: variant.size ?? null,
                   price: variant.price,
@@ -213,13 +277,17 @@ export const ProductModel = {
         },
       },
     });
+
+    await invalidateProductsCache(tenantId);
+    return result;
   },
 
   async edit(
-    { id },
+    { tenantId, id },
     { name, description, categoryId, img, imgPublicId, isActive }
   ) {
-    await this.getByIdForManagement({ id });
+    await this.getByIdForManagement({ tenantId, id });
+    await ensureCategoryExists(tenantId, categoryId);
 
     const data = {
       name,
@@ -234,7 +302,7 @@ export const ProductModel = {
       Object.entries(data).filter(([, value]) => value !== undefined)
     );
 
-    return prisma.product.update({
+    const result = await prisma.product.update({
       where: { id },
       data: updateData,
       include: {
@@ -244,27 +312,16 @@ export const ProductModel = {
         },
       },
     });
+
+    await invalidateProductsCache(tenantId);
+    return result;
   },
 
-  async assignCategory({ id, categoryId }) {
-    await this.getByIdForManagement({ id });
+  async assignCategory({ tenantId, id, categoryId }) {
+    await this.getByIdForManagement({ tenantId, id });
+    await ensureCategoryExists(tenantId, categoryId);
 
-    if (categoryId !== null) {
-      const category = await prisma.categories.findUnique({
-        where: { id: categoryId },
-        select: { id: true },
-      });
-
-      if (!category) {
-        throw createError(
-          "La categoría no existe",
-          "CATEGORY_NOT_FOUND",
-          404
-        );
-      }
-    }
-
-    return prisma.product.update({
+    const result = await prisma.product.update({
       where: { id },
       data: { categoryId },
       include: {
@@ -274,13 +331,19 @@ export const ProductModel = {
         },
       },
     });
+
+    await invalidateProductsCache(tenantId);
+    return result;
   },
 
-  async delete({ id }) {
-    await this.getByIdForManagement({ id });
+  async delete({ tenantId, id }) {
+    await this.getByIdForManagement({ tenantId, id });
 
-    return prisma.product.delete({
+    const result = await prisma.product.delete({
       where: { id },
     });
+
+    await invalidateProductsCache(tenantId);
+    return result;
   },
 };

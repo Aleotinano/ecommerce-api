@@ -13,13 +13,13 @@ const buildMpItemTitle = ({ productName, color, size }) => {
 };
 
 export const mercadopagoModel = {
-  async create({ userId, orderId, payerEmail }) {
+  async create({ tenantId, userId, orderId, payerEmail }) {
     if (!payerEmail) {
       throw createError("Email requerido", "PAYER_EMAIL_REQUIRED", 400);
     }
 
     const order = await prisma.order.findFirst({
-      where: { id: orderId, userId },
+      where: { id: orderId, userId, tenantId },
       include: {
         user: { select: { email: true } },
         orderItems: {
@@ -105,7 +105,7 @@ export const mercadopagoModel = {
     });
 
     if (paymentInfo.status !== "approved") {
-      console.log("Pago no aprobado todavía");
+      console.log("Pago no aprobado todavï¿½a");
       return;
     }
 
@@ -113,7 +113,7 @@ export const mercadopagoModel = {
 
     if (!orderId) {
       throw createError(
-        "External reference inválida",
+        "External reference invï¿½lida",
         "INVALID_EXTERNAL_REFERENCE",
         400
       );
@@ -132,10 +132,11 @@ export const mercadopagoModel = {
     }
 
     if (Number(order.total) !== Number(paymentInfo.transaction_amount)) {
-      throw createError("Monto inválido", "AMOUNT_MISMATCH", 409);
+      throw createError("Monto invï¿½lido", "AMOUNT_MISMATCH", 409);
     }
 
     await OrderModel.updateOrderStatus({
+      tenantId: order.tenantId,
       orderId,
       status: "COMPLETED",
       extraData: {

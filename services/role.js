@@ -2,9 +2,9 @@ import prisma from "../lib/prisma.js";
 import { createError } from "../helpers/error.js";
 
 export const roleModel = {
-  async edit(id, role) {
-    const user = await prisma.user.findUnique({
-      where: { id: Number(id) },
+  async edit(tenantId, id, role) {
+    const user = await prisma.user.findFirst({
+      where: { id: Number(id), tenantId },
     });
 
     if (!user) {
