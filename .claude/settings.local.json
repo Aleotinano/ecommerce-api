@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($env:PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION = 'Sí, hacelo — es dev y no hay data importante'; npx prisma migrate reset --force --skip-generate 2>&1 | Select-Object -Last 10)",
+      "Bash(npx prisma *)",
+      "PowerShell($env:PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION = 'Sí, hacelo — es dev y no hay data importante'; npx prisma db push 2>&1 | Select-Object -Last 20)",
+      "PowerShell(npx prisma db execute --file=./reset-db.sql 2>&1)",
+      "Bash(ls ..)",
+      "Read(//d/mocks/e-commerce-express/**)",
+      "Bash(ls ../../)",
+      "Read(//d/mocks/**)",
+      "Bash(timeout 6 pnpm run dev)",
+      "Bash(grep -v \"^$\")",
+      "Bash(pnpm test *)",
+      "Bash(git commit -m 'fix\\(categories\\): validar icono no vacío y permitir null en actualización *)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
+    ]
+  }
+}
