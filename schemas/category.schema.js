@@ -13,7 +13,10 @@ export const createCategory = z.object({
     .trim()
     .optional(),
 
-  icon: z.string({ invalid_type_error: "El icono debe ser texto" }).optional(),
+  icon: z
+    .string({ invalid_type_error: "El icono debe ser texto" })
+    .min(1, "El icono no puede estar vacío")
+    .optional(),
 
   isActive: z
     .boolean({ invalid_type_error: "El valor debe ser booleano" })
@@ -44,6 +47,8 @@ export const updateCategory = z
 
     icon: z
       .string({ invalid_type_error: "El icono debe ser texto" })
+      .min(1, "El icono no puede estar vacío")
+      .nullable()
       .optional(),
 
     isActive: z
