@@ -5,7 +5,10 @@ export class OrderController {
     try {
       const { id, username } = req.user;
 
-      const order = await OrderModel.create({ userId: id });
+      const order = await OrderModel.create({
+        tenantId: req.tenantId,
+        userId: id,
+      });
 
       return res.status(201).json({
         message: "Orden creada exitosamente",
@@ -35,7 +38,10 @@ export class OrderController {
     try {
       const { id } = req.user;
 
-      const orders = await OrderModel.getAll({ id });
+      const orders = await OrderModel.getAll({
+        tenantId: req.tenantId,
+        userId: id,
+      });
 
       const formattedOrders = orders.map((order) => ({
         id: order.id,
@@ -60,7 +66,7 @@ export class OrderController {
 
   static async getUserOrders(req, res, next) {
     try {
-      const orders = await OrderModel.getUserOrders();
+      const orders = await OrderModel.getUserOrders({ tenantId: req.tenantId });
 
       const formattedOrders = orders.map((order) => ({
         id: order.id,
@@ -93,6 +99,7 @@ export class OrderController {
       const { id: orderId } = req.params;
 
       const order = await OrderModel.getUserOrderById({
+        tenantId: req.tenantId,
         userId,
         orderId,
       });
@@ -128,6 +135,7 @@ export class OrderController {
       const { status } = req.body;
 
       const order = await OrderModel.updateOrderStatus({
+        tenantId: req.tenantId,
         orderId,
         status,
       });

@@ -8,6 +8,7 @@ export class mercadopagoController {
       const { id: orderId } = req.params;
 
       const mpOrder = await mercadopagoModel.create({
+        tenantId: req.tenantId,
         userId,
         orderId,
         payerEmail,

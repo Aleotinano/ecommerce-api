@@ -6,6 +6,7 @@ export class StatsController {
       const { days, lowStockThreshold } = req.search;
 
       const dashboard = await StatsModel.getDashboard({
+        tenantId: req.tenantId,
         days,
         lowStockThreshold,
       });

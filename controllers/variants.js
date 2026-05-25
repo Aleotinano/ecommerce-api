@@ -14,7 +14,10 @@ export class variantsController {
   static async getAll(req, res, next) {
     try {
       const { productId } = req.params;
-      const variants = await VariantModel.getVariants({ productId });
+      const variants = await VariantModel.getVariants({
+        tenantId: req.tenantId,
+        productId,
+      });
       return res.json({ variants });
     } catch (error) {
       next(error);
@@ -36,6 +39,7 @@ export class variantsController {
       }
 
       const variant = await VariantModel.createVariant({
+        tenantId: req.tenantId,
         productId,
         color,
         size,
@@ -64,6 +68,7 @@ export class variantsController {
     try {
       const { productId, id: variantId } = req.params;
       const existing = await VariantModel.getByIdForManagement({
+        tenantId: req.tenantId,
         productId,
         variantId,
       });
@@ -86,7 +91,7 @@ export class variantsController {
       }
 
       const variant = await VariantModel.editVariant(
-        { productId, variantId },
+        { tenantId: req.tenantId, productId, variantId },
         { color, size, price, stock, isActive, ...imageData }
       );
 
@@ -109,6 +114,7 @@ export class variantsController {
     try {
       const { productId, id: variantId } = req.params;
       const existing = await VariantModel.getByIdForManagement({
+        tenantId: req.tenantId,
         productId,
         variantId,
       });
@@ -117,7 +123,11 @@ export class variantsController {
         await deleteCloudinaryImage(existing.imgPublicId);
       }
 
-      await VariantModel.deleteVariant({ productId, variantId });
+      await VariantModel.deleteVariant({
+        tenantId: req.tenantId,
+        productId,
+        variantId,
+      });
 
       return res.json({ message: "Variante eliminada" });
     } catch (error) {

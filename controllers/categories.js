@@ -4,7 +4,10 @@ export class CategoryController {
   static async getAll(req, res, next) {
     try {
       const includeChildren = req.query.includeChildren === "true";
-      const categories = await CategoryModel.getAll({ includeChildren });
+      const categories = await CategoryModel.getAll({
+        tenantId: req.tenantId,
+        includeChildren,
+      });
       res.json(categories);
     } catch (error) {
       next(error);
@@ -13,7 +16,7 @@ export class CategoryController {
 
   static async getTree(req, res, next) {
     try {
-      const categories = await CategoryModel.getTree();
+      const categories = await CategoryModel.getTree({ tenantId: req.tenantId });
       res.json(categories);
     } catch (error) {
       next(error);
@@ -23,7 +26,10 @@ export class CategoryController {
   static async getById(req, res, next) {
     try {
       const { id } = req.params;
-      const category = await CategoryModel.getById({ id });
+      const category = await CategoryModel.getById({
+        tenantId: req.tenantId,
+        id,
+      });
 
       res.json({ message: "categoria", category: category });
     } catch (error) {
@@ -36,6 +42,7 @@ export class CategoryController {
       const { name, description, isActive, icon, parentId } = req.body;
 
       const category = await CategoryModel.create({
+        tenantId: req.tenantId,
         name,
         description,
         isActive,
@@ -58,6 +65,7 @@ export class CategoryController {
       const { name, description, isActive, icon, parentId } = req.body;
 
       const category = await CategoryModel.edit({
+        tenantId: req.tenantId,
         id,
         name,
         description,
@@ -76,7 +84,10 @@ export class CategoryController {
     try {
       const { id } = req.params;
 
-      const category = await CategoryModel.delete({ id });
+      const category = await CategoryModel.delete({
+        tenantId: req.tenantId,
+        id,
+      });
       res.json({ message: "Categoria eliminada", category });
     } catch (error) {
       next(error);

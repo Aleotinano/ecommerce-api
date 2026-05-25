@@ -27,6 +27,7 @@ export class productsController {
       const isAdmin = req.user?.role === "ADMIN";
 
       const pagination = await ProductModel.getAll({
+        tenantId: req.tenantId,
         name,
         categoryId,
         variantColor,
@@ -46,7 +47,9 @@ export class productsController {
 
   static async getVariantOptions(req, res, next) {
     try {
-      const options = await ProductModel.getVariantOptions();
+      const options = await ProductModel.getVariantOptions({
+        tenantId: req.tenantId,
+      });
       return res.json(options);
     } catch (error) {
       next(error);
@@ -56,7 +59,7 @@ export class productsController {
   static async getById(req, res, next) {
     try {
       const { id } = req.params;
-      const product = await ProductModel.getById({ id });
+      const product = await ProductModel.getById({ tenantId: req.tenantId, id });
 
       return res.json(product);
     } catch (error) {
@@ -85,6 +88,7 @@ export class productsController {
       }
 
       const newProduct = await ProductModel.create({
+        tenantId: req.tenantId,
         name,
         description,
         categoryId,
@@ -114,7 +118,10 @@ export class productsController {
 
     try {
       const { id } = req.params;
-      const existing = await ProductModel.getByIdForManagement({ id });
+      const existing = await ProductModel.getByIdForManagement({
+        tenantId: req.tenantId,
+        id,
+      });
       const { name, description, categoryId, img, isActive } = req.body;
 
       const imageData = {};
@@ -134,7 +141,7 @@ export class productsController {
       }
 
       const updatedProduct = await ProductModel.edit(
-        { id },
+        { tenantId: req.tenantId, id },
         {
           name,
           description,
@@ -168,6 +175,7 @@ export class productsController {
       const { categoryId } = req.body;
 
       const updatedProduct = await ProductModel.assignCategory({
+        tenantId: req.tenantId,
         id,
         categoryId,
       });
@@ -184,13 +192,19 @@ export class productsController {
   static async delete(req, res, next) {
     try {
       const { id } = req.params;
-      const existing = await ProductModel.getByIdForManagement({ id });
+      const existing = await ProductModel.getByIdForManagement({
+        tenantId: req.tenantId,
+        id,
+      });
 
       if (existing.imgPublicId) {
         await deleteCloudinaryImage(existing.imgPublicId);
       }
 
-      const deletedProduct = await ProductModel.delete({ id });
+      const deletedProduct = await ProductModel.delete({
+        tenantId: req.tenantId,
+        id,
+      });
 
       return res.json({
         message: "Producto eliminado correctamente",

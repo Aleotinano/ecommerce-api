@@ -4,7 +4,7 @@ export class cartController {
   static async getCart(req, res, next) {
     try {
       const { id } = req.user;
-      const cart = await CartModel.getCart({ id });
+      const cart = await CartModel.getCart({ tenantId: req.tenantId, id });
 
       return res.json({
         message: "Tu carrito de compras",
@@ -42,7 +42,11 @@ export class cartController {
       const { id } = req.user;
       const variantId = req.params.variantId;
 
-      const cartItem = await CartModel.add({ id, variantId });
+      const cartItem = await CartModel.add({
+        tenantId: req.tenantId,
+        id,
+        variantId,
+      });
 
       return res.status(201).json({
         message: "Variante agregada al carrito",
@@ -68,7 +72,11 @@ export class cartController {
       const { id } = req.user;
       const variantId = req.params.variantId;
 
-      const result = await CartModel.remove({ id, variantId });
+      const result = await CartModel.remove({
+        tenantId: req.tenantId,
+        id,
+        variantId,
+      });
 
       if (result.deleted) {
         return res.json({ message: "Variante eliminada del carrito" });
@@ -86,7 +94,7 @@ export class cartController {
   static async clear(req, res, next) {
     try {
       const { id } = req.user;
-      const result = await CartModel.clear({ id });
+      const result = await CartModel.clear({ tenantId: req.tenantId, id });
 
       return res.json({
         message: "Carrito vaciado completamente",

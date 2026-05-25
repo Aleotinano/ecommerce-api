@@ -11,7 +11,7 @@ export class roleController {
         return next(createError("Faltan datos", "MISSING_DATA", 400));
       }
 
-      const updatedUser = await roleModel.edit(id, role);
+      const updatedUser = await roleModel.edit(req.tenantId, id, role);
 
       return res.json({
         message: "Rol actualizado correctamente",
