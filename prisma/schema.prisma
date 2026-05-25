@@ -117,6 +117,7 @@ model Product {
   imgPublicId String?
   name        String
   description String?
+  price       Float?
   categoryId  Int?
   isActive    Boolean          @default(true)
   variants    ProductVariant[]
