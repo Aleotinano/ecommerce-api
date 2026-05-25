@@ -4,7 +4,7 @@ import { requireRole } from "../middleware/role.js";
 
 export const testRouter = Router();
 
-const testValue = "ADMIN";
+const testValue = ["ADMIN"];
 
 testRouter.get("/:id", verifyToken, requireRole(testValue), (req, res) => {
   const { id, username, role } = req.user;

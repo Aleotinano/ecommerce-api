@@ -8,7 +8,7 @@ import { validateId } from "../schemas/id.schema.js";
 
 export const categoriesRouter = Router();
 
-const roleRequired = "ADMIN";
+const roleRequired = ["ADMIN"];
 
 const validation = {
   create: validate({ body: createCategory }),
@@ -16,11 +16,16 @@ const validation = {
   id: validate({ params: validateId }),
 };
 
-categoriesRouter.get("/", CategoryController.getAll);
+categoriesRouter.get("/", verifyToken, CategoryController.getAll);
 
-categoriesRouter.get("/tree", CategoryController.getTree);
+categoriesRouter.get("/tree", verifyToken, CategoryController.getTree);
 
-categoriesRouter.get("/:id", validation.id, CategoryController.getById);
+categoriesRouter.get(
+  "/:id",
+  verifyToken,
+  validation.id,
+  CategoryController.getById
+);
 
 categoriesRouter.post(
   "/",

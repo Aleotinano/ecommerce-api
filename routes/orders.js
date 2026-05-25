@@ -8,7 +8,7 @@ import { validateId } from "../schemas/id.schema.js";
 
 export const ordersRouter = Router();
 
-const roleRequired = "ADMIN";
+const roleRequired = ["ADMIN"];
 
 const validation = {
   id: validate({ params: validateId }),

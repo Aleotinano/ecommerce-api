@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { productsController } from "../controllers/productos.js";
 import { requireRole } from "../middleware/role.js";
-import { verifyToken, attachUser } from "../middleware/auth.js";
+import { verifyToken } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
 import {
   normalizeMultipartBody,
@@ -18,7 +18,7 @@ import { validateId } from "../schemas/id.schema.js";
 
 export const productosRouter = Router();
 
-const roleRequired = "ADMIN";
+const roleRequired = ["ADMIN"];
 
 const validation = {
   create: validate({ body: createProduct }),
@@ -33,12 +33,12 @@ const validation = {
 
 productosRouter.get(
   "/",
-  attachUser,
+  verifyToken,
   validation.query,
   productsController.getAll
 );
-productosRouter.get("/options", productsController.getVariantOptions);
-productosRouter.get("/:id", validation.id, productsController.getById);
+productosRouter.get("/options", verifyToken, productsController.getVariantOptions);
+productosRouter.get("/:id", verifyToken, validation.id, productsController.getById);
 
 productosRouter.post(
   "/",
