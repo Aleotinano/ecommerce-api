@@ -8,9 +8,6 @@ export const middleWare = ({ acceptedOrigins = ACCEPTED_ORIGINS } = {}) => {
   return cors({
     origin: (origin, callback) => {
       if (!origin) {
-        // En producción se rechaza cualquier request sin Origin (evita acceso
-        // desde herramientas fuera del browser). En desarrollo se permite para
-        // facilitar pruebas con Postman/curl.
         if (isProd) return callback(new Error("El origen no esta permitido"));
         return callback(null, true);
       }
@@ -22,5 +19,19 @@ export const middleWare = ({ acceptedOrigins = ACCEPTED_ORIGINS } = {}) => {
       return callback(new Error("El origen no esta permitido"));
     },
     credentials: true,
+  });
+};
+
+export const storeCors = () => {
+  return cors({
+    origin: (origin, callback) => {
+      if (!origin) {
+        if (isProd) return callback(new Error("El origen no esta permitido"));
+        return callback(null, true);
+      }
+      callback(null, true);
+    },
+    credentials: true,
+    exposedHeaders: ["Authorization"],
   });
 };

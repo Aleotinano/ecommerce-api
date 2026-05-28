@@ -82,7 +82,7 @@ export const generalLimiter = rateLimit({
   standardHeaders: "draft-8",
   legacyHeaders: false,
   skip: (req) => !isProd,
-  keyGenerator: ipKeyGenerator,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
   store: generalStore,
   handler: rateLimitHandler,
 });
@@ -94,7 +94,7 @@ export const loginLimiter = rateLimit({
   legacyHeaders: false,
   skipSuccessfulRequests: true,
   skipFailedRequests: false,
-  keyGenerator: (req) => req.body?.email || ipKeyGenerator(req),
+  keyGenerator: (req) => req.body?.email || ipKeyGenerator(req.ip),
   store: loginStore,
   handler: rateLimitHandler,
 });
@@ -105,7 +105,7 @@ export const registerLimiter = rateLimit({
   standardHeaders: "draft-8",
   legacyHeaders: false,
   skipSuccessfulRequests: false,
-  keyGenerator: ipKeyGenerator,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
   store: registerStore,
   handler: rateLimitHandler,
 });
@@ -115,7 +115,7 @@ export const webhookLimiter = rateLimit({
   limit: 30,
   standardHeaders: "draft-8",
   legacyHeaders: false,
-  keyGenerator: ipKeyGenerator,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
   store: webhookStore,
   handler: rateLimitHandler,
 });
