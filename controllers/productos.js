@@ -24,7 +24,7 @@ export class productsController {
         offset,
       } = req.search;
 
-      const isAdmin = req.user?.role === "ADMIN";
+      const isAdmin = req.user?.role === "ADMIN" || req.user?.role === "STAFF";
 
       const pagination = await ProductModel.getAll({
         tenantId: req.tenantId,

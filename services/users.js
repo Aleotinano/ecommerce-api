@@ -19,12 +19,16 @@ const tenantSlugExists = async (slug) =>
     select: { id: true },
   }));
 
-function buildVerifyUrl(token) {
+function buildVerifyUrl(token, { audience = "admin" } = {}) {
+  if (audience === "customer") {
+    const base = DEFAULTS.STORE_APP_URL.replace(/\/$/, "");
+    return `${base}/cuenta/verify-email?token=${encodeURIComponent(token)}`;
+  }
   const base = DEFAULTS.APP_URL.replace(/\/$/, "");
   return `${base}/auth/verify-email?token=${encodeURIComponent(token)}`;
 }
 
-async function dispatchVerificationEmail({ user, tenantName }) {
+async function dispatchVerificationEmail({ user, tenantName, audience = "admin" }) {
   const { token, tokenHash, expiresAt } = generateEmailVerificationToken();
 
   await prisma.user.update({
@@ -35,7 +39,7 @@ async function dispatchVerificationEmail({ user, tenantName }) {
     },
   });
 
-  const verifyUrl = buildVerifyUrl(token);
+  const verifyUrl = buildVerifyUrl(token, { audience });
   const { subject, html, text } = buildVerificationEmail({
     verifyUrl,
     tenantName,
@@ -60,14 +64,6 @@ export const UserModel = {
         slug,
         suggestions,
       });
-    }
-
-    const emailTaken = await prisma.user.findUnique({
-      where: { email },
-      select: { id: true },
-    });
-    if (emailTaken) {
-      throw createError("El email ya está registrado", "EMAIL_EXISTS", 409);
     }
 
     const hashedPassword = await hashPassword(password);
@@ -95,9 +91,83 @@ export const UserModel = {
     return { user, tenant };
   },
 
-  async login({ email, password }) {
+  async registerCustomer({ tenantId, username, email, password }) {
+    const emailTaken = await prisma.user.findUnique({
+      where: { tenantId_email: { tenantId, email } },
+      select: { id: true },
+    });
+    if (emailTaken) {
+      throw createError("El email ya está registrado en esta tienda", "EMAIL_EXISTS", 409);
+    }
+
+    const usernameTaken = await prisma.user.findUnique({
+      where: { tenantId_username: { tenantId, username } },
+      select: { id: true },
+    });
+    if (usernameTaken) {
+      throw createError("El nombre de usuario ya está en uso", "USERNAME_EXISTS", 409);
+    }
+
+    const hashedPassword = await hashPassword(password);
+
+    const user = await prisma.user.create({
+      data: {
+        tenantId,
+        username,
+        email,
+        password: hashedPassword,
+        role: "CUSTOMER",
+      },
+    });
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { name: true },
+    });
+
+    await dispatchVerificationEmail({ user, tenantName: tenant.name, audience: "customer" });
+
+    return { user };
+  },
+
+  async loginForTenant({ email, password, tenantId }) {
     const user = await prisma.user.findUnique({
-      where: { email },
+      where: { tenantId_email: { tenantId, email } },
+      include: {
+        tenant: { select: { slug: true, isActive: true } },
+      },
+    });
+
+    const invalidCredentials = createError(
+      "Credenciales inválidas",
+      "INVALID_CREDENTIALS",
+      401
+    );
+
+    if (!user || !user.tenant || !user.tenant.isActive) {
+      throw invalidCredentials;
+    }
+
+    const isValid = await verifyPassword(password, user.password);
+    if (!isValid) {
+      throw invalidCredentials;
+    }
+
+    if (!user.emailVerified) {
+      throw createError(
+        "Debes verificar tu email antes de iniciar sesión",
+        "EMAIL_NOT_VERIFIED",
+        403,
+        { email: user.email }
+      );
+    }
+
+    return { user, tenant: { slug: user.tenant.slug } };
+  },
+
+  async login({ email, password }) {
+    const user = await prisma.user.findFirst({
+      where: { email, role: { in: ["ADMIN", "STAFF"] } },
       include: {
         tenant: { select: { slug: true, isActive: true } },
       },
@@ -177,11 +247,14 @@ export const UserModel = {
     return { alreadyVerified: false };
   },
 
-  async resendVerification({ email }) {
-    const user = await prisma.user.findUnique({
-      where: { email },
-      include: { tenant: { select: { name: true } } },
-    });
+  async resendVerification({ email, tenantId }) {
+    const where = tenantId
+      ? { tenantId_email: { tenantId, email } }
+      : undefined;
+
+    const user = tenantId
+      ? await prisma.user.findUnique({ where, include: { tenant: { select: { name: true } } } })
+      : await prisma.user.findFirst({ where: { email }, include: { tenant: { select: { name: true } } } });
 
     if (!user || user.emailVerified) {
       return { sent: false };
@@ -190,6 +263,7 @@ export const UserModel = {
     await dispatchVerificationEmail({
       user,
       tenantName: user.tenant?.name,
+      audience: user.role === "CUSTOMER" ? "customer" : "admin",
     });
 
     return { sent: true };

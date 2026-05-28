@@ -7,7 +7,7 @@ import { StatsQuery } from "../schemas/stats.schema.js";
 
 export const statsRouter = Router();
 
-const roleRequired = ["ADMIN"];
+const roleRequired = ["ADMIN", "STAFF"];
 
 statsRouter.get(
   "/dashboard",

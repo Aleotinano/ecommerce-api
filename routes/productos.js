@@ -18,7 +18,7 @@ import { validateId } from "../schemas/id.schema.js";
 
 export const productosRouter = Router();
 
-const roleRequired = ["ADMIN"];
+const roleRequired = ["ADMIN", "STAFF"];
 
 const validation = {
   create: validate({ body: createProduct }),

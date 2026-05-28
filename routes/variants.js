@@ -16,7 +16,7 @@ import {
 
 export const variantRouter = Router();
 
-const roleRequired = ["ADMIN"];
+const roleRequired = ["ADMIN", "STAFF"];
 
 const validation = {
   productId: validate({ params: variantParams }),
