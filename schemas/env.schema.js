@@ -9,6 +9,7 @@ export const envSchema = z.object({
 
   BASE_URL: z.string().url(),
   APP_URL: z.string().url().optional(),
+  STORE_APP_URL: z.string().url().optional(),
 
   PUBLIC_KEY: z.string().min(1),
   ACCESS_TOKEN: z.string().min(1),

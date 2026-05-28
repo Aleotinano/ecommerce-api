@@ -11,6 +11,7 @@ export const DEFAULTS = {
   ORIGINS: env.ORIGINS ? env.ORIGINS.split(",").map((o) => o.trim()) : [],
   BASE_URL: env.BASE_URL,
   APP_URL: env.APP_URL || env.BASE_URL,
+  STORE_APP_URL: env.STORE_APP_URL || "http://localhost:3000",
   DATABASE_URL: env.DATABASE_URL,
   PUBLIC_KEY: env.PUBLIC_KEY,
   ACCESS_TOKEN: env.ACCESS_TOKEN,

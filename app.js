@@ -20,6 +20,7 @@ import { cartRouter } from "./routes/cart.js";
 import { categoriesRouter } from "./routes/categories.js";
 import { mercadopagoRouter } from "./routes/mercadopago.js";
 import { statsRouter } from "./routes/stats.js";
+import { storeRouter } from "./routes/store/index.js";
 
 // Middlewares
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
@@ -50,6 +51,7 @@ app.use("/stats", statsRouter);
 app.use("/auth", usersRouter);
 app.use("/test", testRouter);
 app.use("/tenant-config", tenantConfigRouter);
+app.use("/store", storeRouter);
 
 // Manejo de errores \\
 app.use(notFoundHandler);
