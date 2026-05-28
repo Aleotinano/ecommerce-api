@@ -46,9 +46,38 @@ Datos creados:
 
 Cada tenant tiene su propio catálogo (categorías + productos + variantes).
 
-## 2. Tests críticos a correr
+## 1.5 Suite automatizada (Vitest)
 
-> Asumo `BASE_URL=http://localhost:3000`. Ajustá si usás otro puerto.
+El repo trae una suite de tests de integración corriendo contra una DB Postgres
+de test (variable `DATABASE_URL` con `_test` en el nombre, definida en `.env.test`).
+
+```bash
+pnpm exec vitest run            # corre toda la suite
+pnpm exec vitest run tests/tenant-config.test.js   # un archivo en particular
+pnpm exec vitest                # modo watch
+```
+
+Archivos cubiertos:
+
+| Archivo                          | Qué prueba                                                |
+|----------------------------------|-----------------------------------------------------------|
+| `tests/auth.test.js`             | Login por email, /me, slug del tenant en la respuesta     |
+| `tests/isolation.test.js`        | Aislamiento cross-tenant (categorías/productos/cart) + register |
+| `tests/products.test.js`         | Resolución de precios (variante vs producto) y BD         |
+| `tests/tenant-config.test.js`    | GET/PATCH /tenant-config y DELETE /tenant-config/:id/logo |
+
+Helpers compartidos en `tests/helpers.js`:
+- `seedTenants()` — limpia la DB y crea 2 tenants (`acme`, `shopco`) con admins
+  `admin@acme.com` / `admin@shopco.com` (password `password123`, `emailVerified=true`).
+- `seedTenantConfig(tenantId, overrides?)` — upsertea una `TenantConfig` demo.
+- `loginAs(app, { email, password? })` — hace login HTTP y devuelve `{ res, cookie }`.
+- `cookieFor(user)` — firma un JWT con el secreto del proyecto y devuelve la cookie
+  `access_token=...` sin tocar el endpoint de login (útil para bypassear el
+  `loginLimiter` cuando un test necesita varias sesiones).
+
+## 2. Tests críticos a correr (manual con curl)
+
+> Asumo `BASE_URL=http://localhost:3001`. Ajustá si usás otro puerto.
 > Los ejemplos usan `curl` con cookie jar para mantener sesión.
 
 ### 2.1 Login resuelve el tenant a partir del email
