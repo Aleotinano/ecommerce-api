@@ -2,10 +2,11 @@ import "dotenv/config";
 
 import prisma from "../lib/prisma.js";
 import { hashPassword } from "../helpers/password.js";
+import { seedTenantConfigs } from "./seed-tenant-config.js";
 
 const PASSWORD_PLAIN = "password123";
 
-async function seedTenant({ slug, name, adminUsername, adminEmail, categories }) {
+async function seedTenant({ slug, name, adminUsername, adminEmail, staffUsername, staffEmail, customerUsername, customerEmail, categories }) {
   const hashed = await hashPassword(PASSWORD_PLAIN);
 
   const tenant = await prisma.tenant.create({
@@ -13,13 +14,29 @@ async function seedTenant({ slug, name, adminUsername, adminEmail, categories })
       slug,
       name,
       users: {
-        create: {
-          username: adminUsername,
-          email: adminEmail,
-          password: hashed,
-          role: "ADMIN",
-          emailVerified: true,
-        },
+        create: [
+          {
+            username: adminUsername,
+            email: adminEmail,
+            password: hashed,
+            role: "ADMIN",
+            emailVerified: true,
+          },
+          {
+            username: staffUsername,
+            email: staffEmail,
+            password: hashed,
+            role: "STAFF",
+            emailVerified: true,
+          },
+          {
+            username: customerUsername,
+            email: customerEmail,
+            password: hashed,
+            role: "CUSTOMER",
+            emailVerified: true,
+          },
+        ],
       },
     },
     include: { users: true },
@@ -56,21 +73,27 @@ async function seedTenant({ slug, name, adminUsername, adminEmail, categories })
 }
 
 async function main() {
-  await prisma.cartItem.deleteMany();
-  await prisma.cart.deleteMany();
-  await prisma.orderItem.deleteMany();
-  await prisma.order.deleteMany();
-  await prisma.productVariant.deleteMany();
-  await prisma.product.deleteMany();
-  await prisma.categories.deleteMany();
-  await prisma.user.deleteMany();
-  await prisma.tenant.deleteMany();
+  // TRUNCATE con RESTART IDENTITY resetea los autoincrement: así el primer
+  // tenant siempre queda con id=1, el primer user con id=1, etc.
+  await prisma.$executeRawUnsafe(`
+    TRUNCATE TABLE
+      "CartItem", "Cart",
+      "OrderItem", "Order",
+      "ProductVariant", "Product", "Categories",
+      "TenantConfig",
+      "User", "Tenant"
+    RESTART IDENTITY CASCADE
+  `);
 
   const acme = await seedTenant({
     slug: "acme",
     name: "Acme Store",
     adminUsername: "admin_acme",
     adminEmail: "admin@acme.com",
+    staffUsername: "staff_acme",
+    staffEmail: "staff@acme.com",
+    customerUsername: "customer_acme",
+    customerEmail: "customer@acme.com",
     categories: [
       {
         name: "Remeras",
@@ -107,6 +130,10 @@ async function main() {
     name: "ShopCo",
     adminUsername: "admin_shopco",
     adminEmail: "admin@shopco.com",
+    staffUsername: "staff_shopco",
+    staffEmail: "staff@shopco.com",
+    customerUsername: "customer_shopco",
+    customerEmail: "customer@shopco.com",
     categories: [
       {
         name: "Electrónica",
@@ -126,10 +153,16 @@ async function main() {
   });
 
   console.log("\n=== Seed completado ===\n");
-  console.log(`Tenant 1: ${acme.name} (slug: ${acme.slug}, id: ${acme.id})`);
-  console.log(`  Admin: ${acme.users[0].username} / ${PASSWORD_PLAIN}\n`);
-  console.log(`Tenant 2: ${shopco.name} (slug: ${shopco.slug}, id: ${shopco.id})`);
-  console.log(`  Admin: ${shopco.users[0].username} / ${PASSWORD_PLAIN}\n`);
+  for (const t of [acme, shopco]) {
+    console.log(`Tenant: ${t.name} (slug: ${t.slug}, id: ${t.id})`);
+    for (const u of t.users) {
+      console.log(`  ${u.role}: ${u.username} (${u.email}) / ${PASSWORD_PLAIN}`);
+    }
+    console.log();
+  }
+
+  console.log("--- Tenant configs ---");
+  await seedTenantConfigs();
 }
 
 main()
