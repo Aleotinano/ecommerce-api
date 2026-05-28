@@ -11,14 +11,8 @@ let shopcoCookie;
 
 beforeAll(async () => {
   ({ acme, shopco } = await seedTenants());
-  ({ cookie: acmeCookie } = await loginAs(app, {
-    slug: "acme",
-    username: "admin_acme",
-  }));
-  ({ cookie: shopcoCookie } = await loginAs(app, {
-    slug: "shopco",
-    username: "admin_shopco",
-  }));
+  ({ cookie: acmeCookie } = await loginAs(app, { email: "admin@acme.com" }));
+  ({ cookie: shopcoCookie } = await loginAs(app, { email: "admin@shopco.com" }));
 });
 
 afterAll(async () => {
@@ -87,34 +81,42 @@ describe("isolation cross-tenant", () => {
 });
 
 describe("register multi-tenant", () => {
-  it("permite mismo username/email en tenants distintos", async () => {
+  it("mismo username pero distintos emails y tenants → OK", async () => {
     const a = await request(app).post("/auth/register").send({
       username: "cliente1",
       password: "secret123",
-      email: "c@x.com",
+      email: "c1@x.com",
       tenantName: "Tienda A",
-      tenantSlug: "tenant-a",
     });
 
     const b = await request(app).post("/auth/register").send({
       username: "cliente1",
       password: "secret123",
-      email: "c@x.com",
+      email: "c2@x.com",
       tenantName: "Tienda B",
-      tenantSlug: "tenant-b",
     });
 
     expect(a.status).toBe(201);
     expect(b.status).toBe(201);
   });
 
-  it("rechaza slug duplicado → 409", async () => {
+  it("mismo email en distinto tenant → 201 (email único por tenant)", async () => {
+    const res = await request(app).post("/auth/register").send({
+      username: "otro_user",
+      password: "secret123",
+      email: "c1@x.com",
+      tenantName: "Tienda C",
+    });
+
+    expect(res.status).toBe(201);
+  });
+
+  it("tenantName que slugifica a uno existente → 409 TENANT_EXISTS", async () => {
     const res = await request(app).post("/auth/register").send({
       username: "founderx",
       password: "secret123",
       email: "fx@x.com",
-      tenantName: "Acme dup",
-      tenantSlug: "acme",
+      tenantName: "acme",
     });
 
     expect(res.status).toBe(409);

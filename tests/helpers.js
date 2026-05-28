@@ -1,22 +1,52 @@
 import request from "supertest";
+import jwt from "jsonwebtoken";
 import prisma from "../lib/prisma.js";
 import { hashPassword } from "../helpers/password.js";
+import { DEFAULTS } from "../config.js";
 
-async function buildTenant({ slug, name, adminUsername, adminEmail, categories }) {
+export function cookieFor(user) {
+  const token = jwt.sign(
+    {
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      email: user.email,
+      tenantId: user.tenantId,
+    },
+    DEFAULTS.SECRET_JWT_KEY,
+    { expiresIn: "1h" }
+  );
+  return `access_token=${token}`;
+}
+
+async function buildTenant({ slug, name, adminUsername, adminEmail, customerUsername, customerEmail, categories }) {
   const password = await hashPassword("password123");
+
+  const users = [
+    {
+      username: adminUsername,
+      email: adminEmail,
+      password,
+      role: "ADMIN",
+      emailVerified: true,
+    },
+  ];
+
+  if (customerUsername) {
+    users.push({
+      username: customerUsername,
+      email: customerEmail,
+      password,
+      role: "CUSTOMER",
+      emailVerified: true,
+    });
+  }
 
   const tenant = await prisma.tenant.create({
     data: {
       slug,
       name,
-      users: {
-        create: {
-          username: adminUsername,
-          email: adminEmail,
-          password,
-          role: "ADMIN",
-        },
-      },
+      users: { create: users },
     },
     include: { users: true },
   });
@@ -62,6 +92,7 @@ export async function seedTenants() {
   await prisma.productVariant.deleteMany();
   await prisma.product.deleteMany();
   await prisma.categories.deleteMany();
+  await prisma.tenantConfig.deleteMany();
   await prisma.user.deleteMany();
   await prisma.tenant.deleteMany();
 
@@ -69,7 +100,9 @@ export async function seedTenants() {
     slug: "acme",
     name: "Acme",
     adminUsername: "admin_acme",
-    adminEmail: "a@a.com",
+    adminEmail: "admin@acme.com",
+    customerUsername: "customer_acme",
+    customerEmail: "customer@acme.com",
     categories: [
       {
         name: "Remeras",
@@ -89,7 +122,9 @@ export async function seedTenants() {
     slug: "shopco",
     name: "ShopCo",
     adminUsername: "admin_shopco",
-    adminEmail: "s@s.com",
+    adminEmail: "admin@shopco.com",
+    customerUsername: "customer_shopco",
+    customerEmail: "customer@shopco.com",
     categories: [
       {
         name: "Electrónica",
@@ -108,15 +143,60 @@ export async function seedTenants() {
   return { acme, shopco };
 }
 
-export async function loginAs(app, { slug, username, password = "password123" }) {
+export async function seedTenantConfig(tenantId, overrides = {}) {
+  return prisma.tenantConfig.upsert({
+    where: { tenantId },
+    update: { ...overrides },
+    create: {
+      tenantId,
+      storeName: "Acme Store",
+      storeDescription: "Tienda demo de Acme",
+      storeTagline: "Lo mejor en remeras",
+      contactEmail: "contacto@acme.com",
+      contactPhone: "+541112345678",
+      contactAddress: "Av. Siempre Viva 123",
+      socialInstagram: "https://instagram.com/acme",
+      currency: "ARS",
+      locale: "es-AR",
+      showOutOfStock: false,
+      allowCartGuest: true,
+      ...overrides,
+    },
+  });
+}
+
+export function bearerFor(user) {
+  const token = jwt.sign(
+    {
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      email: user.email,
+      tenantId: user.tenantId,
+    },
+    DEFAULTS.SECRET_JWT_KEY,
+    { expiresIn: "1h" }
+  );
+  return `Bearer ${token}`;
+}
+
+export async function loginAs(app, { email, password = "password123" }) {
   const res = await request(app)
     .post("/auth/login")
-    .set("X-Tenant-Slug", slug)
-    .send({ username, password });
+    .send({ email, password });
 
   const cookie = res.headers["set-cookie"]?.find((c) =>
     c.startsWith("access_token=")
   );
 
   return { res, cookie };
+}
+
+export async function storeLoginAs(app, { slug, email, password = "password123" }) {
+  const res = await request(app)
+    .post("/store/auth/login")
+    .set("X-Tenant-Slug", slug)
+    .send({ email, password });
+
+  return { res, token: res.body.token };
 }

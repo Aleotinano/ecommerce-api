@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import prisma from "../lib/prisma.js";
 import { app } from "../app.js";
-import { seedTenants } from "./helpers.js";
+import { seedTenants, loginAs } from "./helpers.js";
 
 beforeAll(async () => {
   await seedTenants();
@@ -12,47 +12,53 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-describe("auth multi-tenant", () => {
-  it("login sin tenant slug (ni subdominio ni header) → 400 TENANT_REQUIRED", async () => {
+describe("auth multi-tenant (login por email)", () => {
+  it("login sin email → 400", async () => {
     const res = await request(app)
       .post("/auth/login")
-      .send({ username: "admin_acme", password: "password123" });
+      .send({ password: "password123" });
 
     expect(res.status).toBe(400);
-    expect(res.body.error.code).toBe("TENANT_REQUIRED");
   });
 
-  it("login con tenant inexistente → 401 INVALID_TENANT", async () => {
+  it("login con email inexistente → 401 INVALID_CREDENTIALS", async () => {
     const res = await request(app)
       .post("/auth/login")
-      .set("X-Tenant-Slug", "fantasma")
-      .send({ username: "admin_acme", password: "password123" });
+      .send({ email: "nadie@fantasma.com", password: "password123" });
 
     expect(res.status).toBe(401);
-    expect(res.body.error.code).toBe("INVALID_TENANT");
+    expect(res.body.error.code).toBe("INVALID_CREDENTIALS");
   });
 
-  it("login válido devuelve cookie y /me incluye tenantId", async () => {
-    const login = await request(app)
+  it("login con password incorrecta → 401 INVALID_CREDENTIALS", async () => {
+    const res = await request(app)
       .post("/auth/login")
-      .set("X-Tenant-Slug", "acme")
-      .send({ username: "admin_acme", password: "password123" });
+      .send({ email: "admin@acme.com", password: "wrong" });
 
-    expect(login.status).toBe(200);
-    const cookie = login.headers["set-cookie"][0];
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe("INVALID_CREDENTIALS");
+  });
 
-    const me = await request(app).get("/auth/me").set("Cookie", cookie);
+  it("login válido devuelve cookie, tenant.slug y /me incluye tenantId", async () => {
+    const login = await loginAs(app, { email: "admin@acme.com" });
+
+    expect(login.res.status).toBe(200);
+    expect(login.res.body.tenant.slug).toBe("acme");
+    expect(login.cookie).toBeDefined();
+
+    const me = await request(app).get("/auth/me").set("Cookie", login.cookie);
     expect(me.status).toBe(200);
     expect(me.body.usuario.tenantId).toBeTypeOf("number");
+    expect(me.body.tenant.slug).toBe("acme");
   });
 
-  it("usuario de un tenant no logea con slug de otro tenant", async () => {
-    const res = await request(app)
-      .post("/auth/login")
-      .set("X-Tenant-Slug", "shopco")
-      .send({ username: "admin_acme", password: "password123" });
+  it("emails distintos resuelven a tenants distintos", async () => {
+    const acme = await loginAs(app, { email: "admin@acme.com" });
+    const shopco = await loginAs(app, { email: "admin@shopco.com" });
 
-    expect(res.status).toBe(401);
-    expect(res.body.error.code).toBe("USER_NOT_FOUND");
+    expect(acme.res.status).toBe(200);
+    expect(shopco.res.status).toBe(200);
+    expect(acme.res.body.tenant.slug).toBe("acme");
+    expect(shopco.res.body.tenant.slug).toBe("shopco");
   });
 });
