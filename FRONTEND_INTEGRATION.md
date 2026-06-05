@@ -7,13 +7,103 @@ Referencia para conectar el frontend al backend multi-tenant. Hay **dos apps cli
 
 ---
 
+## 0. Arquitectura de dominios y ruteo (leer primero)
+
+Son **dos frontends separados**, NO un solo sitio con un menú. Cada uno vive en su propio dominio y nunca comparten login. La raíz es de admins; los clientes entran directo a la tienda del tenant.
+
+```
+                         ┌─────────────────────────────────────────────┐
+  midominio.com   ──────▶│  APP ADMIN  (raíz, sin subdominio)           │
+  app.midominio.com      │  Dueños/empleados + "Crear tu tienda"        │
+                         │  Auth: cookie · Rutas: /auth/* , /products…  │
+                         └─────────────────────────────────────────────┘
+
+  acme.midominio.com ───▶┌─────────────────────────────────────────────┐
+  shopco.midominio.com   │  STOREFRONT  (subdominio = tenant)           │
+                         │  Clientes de ESA tienda                      │
+                         │  Auth: Bearer · Rutas: /store/*              │
+                         └─────────────────────────────────────────────┘
+```
+
+### Quién entra por dónde
+
+| Persona | Entra por | Login | App |
+|---------|-----------|-------|-----|
+| Quiere **crear una tienda** | raíz (`midominio.com`) | `POST /auth/register` (crea tenant + ADMIN) | Admin |
+| **Dueño/empleado** de una tienda | raíz (`midominio.com`) | `POST /auth/login` | Admin |
+| **Cliente/comprador** | el subdominio de la tienda (`acme.midominio.com`) | `POST /store/auth/login` | Storefront |
+
+> Regla mental: **la raíz nunca muestra productos de un tenant**. La raíz es marketing + login/registro de dueños. Si alguien llega a `acme.midominio.com` ya está "dentro" de la tienda acme y no necesita pasar por la raíz.
+
+### Cómo el cliente llega directo a su tienda (sin pasar por la raíz)
+
+El tenant se identifica por **subdominio** (lo resuelve el backend, ver §3). El frontend storefront no tiene que elegir tenant en una pantalla: el host ya lo dice.
+
+- **Producción:** cada tienda se sirve en su subdominio. `acme.midominio.com` → el front lee `window.location.hostname`, saca el primer label (`acme`) y lo manda como `X-Tenant-Slug` en cada request a `/store/*`. (El backend igual lo deduce solo del subdominio, pero mandar el header lo hace robusto detrás de proxies.)
+- **Desarrollo:** no hay subdominios en `localhost`, así que el slug se elige por **header `X-Tenant-Slug`**. Para probar varias tiendas: usá `?tenant=acme` en la URL del front y guardalo, o un selector solo-dev. Ej. de cliente:
+
+```js
+// storefront/src/api.js
+const slug =
+  // prod: acme.midominio.com -> "acme"
+  (location.hostname.split(".").length >= 3 &&
+    !["www", "api", "app"].includes(location.hostname.split(".")[0])
+    ? location.hostname.split(".")[0]
+    : null) ||
+  // dev: ?tenant=acme  (persistido en localStorage)
+  new URLSearchParams(location.search).get("tenant") ||
+  localStorage.getItem("tenant");
+
+export const storeApi = axios.create({
+  baseURL: "http://localhost:4000",
+  headers: { "X-Tenant-Slug": slug },
+  // storefront NO usa cookies → no withCredentials
+});
+storeApi.interceptors.request.use((cfg) => {
+  const t = localStorage.getItem("store_token");
+  if (t) cfg.headers.Authorization = `Bearer ${t}`;
+  return cfg;
+});
+```
+
+```js
+// admin/src/api.js  (app de la raíz, auth por cookie)
+export const adminApi = axios.create({
+  baseURL: "http://localhost:4000",
+  withCredentials: true, // imprescindible: la cookie httpOnly viaja sola
+  // NO se manda X-Tenant-Slug: el tenant del admin sale de su sesión
+});
+```
+
+### Ruteo interno de cada front (ejemplo React Router)
+
+```
+APP ADMIN (raíz)                  STOREFRONT (subdominio del tenant)
+  /                  landing        /                  home de la tienda
+  /crear-tienda      register       /productos         catálogo
+  /login             login          /productos/:id     detalle
+  /dashboard         (cookie)       /carrito           (Bearer)
+  /dashboard/productos              /cuenta/login      store login
+  /dashboard/ordenes                /cuenta/registro   store register
+  /dashboard/config  (solo ADMIN)   /cuenta/verify-email?token=...
+```
+
+> Dos apps = dos builds/deploys separados. No mezclar los `axios`: el admin usa `withCredentials`, el storefront usa `Bearer`. Mezclarlos es la causa #1 de bugs de auth.
+
+---
+
 ## 1. Config / acceso
 
 | Dato | Valor |
 |------|-------|
 | API URL | `http://localhost:4000` (`.env` → `PORT=4000`) |
-| CORS admin | solo `http://localhost:3000` (`ORIGINS`) |
+| CORS admin | en **dev**: cualquier `localhost`/`127.0.0.1` (cualquier puerto). En **prod**: solo los orígenes de `ORIGINS` |
 | CORS storefront | cualquier origin en dev (`storeCors`) |
+
+> ⚠️ **Auth admin = cookie httpOnly.** Toda request al panel admin (incluido `/auth/login`) DEBE mandarse con credenciales, si no la cookie no viaja:
+> - `fetch(url, { credentials: "include" })`
+> - axios: `axios.create({ baseURL, withCredentials: true })`
+> En producción agregá el dominio del panel admin a `ORIGINS` (separado por comas); si no, el CORS responde **500 `El origen no esta permitido`**.
 
 **Usuarios de prueba** (password de todos: `password123`):
 
