@@ -134,7 +134,7 @@ model ProductVariant {
   productId   Int
   color       String?
   size        String?
-  price       Float
+  price       Float?
   stock       Int
   sku         String
   img         String?

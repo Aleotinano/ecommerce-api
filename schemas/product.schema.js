@@ -22,6 +22,11 @@ export const createProduct = z.object({
     .positive("El ID de categoría es inválido")
     .nullable()
     .optional(),
+  price: z.coerce
+    .number({ invalid_type_error: "El precio debe ser un número" })
+    .positive("El precio debe ser mayor a 0")
+    .nullable()
+    .optional(),
   img: z
     .string({ invalid_type_error: "La imagen debe ser texto" })
     .url("La URL de la imagen no es válida")
@@ -51,6 +56,11 @@ export const updateProduct = z
       .number({ invalid_type_error: "El ID de categoría debe ser un número" })
       .int("El ID de categoría debe ser un número entero")
       .positive("El ID de categoría es inválido")
+      .nullable()
+      .optional(),
+    price: z.coerce
+      .number({ invalid_type_error: "El precio debe ser un número" })
+      .positive("El precio debe ser mayor a 0")
       .nullable()
       .optional(),
     img: z

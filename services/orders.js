@@ -108,11 +108,14 @@ export const OrderModel = {
           total,
           status: "PENDING",
           orderItems: {
-            create: cart.items.map((item) => ({
-              variantId: item.variantId,
-              quantity: item.quantity,
-              price: variantMap.get(item.variantId).price,
-            })),
+            create: cart.items.map((item) => {
+              const variant = variantMap.get(item.variantId);
+              return {
+                variantId: item.variantId,
+                quantity: item.quantity,
+                price: getProductPrice(variant, variant.product),
+              };
+            }),
           },
         },
         ...orderItemsInclude,

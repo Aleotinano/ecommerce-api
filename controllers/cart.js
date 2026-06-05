@@ -1,4 +1,5 @@
 import { CartModel } from "../services/cart.js";
+import { getProductPrice } from "../helpers/price.js";
 
 export class cartController {
   static async getCart(req, res, next) {
@@ -17,7 +18,8 @@ export class cartController {
             id: item.variant.id,
             color: item.variant.color,
             size: item.variant.size,
-            price: item.variant.price,
+            price: getProductPrice(item.variant, item.variant.product),
+            variantPrice: item.variant.price,
             stock: item.variant.stock,
             sku: item.variant.sku,
             img: item.variant.img ?? item.variant.product?.img ?? null,

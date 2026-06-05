@@ -76,6 +76,7 @@ export class productsController {
         name,
         description,
         categoryId,
+        price,
         img,
         isActive,
         variants = [],
@@ -92,6 +93,7 @@ export class productsController {
         name,
         description,
         categoryId,
+        price,
         img: uploadedImage?.img ?? img,
         imgPublicId: uploadedImage?.imgPublicId ?? null,
         isActive,
@@ -122,7 +124,7 @@ export class productsController {
         tenantId: req.tenantId,
         id,
       });
-      const { name, description, categoryId, img, isActive } = req.body;
+      const { name, description, categoryId, price, img, isActive } = req.body;
 
       const imageData = {};
       let shouldDeletePreviousImage = false;
@@ -146,6 +148,7 @@ export class productsController {
           name,
           description,
           categoryId,
+          price,
           isActive,
           ...imageData,
         }

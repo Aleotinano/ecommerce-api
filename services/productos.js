@@ -24,35 +24,64 @@ async function invalidateProductsCache(tenantId) {
   await delPattern(`${tenantNs(tenantId)}:prod:*`);
 }
 
-const buildVariantFilter = ({ color, size, minPrice, maxPrice }) => {
+// Filtro de atributos de variante (color/talla). Se usa tanto para decidir qué
+// productos matchean como para qué variantes incluir en la respuesta.
+const buildVariantAttributeFilter = ({ color, size }) => {
   const filter = { isActive: true };
-  let hasAdditionalCriteria = false;
+  if (color) filter.color = color;
+  if (size) filter.size = size;
+  return filter;
+};
 
-  if (color) {
-    filter.color = color;
-    hasAdditionalCriteria = true;
+const buildPriceRange = ({ minPrice, maxPrice }) => {
+  const range = {};
+  if (minPrice !== undefined) range.gte = minPrice;
+  if (maxPrice !== undefined) range.lte = maxPrice;
+  return Object.keys(range).length ? range : null;
+};
+
+// Construye el WHERE de producto contemplando el "precio efectivo":
+// variante.price si existe, o product.price como fallback (productos unitarios).
+const buildProductWhere = ({
+  base,
+  color,
+  size,
+  minPrice,
+  maxPrice,
+}) => {
+  const where = { ...base };
+  const attributeFilter = buildVariantAttributeFilter({ color, size });
+  const hasAttributeFilter = Boolean(color || size);
+  const priceRange = buildPriceRange({ minPrice, maxPrice });
+  const and = [];
+
+  if (hasAttributeFilter) {
+    and.push({ variants: { some: attributeFilter } });
   }
 
-  if (size) {
-    filter.size = size;
-    hasAdditionalCriteria = true;
+  if (priceRange) {
+    and.push({
+      OR: [
+        // La variante tiene su propio precio dentro del rango.
+        { variants: { some: { ...attributeFilter, price: priceRange } } },
+        // La variante no tiene precio: aplica el precio del producto.
+        {
+          price: priceRange,
+          variants: { some: { ...attributeFilter, price: null } },
+        },
+        // Producto unitario (sin variantes): aplica el precio del producto.
+        ...(hasAttributeFilter
+          ? []
+          : [{ price: priceRange, variants: { none: {} } }]),
+      ],
+    });
   }
 
-  const priceFilter = {};
-  if (minPrice !== undefined) {
-    priceFilter.gte = minPrice;
+  if (and.length) {
+    where.AND = and;
   }
 
-  if (maxPrice !== undefined) {
-    priceFilter.lte = maxPrice;
-  }
-
-  if (Object.keys(priceFilter).length) {
-    filter.price = priceFilter;
-    hasAdditionalCriteria = true;
-  }
-
-  return { filter, hasAdditionalCriteria };
+  return { where, attributeFilter };
 };
 
 const ensureCategoryExists = async (tenantId, categoryId) => {
@@ -111,37 +140,32 @@ export const ProductModel = {
     const key = productsListKey(tenantId, params, includeInactive);
 
     return wrap(key, PRODUCTS_LIST_TTL, async () => {
-      const where = { tenantId };
+      const base = { tenantId };
 
       if (!includeInactive) {
-        where.isActive = true;
+        base.isActive = true;
       }
       if (name) {
-        where.name = { contains: name, mode: "insensitive" };
+        base.name = { contains: name, mode: "insensitive" };
       }
 
       if (categoryId !== undefined) {
-        where.categoryId = categoryId;
+        base.categoryId = categoryId;
       }
 
-      const { filter: variantFilter, hasAdditionalCriteria } = buildVariantFilter(
-        {
-          color: variantColor,
-          size: variantSize,
-          minPrice,
-          maxPrice,
-        }
-      );
-
-      if (hasAdditionalCriteria) {
-        where.variants = { some: variantFilter };
-      }
+      const { where, attributeFilter } = buildProductWhere({
+        base,
+        color: variantColor,
+        size: variantSize,
+        minPrice,
+        maxPrice,
+      });
 
       return prisma.product.findMany({
         where,
         include: {
           variants: {
-            where: variantFilter,
+            where: attributeFilter,
             orderBy: { id: "asc" },
           },
         },
@@ -222,6 +246,7 @@ export const ProductModel = {
     name,
     description,
     categoryId,
+    price,
     img,
     imgPublicId,
     isActive,
@@ -246,6 +271,7 @@ export const ProductModel = {
       name,
       description: description ?? null,
       categoryId: categoryId ?? null,
+      price: price ?? null,
       img: img ?? null,
       imgPublicId: imgPublicId ?? null,
       isActive: isActive ?? true,
@@ -261,7 +287,7 @@ export const ProductModel = {
                   tenantId,
                   color: variant.color ?? null,
                   size: variant.size ?? null,
-                  price: variant.price,
+                  price: variant.price ?? null,
                   stock: variant.stock,
                   sku: variant.sku,
                   img: variant.img ?? null,
@@ -284,7 +310,7 @@ export const ProductModel = {
 
   async edit(
     { tenantId, id },
-    { name, description, categoryId, img, imgPublicId, isActive }
+    { name, description, categoryId, price, img, imgPublicId, isActive }
   ) {
     await this.getByIdForManagement({ tenantId, id });
     await ensureCategoryExists(tenantId, categoryId);
@@ -293,6 +319,7 @@ export const ProductModel = {
       name,
       description,
       categoryId,
+      price,
       img,
       imgPublicId,
       isActive,

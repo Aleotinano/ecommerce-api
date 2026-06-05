@@ -11,10 +11,11 @@ export const createVariant = z.object({
     .optional(),
   price: z.coerce
     .number({
-      required_error: "El precio es requerido",
       invalid_type_error: "El precio debe ser un número",
     })
-    .positive("El precio debe ser mayor a 0"),
+    .positive("El precio debe ser mayor a 0")
+    .nullable()
+    .optional(),
   stock: z.coerce
     .number({
       required_error: "El stock es requerido",
@@ -45,6 +46,7 @@ export const updateVariant = z
     price: z.coerce
       .number({ invalid_type_error: "El precio debe ser un número" })
       .positive("El precio debe ser mayor a 0")
+      .nullable()
       .optional(),
     stock: z.coerce
       .number({ invalid_type_error: "El stock debe ser un número" })
