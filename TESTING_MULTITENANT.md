@@ -39,10 +39,10 @@ LOG_LEVEL=debug                        # opcional; default: debug en dev, info e
 
 Datos creados:
 
-| Tenant slug | Admin email          | Admin username  | Password      |
-|-------------|----------------------|-----------------|---------------|
-| `acme`      | `admin@acme.com`     | `admin_acme`    | `password123` |
-| `shopco`    | `admin@shopco.com`   | `admin_shopco`  | `password123` |
+| Tenant slug | Admin email        | Admin username | Password      |
+| ----------- | ------------------ | -------------- | ------------- |
+| `acme`      | `admin@acme.com`   | `admin_acme`   | `password123` |
+| `shopco`    | `admin@shopco.com` | `admin_shopco` | `password123` |
 
 Cada tenant tiene su propio catálogo (categorías + productos + variantes).
 
@@ -59,14 +59,15 @@ pnpm exec vitest                # modo watch
 
 Archivos cubiertos:
 
-| Archivo                          | Qué prueba                                                |
-|----------------------------------|-----------------------------------------------------------|
-| `tests/auth.test.js`             | Login por email, /me, slug del tenant en la respuesta     |
-| `tests/isolation.test.js`        | Aislamiento cross-tenant (categorías/productos/cart) + register |
-| `tests/products.test.js`         | Resolución de precios (variante vs producto) y BD         |
-| `tests/tenant-config.test.js`    | GET/PATCH /tenant-config y DELETE /tenant-config/:id/logo |
+| Archivo                       | Qué prueba                                                      |
+| ----------------------------- | --------------------------------------------------------------- |
+| `tests/auth.test.js`          | Login por email, /me, slug del tenant en la respuesta           |
+| `tests/isolation.test.js`     | Aislamiento cross-tenant (categorías/productos/cart) + register |
+| `tests/products.test.js`      | Resolución de precios (variante vs producto) y BD               |
+| `tests/tenant-config.test.js` | GET/PATCH /tenant-config y DELETE /tenant-config/:id/logo       |
 
 Helpers compartidos en `tests/helpers.js`:
+
 - `seedTenants()` — limpia la DB y crea 2 tenants (`acme`, `shopco`) con admins
   `admin@acme.com` / `admin@shopco.com` (password `password123`, `emailVerified=true`).
 - `seedTenantConfig(tenantId, overrides?)` — upsertea una `TenantConfig` demo.
@@ -249,7 +250,11 @@ Repetir el mismo `tenantName` debe dar 409 `TENANT_EXISTS` con sugerencias:
     "message": "El tenant ya existe",
     "details": {
       "slug": "mi-tienda-nueva",
-      "suggestions": ["mi-tienda-nueva-2", "mi-tienda-nueva-3", "mi-tienda-nueva-4"]
+      "suggestions": [
+        "mi-tienda-nueva-2",
+        "mi-tienda-nueva-3",
+        "mi-tienda-nueva-4"
+      ]
     }
   }
 }
@@ -375,11 +380,11 @@ NODE_ENV=production              # Rate limiting se activa solo en prod
 
 ### 3.5.2 Límites actuales
 
-| Endpoint        | Límite         | Ventana | Por qué (key) |
-|-----------------|----------------|---------|---|
-| POST /auth/login | 5 intentos     | 15 min  | **Email** (anti brute-force) |
-| POST /auth/register | 10 intentos | 1 hora  | **IP** (anti spam) |
-| Resto (general)  | 200 req        | 15 min  | **IP** (general)—solo prod |
+| Endpoint            | Límite      | Ventana | Por qué (key)                |
+| ------------------- | ----------- | ------- | ---------------------------- |
+| POST /auth/login    | 5 intentos  | 15 min  | **Email** (anti brute-force) |
+| POST /auth/register | 10 intentos | 1 hora  | **IP** (anti spam)           |
+| Resto (general)     | 200 req     | 15 min  | **IP** (general)—solo prod   |
 
 ### 3.5.3 Testing en desarrollo
 
@@ -429,6 +434,7 @@ Cuando está limitado, la respuesta incluye:
 ```
 
 Y headers HTTP:
+
 ```
 HTTP/1.1 429 Too Many Requests
 Retry-After: 420
