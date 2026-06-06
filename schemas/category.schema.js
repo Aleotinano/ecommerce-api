@@ -16,6 +16,7 @@ export const createCategory = z.object({
   icon: z
     .string({ invalid_type_error: "El icono debe ser texto" })
     .min(1, "El icono no puede estar vacío")
+    .nullable()
     .optional(),
 
   isActive: z
