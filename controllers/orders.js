@@ -37,10 +37,14 @@ export class OrderController {
   static async getAll(req, res, next) {
     try {
       const { id } = req.user;
+      const { status, limit, offset } = req.search ?? {};
 
       const orders = await OrderModel.getAll({
         tenantId: req.tenantId,
         userId: id,
+        status,
+        limit,
+        offset,
       });
 
       const formattedOrders = orders.map((order) => ({
@@ -66,7 +70,15 @@ export class OrderController {
 
   static async getUserOrders(req, res, next) {
     try {
-      const orders = await OrderModel.getUserOrders({ tenantId: req.tenantId });
+      const { status, search, limit, offset } = req.search;
+
+      const orders = await OrderModel.getUserOrders({
+        tenantId: req.tenantId,
+        status,
+        search,
+        limit,
+        offset,
+      });
 
       const formattedOrders = orders.map((order) => ({
         id: order.id,
@@ -122,6 +134,11 @@ export class OrderController {
             size: item.variant.size,
             image: item.variant.img ?? item.variant.product?.img ?? null,
           })),
+          timeline: (order.statusHistory ?? []).map((entry) => ({
+            estado: entry.toStatus,
+            nota: entry.note,
+            fecha: entry.createdAt,
+          })),
         },
       });
     } catch (error) {
@@ -132,15 +149,18 @@ export class OrderController {
   static async update(req, res, next) {
     try {
       const { id: orderId } = req.params;
-      const { status } = req.body;
+      const { status, note } = req.body;
 
       const order = await OrderModel.updateOrderStatus({
         tenantId: req.tenantId,
         orderId,
         status,
+        changedById: req.user.id,
+        note,
       });
 
       const statusMessages = {
+        PROCESSING: "en preparación",
         COMPLETED: "completada",
         CANCELLED: "cancelada",
         PENDING: "actualizada",

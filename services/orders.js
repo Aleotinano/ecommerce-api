@@ -1,6 +1,10 @@
 import prisma from "../lib/prisma.js";
 import { createError } from "../helpers/error.js";
 import { getProductPrice } from "../helpers/price.js";
+import { sendMail, buildOrderStatusEmail } from "../lib/mailer.js";
+import { logger } from "../lib/logger.js";
+
+const log = logger.child({ module: "orders" });
 
 const orderItemsInclude = {
   include: {
@@ -121,24 +125,45 @@ export const OrderModel = {
         ...orderItemsInclude,
       });
 
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId: newOrder.id,
+          fromStatus: null,
+          toStatus: "PENDING",
+          note: "Pedido creado",
+          changedById: userId,
+        },
+      });
+
       await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
 
       return newOrder;
     });
   },
 
-  async getAll({ tenantId, userId }) {
+  async getAll({ tenantId, userId, status, limit = 10, offset = 0 }) {
+    const where = { userId, tenantId };
+
+    if (status) {
+      where.status = status;
+    }
+
     return prisma.order.findMany({
-      where: { userId, tenantId },
+      where,
       ...orderItemsInclude,
       orderBy: { createdAt: "desc" },
+      take: limit,
+      skip: offset,
     });
   },
 
   async getUserOrderById({ tenantId, userId, orderId }) {
     const order = await prisma.order.findFirst({
       where: { id: orderId, userId, tenantId },
-      ...orderItemsInclude,
+      include: {
+        ...orderItemsInclude.include,
+        statusHistory: { orderBy: { createdAt: "asc" } },
+      },
     });
 
     if (!order) {
@@ -148,9 +173,30 @@ export const OrderModel = {
     return order;
   },
 
-  async getUserOrders({ tenantId }) {
+  async getUserOrders({ tenantId, status, search, limit = 10, offset = 0 }) {
+    const where = { tenantId };
+
+    if (status) {
+      where.status = status;
+    }
+
+    if (search) {
+      where.OR = [
+        { user: { username: { contains: search, mode: "insensitive" } } },
+        {
+          orderItems: {
+            some: {
+              variant: {
+                product: { name: { contains: search, mode: "insensitive" } },
+              },
+            },
+          },
+        },
+      ];
+    }
+
     return prisma.order.findMany({
-      where: { tenantId },
+      where,
       include: {
         user: {
           select: { id: true, username: true },
@@ -158,13 +204,26 @@ export const OrderModel = {
         ...orderItemsInclude.include,
       },
       orderBy: { createdAt: "desc" },
+      take: limit,
+      skip: offset,
     });
   },
 
-  async updateOrderStatus({ tenantId, orderId, status, extraData = {} }) {
+  async updateOrderStatus({
+    tenantId,
+    orderId,
+    status,
+    extraData = {},
+    changedById = null,
+    note = null,
+  }) {
     const order = await prisma.order.findFirst({
       where: { id: orderId, tenantId },
-      ...orderItemsInclude,
+      include: {
+        ...orderItemsInclude.include,
+        user: { select: { id: true, username: true, email: true } },
+        tenant: { select: { name: true } },
+      },
     });
 
     if (!order) {
@@ -191,16 +250,27 @@ export const OrderModel = {
       return order;
     }
 
-    if (status === "PROCESSING") {
-      return prisma.order.update({
-        where: { id: orderId },
-        data: { status, ...extraData },
-        ...orderItemsInclude,
-      });
+    if (!["PROCESSING", "COMPLETED", "CANCELLED"].includes(status)) {
+      throw createError(
+        "Transición de estado no permitida",
+        "INVALID_STATUS_TRANSITION",
+        400
+      );
     }
 
-    if (status === "COMPLETED") {
-      return prisma.$transaction(async (tx) => {
+    const recordHistory = (tx) =>
+      tx.orderStatusHistory.create({
+        data: {
+          orderId,
+          fromStatus: order.status,
+          toStatus: status,
+          note,
+          changedById,
+        },
+      });
+
+    const updated = await prisma.$transaction(async (tx) => {
+      if (status === "COMPLETED") {
         for (const item of order.orderItems) {
           if (item.quantity > item.variant.stock) {
             const error = createError(
@@ -216,36 +286,45 @@ export const OrderModel = {
             throw error;
           }
         }
+      }
 
-        const updated = await tx.order.update({
-          where: { id: orderId },
-          data: { status, ...extraData },
-          ...orderItemsInclude,
-        });
+      const result = await tx.order.update({
+        where: { id: orderId },
+        data: { status, ...extraData },
+        ...orderItemsInclude,
+      });
 
+      if (status === "COMPLETED") {
         for (const item of order.orderItems) {
           await tx.productVariant.update({
             where: { id: item.variantId },
             data: { stock: { decrement: item.quantity } },
           });
         }
+      }
 
-        return updated;
-      });
+      await recordHistory(tx);
+
+      return result;
+    });
+
+    // Notificación al cliente (best-effort, no debe romper la actualización).
+    if (order.user?.email) {
+      try {
+        const { subject, text, html } = buildOrderStatusEmail({
+          orderId,
+          status,
+          tenantName: order.tenant?.name,
+        });
+        await sendMail({ to: order.user.email, subject, text, html });
+      } catch (error) {
+        log.error(
+          { err: error, orderId, status },
+          "no se pudo enviar el email de cambio de estado"
+        );
+      }
     }
 
-    if (status === "CANCELLED") {
-      return prisma.order.update({
-        where: { id: orderId },
-        data: { status, ...extraData },
-        ...orderItemsInclude,
-      });
-    }
-
-    throw createError(
-      "Transición de estado no permitida",
-      "INVALID_STATUS_TRANSITION",
-      400
-    );
+    return updated;
   },
 };
