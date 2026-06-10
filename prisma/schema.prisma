@@ -15,18 +15,19 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users      User[]
-  categories Categories[]
-  products   Product[]
-  variants   ProductVariant[]
-  carts      Cart[]
-  orders     Order[]
-  config     TenantConfig?
+  users              User[]
+  categories         Categories[]
+  products           Product[]
+  variants           ProductVariant[]
+  carts              Cart[]
+  orders             Order[]
+  config             TenantConfig?
+  contentSuggestions ContentSuggestion[]
 }
 
 model TenantConfig {
-  id               Int       @id @default(autoincrement())
-  tenantId         Int       @unique
+  id       Int @id @default(autoincrement())
+  tenantId Int @unique
 
   // Branding
   logoUrl          String?
@@ -36,39 +37,39 @@ model TenantConfig {
   storeTagline     String?
 
   // Contacto
-  contactEmail     String?
-  contactPhone     String?
-  contactAddress   String?
+  contactEmail   String?
+  contactPhone   String?
+  contactAddress String?
 
   // Social media
-  socialInstagram  String?
-  socialTiktok     String?
-  socialFacebook   String?
-  socialTwitter    String?
-  socialYoutube    String?
-  socialPinterest  String?
-  socialWhatsapp   String?
+  socialInstagram String?
+  socialTiktok    String?
+  socialFacebook  String?
+  socialTwitter   String?
+  socialYoutube   String?
+  socialPinterest String?
+  socialWhatsapp  String?
 
   // SEO
-  seoTitle         String?
-  seoDescription   String?
-  seoKeywords      String?
+  seoTitle       String?
+  seoDescription String?
+  seoKeywords    String?
 
   // Políticas
-  shippingPolicy   String?
-  returnsPolicy    String?
-  privacyPolicy    String?
+  shippingPolicy String?
+  returnsPolicy  String?
+  privacyPolicy  String?
 
   // Configuración de tienda
-  currency         String?   @default("ARS")
-  locale           String?   @default("es-AR")
-  showOutOfStock   Boolean   @default(false)
-  allowCartGuest   Boolean   @default(true)
+  currency       String? @default("ARS")
+  locale         String? @default("es-AR")
+  showOutOfStock Boolean @default(false)
+  allowCartGuest Boolean @default(true)
 
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  tenant           Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
 }
@@ -81,13 +82,13 @@ model User {
   password String
   role     Role   @default(CUSTOMER)
 
-  emailVerified                Boolean   @default(false)
-  emailVerificationTokenHash   String?
-  emailVerificationExpiresAt   DateTime?
+  emailVerified              Boolean   @default(false)
+  emailVerificationTokenHash String?
+  emailVerificationExpiresAt DateTime?
 
-  cart     Cart?
-  orders   Order[]
-  tenant   Tenant @relation(fields: [tenantId], references: [id])
+  cart   Cart?
+  orders Order[]
+  tenant Tenant  @relation(fields: [tenantId], references: [id])
 
   @@unique([tenantId, username])
   @@unique([tenantId, email])
@@ -112,24 +113,26 @@ model Categories {
 }
 
 model Product {
-  id          Int              @id @default(autoincrement())
-  tenantId    Int
-  img         String?
-  imgPublicId String?
-  name        String
-  description String?
-  price       Float?
-  categoryId  Int?
-  isActive    Boolean          @default(true)
-  variants    ProductVariant[]
-  category    Categories?      @relation(fields: [categoryId], references: [id])
-  tenant      Tenant           @relation(fields: [tenantId], references: [id])
+  id                 Int                 @id @default(autoincrement())
+  tenantId           Int
+  img                String?
+  imgPublicId        String?
+  name               String
+  description        String?
+  price              Float
+  categoryId         Int?
+  isActive           Boolean             @default(true)
+  createdAt          DateTime            @default(now())
+  variants           ProductVariant[]
+  category           Categories?         @relation(fields: [categoryId], references: [id])
+  tenant             Tenant              @relation(fields: [tenantId], references: [id])
+  contentSuggestions ContentSuggestion[]
 
   @@index([tenantId])
 }
 
 model ProductVariant {
-  id          Int             @id @default(autoincrement())
+  id          Int         @id @default(autoincrement())
   tenantId    Int
   productId   Int
   color       String?
@@ -139,9 +142,9 @@ model ProductVariant {
   sku         String
   img         String?
   imgPublicId String?
-  isActive    Boolean         @default(true)
-  product     Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
-  tenant      Tenant          @relation(fields: [tenantId], references: [id])
+  isActive    Boolean     @default(true)
+  product     Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tenant      Tenant      @relation(fields: [tenantId], references: [id])
   cartItems   CartItem[]
   orderItems  OrderItem[]
 
@@ -163,48 +166,99 @@ model Cart {
 }
 
 model CartItem {
-  id        Int             @id @default(autoincrement())
+  id        Int            @id @default(autoincrement())
   cartId    Int
   variantId Int
-  quantity  Int             @default(1)
-  createdAt DateTime        @default(now())
-  cart      Cart            @relation(fields: [cartId], references: [id])
-  variant   ProductVariant  @relation(fields: [variantId], references: [id])
+  quantity  Int            @default(1)
+  createdAt DateTime       @default(now())
+  cart      Cart           @relation(fields: [cartId], references: [id])
+  variant   ProductVariant @relation(fields: [variantId], references: [id])
 
   @@unique([cartId, variantId])
 }
 
 model Order {
-  id         Int         @id @default(autoincrement())
-  tenantId   Int
-  userId     Int
-  status     OrderStatus @default(PENDING)
-  total      Float
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
-  user       User        @relation(fields: [userId], references: [id])
-  tenant     Tenant      @relation(fields: [tenantId], references: [id])
-  orderItems OrderItem[]
+  id            Int                  @id @default(autoincrement())
+  tenantId      Int
+  userId        Int
+  status        OrderStatus          @default(PENDING)
+  total         Float
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  user          User                 @relation(fields: [userId], references: [id])
+  tenant        Tenant               @relation(fields: [tenantId], references: [id])
+  orderItems    OrderItem[]
+  statusHistory OrderStatusHistory[]
 
-  paymentStatus   PaymentStatus @default(PENDING)
-  paymentMethod   String?
-  paymentId       String?
-  mercadoPagoId   String?       @unique
-  preferenceId    String?
+  paymentStatus PaymentStatus @default(PENDING)
+  paymentMethod String?
+  paymentId     String?
+  mercadoPagoId String?       @unique
+  preferenceId  String?
 
   @@index([tenantId])
 }
 
+model OrderStatusHistory {
+  id          Int          @id @default(autoincrement())
+  orderId     Int
+  fromStatus  OrderStatus?
+  toStatus    OrderStatus
+  note        String?
+  changedById Int?
+  createdAt   DateTime     @default(now())
+  order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
 model OrderItem {
-  id        Int             @id @default(autoincrement())
+  id        Int            @id @default(autoincrement())
   orderId   Int
   variantId Int
   quantity  Int
   price     Float
-  order     Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  variant   ProductVariant  @relation(fields: [variantId], references: [id])
+  order     Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variant   ProductVariant @relation(fields: [variantId], references: [id])
 
   @@unique([orderId, variantId])
+}
+
+model ContentSuggestion {
+  id        Int              @id @default(autoincrement())
+  tenantId  Int
+  productId Int
+  angle     SuggestionAngle
+  status    SuggestionStatus @default(SUGGESTED)
+  date      DateTime         @db.Date
+
+  // Campos de IA (Fase 2) — nullable por ahora
+  copy        String?
+  hashtags    String[]  @default([])
+  model       String?
+  generatedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  @@unique([tenantId, date])
+  @@index([tenantId])
+}
+
+enum SuggestionAngle {
+  BEST_SELLER
+  NEW_ARRIVAL
+  LOW_STOCK
+  NO_RECENT_SALES
+}
+
+enum SuggestionStatus {
+  SUGGESTED
+  USED
+  DISMISSED
 }
 
 enum OrderStatus {

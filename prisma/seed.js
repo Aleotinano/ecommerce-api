@@ -303,7 +303,9 @@ async function seedProducts(tenantId, categoryIdByName, specs) {
         tenantId,
         name: p.name,
         description: p.description ?? null,
-        price: p.price ?? null,
+        // El precio de producto es obligatorio: si el spec no lo trae, se deriva
+        // de una variante con precio (sino 0).
+        price: p.price ?? p.variants.find((v) => v.price != null)?.price ?? 0,
         img: p.img ?? null,
         imgPublicId: p.imgPublicId ?? null,
         categoryId: categoryIdByName.get(p.category) ?? null,
@@ -348,6 +350,37 @@ async function seedCartForUser({ tenantId, userId, items }) {
   return cart;
 }
 
+// Secuencia de estados por los que pasó la orden hasta su estado final, para
+// poblar un timeline coherente de demo.
+const STATUS_FLOW = {
+  PENDING: ["PENDING"],
+  PROCESSING: ["PENDING", "PROCESSING"],
+  COMPLETED: ["PENDING", "PROCESSING", "COMPLETED"],
+  CANCELLED: ["PENDING", "CANCELLED"],
+};
+
+const STATUS_NOTE = {
+  PENDING: "Pedido creado",
+  PROCESSING: "Pedido en preparación",
+  COMPLETED: "Pedido completado",
+  CANCELLED: "Pedido cancelado",
+};
+
+function buildStatusHistory({ status, userId, createdAt }) {
+  const flow = STATUS_FLOW[status] ?? ["PENDING"];
+  return flow.map((toStatus, index) => {
+    // Cada transición ocurre algo después de la creación de la orden.
+    const at = new Date(createdAt.getTime() + index * 60 * 60 * 1000);
+    return {
+      fromStatus: index === 0 ? null : flow[index - 1],
+      toStatus,
+      note: STATUS_NOTE[toStatus],
+      changedById: index === 0 ? userId : null,
+      createdAt: at,
+    };
+  });
+}
+
 async function seedOrdersForUser({ tenantId, userId, orders }) {
   let created = 0;
 
@@ -379,6 +412,9 @@ async function seedOrdersForUser({ tenantId, userId, orders }) {
         createdAt,
         updatedAt: createdAt,
         orderItems: { create: items },
+        statusHistory: {
+          create: buildStatusHistory({ status: spec.status, userId, createdAt }),
+        },
       },
     });
 
@@ -397,7 +433,7 @@ async function main() {
   await prisma.$executeRawUnsafe(`
     TRUNCATE TABLE
       "CartItem", "Cart",
-      "OrderItem", "Order",
+      "OrderStatusHistory", "OrderItem", "Order",
       "ProductVariant", "Product", "Categories",
       "TenantConfig",
       "User", "Tenant"

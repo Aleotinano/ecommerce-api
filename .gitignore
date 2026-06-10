@@ -15,3 +15,6 @@ tmp
 prisma/demo-catalog.js
 prisma/seed-catalog.js
 prisma/seed-stats.js
+
+# front guia
+front-md-guia
