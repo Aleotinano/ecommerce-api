@@ -23,10 +23,11 @@ export const createProduct = z.object({
     .nullable()
     .optional(),
   price: z.coerce
-    .number({ invalid_type_error: "El precio debe ser un número" })
-    .positive("El precio debe ser mayor a 0")
-    .nullable()
-    .optional(),
+    .number({
+      required_error: "El precio es requerido",
+      invalid_type_error: "El precio debe ser un número",
+    })
+    .positive("El precio debe ser mayor a 0"),
   img: z
     .string({ invalid_type_error: "La imagen debe ser texto" })
     .url("La URL de la imagen no es válida")
@@ -61,7 +62,6 @@ export const updateProduct = z
     price: z.coerce
       .number({ invalid_type_error: "El precio debe ser un número" })
       .positive("El precio debe ser mayor a 0")
-      .nullable()
       .optional(),
     img: z
       .string({ invalid_type_error: "La imagen debe ser texto" })

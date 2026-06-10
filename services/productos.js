@@ -271,7 +271,7 @@ export const ProductModel = {
       name,
       description: description ?? null,
       categoryId: categoryId ?? null,
-      price: price ?? null,
+      price,
       img: img ?? null,
       imgPublicId: imgPublicId ?? null,
       isActive: isActive ?? true,

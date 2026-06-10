@@ -71,16 +71,16 @@ describe("Productos con precios en BD", () => {
     expect(product.id).toBeDefined();
   });
 
-  it("crear producto sin precio", async () => {
-    const product = await prisma.product.create({
-      data: {
-        tenantId: tenant.id,
-        name: "Producto sin precio",
-        description: "Sin precio inicial",
-      },
-    });
-
-    expect(product.price).toBeNull();
+  it("el precio del producto es obligatorio (rechaza crear sin precio)", async () => {
+    await expect(
+      prisma.product.create({
+        data: {
+          tenantId: tenant.id,
+          name: "Producto sin precio",
+          description: "Sin precio inicial",
+        },
+      })
+    ).rejects.toThrow();
   });
 
   it("actualizar precio del producto", async () => {

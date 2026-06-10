@@ -62,6 +62,9 @@ async function buildTenant({ slug, name, adminUsername, adminEmail, customerUser
           create: cat.products.map((p) => ({
             tenantId: tenant.id,
             name: p.name,
+            // Precio de producto obligatorio: se deriva de una variante si el
+            // spec no lo trae explicito.
+            price: p.price ?? p.variants.find((v) => v.price != null)?.price ?? 0,
             variants: {
               create: p.variants.map((v) => ({
                 tenantId: tenant.id,
