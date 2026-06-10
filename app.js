@@ -20,6 +20,7 @@ import { cartRouter } from "./routes/cart.js";
 import { categoriesRouter } from "./routes/categories.js";
 import { mercadopagoRouter } from "./routes/mercadopago.js";
 import { statsRouter } from "./routes/stats.js";
+import { contentSuggestionsRouter } from "./routes/content-suggestions.js";
 import { storeRouter } from "./routes/store/index.js";
 
 // Middlewares
@@ -48,6 +49,7 @@ app.use("/cart", cartRouter);
 app.use("/users", roleRouter);
 app.use("/mercadopago", mercadopagoRouter);
 app.use("/stats", statsRouter);
+app.use("/content-suggestions", contentSuggestionsRouter);
 app.use("/auth", usersRouter);
 app.use("/test", testRouter);
 app.use("/tenant-config", tenantConfigRouter);

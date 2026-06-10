@@ -39,4 +39,10 @@ export const envSchema = z.object({
     .union([z.literal("true"), z.literal("false")])
     .optional()
     .transform((v) => v !== "false"),
+
+  LLM_PROVIDER: z.enum(["gemini", "anthropic"]).default("gemini"),
+  ANTHROPIC_API_KEY: z.string().optional(),
+  ANTHROPIC_MODEL: z.string().default("claude-haiku-4-5"),
+  GEMINI_API_KEY: z.string().optional(),
+  GEMINI_MODEL: z.string().default("gemini-2.0-flash"),
 });

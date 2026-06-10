@@ -31,4 +31,15 @@ export const DEFAULTS = {
     env.LOG_LEVEL || (env.NODE_ENV === "production" ? "info" : "debug"),
   REDIS_URL: env.REDIS_URL,
   CACHE_ENABLED: env.CACHE_ENABLED === true,
+  LLM: {
+    PROVIDER: env.LLM_PROVIDER,
+    ANTHROPIC: {
+      API_KEY: env.ANTHROPIC_API_KEY,
+      MODEL: env.ANTHROPIC_MODEL,
+    },
+    GEMINI: {
+      API_KEY: env.GEMINI_API_KEY,
+      MODEL: env.GEMINI_MODEL,
+    },
+  },
 };
