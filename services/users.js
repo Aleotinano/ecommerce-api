@@ -6,7 +6,7 @@ import {
   generateEmailVerificationToken,
   hashToken,
 } from "../lib/tokens.js";
-import { sendMail, buildVerificationEmail } from "../lib/mailer.js";
+import { sendMail, buildVerificationEmail, isSmtpConfigured } from "../lib/mailer.js";
 import { logger } from "../lib/logger.js";
 import jwt from "jsonwebtoken";
 import { DEFAULTS } from "../config.js";
@@ -67,6 +67,9 @@ export const UserModel = {
     }
 
     const hashedPassword = await hashPassword(password);
+    // En dev (sin SMTP) no se puede enviar el correo, así que auto-verificamos
+    // para no dejar al usuario trabado. En prod el flujo normal sigue intacto.
+    const autoVerify = !isSmtpConfigured();
 
     const { user, tenant } = await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
@@ -80,13 +83,16 @@ export const UserModel = {
           email,
           password: hashedPassword,
           role: "ADMIN",
+          emailVerified: autoVerify,
         },
       });
 
       return { user, tenant };
     });
 
-    await dispatchVerificationEmail({ user, tenantName: tenant.name });
+    if (!autoVerify) {
+      await dispatchVerificationEmail({ user, tenantName: tenant.name });
+    }
 
     return { user, tenant };
   },
@@ -109,6 +115,7 @@ export const UserModel = {
     }
 
     const hashedPassword = await hashPassword(password);
+    const autoVerify = !isSmtpConfigured();
 
     const user = await prisma.user.create({
       data: {
@@ -117,6 +124,7 @@ export const UserModel = {
         email,
         password: hashedPassword,
         role: "CUSTOMER",
+        emailVerified: autoVerify,
       },
     });
 
@@ -125,7 +133,9 @@ export const UserModel = {
       select: { name: true },
     });
 
-    await dispatchVerificationEmail({ user, tenantName: tenant.name, audience: "customer" });
+    if (!autoVerify) {
+      await dispatchVerificationEmail({ user, tenantName: tenant.name, audience: "customer" });
+    }
 
     return { user };
   },
