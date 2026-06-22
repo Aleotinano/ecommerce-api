@@ -20,6 +20,89 @@ const orderItemsInclude = {
   },
 };
 
+/** Redondea un monto a 2 decimales (el modelo usa Float). */
+const roundMoney = (n) => Math.round(n * 100) / 100;
+
+/**
+ * Valida una lista de items `{ variantId, quantity }` contra el catálogo del
+ * tenant y resuelve el precio SERVER-SIDE. Devuelve los items con precio y el
+ * total. Compartido por la creación desde carrito y la creación borrador del bot
+ * (no se duplica la validación ni el pricing). Corre dentro de una transacción.
+ *
+ * @param {object}  tx                 cliente de transacción de Prisma
+ * @param {number}  tenantId
+ * @param {Array}   items              `[{ variantId, quantity }]`
+ * @param {object}  [opts]
+ * @param {boolean} [opts.checkStock]  si valida stock (carrito sí; bot a-pedido no)
+ * @returns {Promise<{ pricedItems: Array, total: number }>}
+ */
+async function priceItems(tx, tenantId, items, { checkStock = true } = {}) {
+  const variantIds = items.map((i) => i.variantId);
+  const variants = await tx.productVariant.findMany({
+    where: { id: { in: variantIds }, tenantId },
+    include: { product: true },
+  });
+  const variantMap = new Map(variants.map((v) => [v.id, v]));
+
+  const pricedItems = items.map((item) => {
+    const variant = variantMap.get(item.variantId);
+
+    if (!variant) {
+      throw createError("Variante no encontrada", "VARIANT_NOT_FOUND", 404);
+    }
+
+    if (!variant.isActive) {
+      const error = createError(
+        "Variante no disponible",
+        "VARIANT_NOT_AVAILABLE",
+        400
+      );
+      error.details = { variant: variant.id };
+      throw error;
+    }
+
+    if (!variant.product?.isActive) {
+      const error = createError(
+        "Producto no disponible",
+        "PRODUCT_NOT_AVAILABLE",
+        400
+      );
+      error.details = { product: variant.product?.name ?? null };
+      throw error;
+    }
+
+    if (checkStock && item.quantity > variant.stock) {
+      const error = createError(
+        "Stock insuficiente",
+        "INSUFFICIENT_STOCK",
+        409
+      );
+      error.details = {
+        variant: variant.id,
+        solicitado: item.quantity,
+        disponible: variant.stock,
+      };
+      throw error;
+    }
+
+    const price = getProductPrice(variant, variant.product);
+    if (price == null) {
+      const error = createError(
+        "Producto o variante sin precio",
+        "PRODUCT_NO_PRICE",
+        400
+      );
+      error.details = { variant: variant.id };
+      throw error;
+    }
+
+    return { variantId: item.variantId, quantity: item.quantity, price: Number(price) };
+  });
+
+  const total = pricedItems.reduce((sum, it) => sum + it.price * it.quantity, 0);
+  return { pricedItems, total };
+}
+
 export const OrderModel = {
   async create({ tenantId, userId }) {
     const cart = await prisma.cart.findFirst({
@@ -40,70 +123,14 @@ export const OrderModel = {
     }
 
     return prisma.$transaction(async (tx) => {
-      const variantIds = cart.items.map((item) => item.variantId);
-      const variants = await tx.productVariant.findMany({
-        where: { id: { in: variantIds }, tenantId },
-        include: { product: true },
-      });
-
-      const variantMap = new Map(variants.map((v) => [v.id, v]));
-
-      for (const item of cart.items) {
-        const variant = variantMap.get(item.variantId);
-
-        if (!variant) {
-          throw createError("Variante no encontrada", "VARIANT_NOT_FOUND", 404);
-        }
-
-        if (!variant.isActive) {
-          const error = createError(
-            "Variante no disponible",
-            "VARIANT_NOT_AVAILABLE",
-            400
-          );
-          error.details = { variant: variant.id };
-          throw error;
-        }
-
-        if (!variant.product?.isActive) {
-          const error = createError(
-            "Producto no disponible",
-            "PRODUCT_NOT_AVAILABLE",
-            400
-          );
-          error.details = { product: variant.product?.name ?? null };
-          throw error;
-        }
-
-        if (item.quantity > variant.stock) {
-          const error = createError(
-            "Stock insuficiente",
-            "INSUFFICIENT_STOCK",
-            409
-          );
-          error.details = {
-            variant: variant.id,
-            solicitado: item.quantity,
-            disponible: variant.stock,
-          };
-          throw error;
-        }
-      }
-
-      const total = cart.items.reduce((sum, item) => {
-        const variant = variantMap.get(item.variantId);
-        const price = getProductPrice(variant, variant.product);
-        if (price == null) {
-          const error = createError(
-            "Producto o variante sin precio",
-            "PRODUCT_NO_PRICE",
-            400
-          );
-          error.details = { variant: variant.id };
-          throw error;
-        }
-        return sum + Number(price) * item.quantity;
-      }, 0);
+      const { pricedItems, total } = await priceItems(
+        tx,
+        tenantId,
+        cart.items.map((item) => ({
+          variantId: item.variantId,
+          quantity: item.quantity,
+        }))
+      );
 
       const newOrder = await tx.order.create({
         data: {
@@ -112,14 +139,11 @@ export const OrderModel = {
           total,
           status: "PENDING",
           orderItems: {
-            create: cart.items.map((item) => {
-              const variant = variantMap.get(item.variantId);
-              return {
-                variantId: item.variantId,
-                quantity: item.quantity,
-                price: getProductPrice(variant, variant.product),
-              };
-            }),
+            create: pricedItems.map(({ variantId, quantity, price }) => ({
+              variantId,
+              quantity,
+              price,
+            })),
           },
         },
         ...orderItemsInclude,
@@ -258,6 +282,32 @@ export const OrderModel = {
       );
     }
 
+    // Guard de "bueno para producir": al pasar a producción/completar exigimos
+    // que una orden del bot esté revisada por un humano y, si lleva seña, que la
+    // seña esté confirmada. CANCELLED queda libre (siempre se puede cancelar).
+    // Si el tenant no usa seña y la orden es ADMIN, nada de esto aplica.
+    if (status === "PROCESSING" || status === "COMPLETED") {
+      if (order.origin === "BOT" && order.reviewedById == null) {
+        throw createError(
+          "La orden creada por el bot debe ser revisada antes de producir",
+          "ORDER_NOT_REVIEWED",
+          409
+        );
+      }
+      if (
+        order.requiresDeposit &&
+        !["DEPOSIT_PAID", "PAID_IN_FULL", "APPROVED"].includes(
+          order.paymentStatus
+        )
+      ) {
+        throw createError(
+          "La seña debe estar confirmada antes de producir",
+          "DEPOSIT_NOT_CONFIRMED",
+          409
+        );
+      }
+    }
+
     const recordHistory = (tx) =>
       tx.orderStatusHistory.create({
         data: {
@@ -326,5 +376,239 @@ export const OrderModel = {
     }
 
     return updated;
+  },
+
+  /**
+   * Acción admin: marca la orden como REVISADA (procedencia validada por un
+   * humano). Permite corrección inline de cantidades antes de validar: si llegan
+   * `items`, se re-resuelve precio y total SERVER-SIDE (nunca se confía en el
+   * precio/total del cliente) y, como la seña todavía no está confirmada, se
+   * recalcula `depositAmount`. NO mueve `status` ni `paymentStatus`.
+   *
+   * @param {object} p
+   * @param {number} p.tenantId
+   * @param {number} p.orderId
+   * @param {number} p.reviewedById   admin que valida
+   * @param {Array|null} [p.items]    `[{ variantId, quantity }]` correcciones
+   */
+  async reviewOrder({ tenantId, orderId, reviewedById, items = null }) {
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, tenantId },
+      include: { ...orderItemsInclude.include },
+    });
+
+    if (!order) {
+      throw createError("Orden no encontrada", "ORDER_NOT_FOUND", 404);
+    }
+
+    if (order.status !== "PENDING") {
+      throw createError(
+        "Solo se puede revisar una orden pendiente",
+        "ORDER_NOT_PENDING",
+        409
+      );
+    }
+
+    const hasEdits = Array.isArray(items) && items.length > 0;
+
+    return prisma.$transaction(async (tx) => {
+      const data = { reviewedById, reviewedAt: new Date() };
+
+      if (hasEdits) {
+        const orderVariantIds = new Set(
+          order.orderItems.map((it) => it.variantId)
+        );
+        for (const edit of items) {
+          if (!orderVariantIds.has(edit.variantId)) {
+            const error = createError(
+              "La variante no pertenece a la orden",
+              "ORDER_ITEM_NOT_FOUND",
+              404
+            );
+            error.details = { variant: edit.variantId };
+            throw error;
+          }
+        }
+
+        // Re-resolvemos TODOS los items (con las cantidades nuevas donde las haya)
+        // para recomputar precio y total server-side. Sin chequeo de stock: la
+        // orden ya existe y Desvare es a-pedido.
+        const desired = order.orderItems.map((it) => {
+          const edit = items.find((e) => e.variantId === it.variantId);
+          return {
+            variantId: it.variantId,
+            quantity: edit ? edit.quantity : it.quantity,
+          };
+        });
+
+        const { pricedItems, total } = await priceItems(tx, tenantId, desired, {
+          checkStock: false,
+        });
+
+        for (const pi of pricedItems) {
+          await tx.orderItem.update({
+            where: {
+              orderId_variantId: { orderId, variantId: pi.variantId },
+            },
+            data: { quantity: pi.quantity, price: pi.price },
+          });
+        }
+
+        data.total = total;
+
+        if (order.requiresDeposit) {
+          const config = await tx.tenantConfig.findUnique({
+            where: { tenantId },
+            select: { depositPercentage: true },
+          });
+          const pct = config?.depositPercentage ?? 50;
+          data.depositAmount = roundMoney((total * pct) / 100);
+        }
+      }
+
+      return tx.order.update({
+        where: { id: orderId },
+        data,
+        ...orderItemsInclude,
+      });
+    });
+  },
+
+  /**
+   * Acción admin: confirma la seña (el dueño verificó la transferencia a ojo).
+   * Mueve `paymentStatus` a DEPOSIT_PAID y sella quién/cuándo. NO mueve `status`.
+   * Es independiente de `reviewOrder` (la seña suele confirmarse días después).
+   * Solo opera si la orden requiere seña y el pago sigue en PENDING, así no pisa
+   * un APPROVED/PAID_IN_FULL escrito por el webhook de MercadoPago.
+   */
+  async confirmDeposit({ tenantId, orderId, confirmedById }) {
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, tenantId },
+    });
+
+    if (!order) {
+      throw createError("Orden no encontrada", "ORDER_NOT_FOUND", 404);
+    }
+
+    if (!order.requiresDeposit) {
+      throw createError(
+        "La orden no requiere seña",
+        "DEPOSIT_NOT_REQUIRED",
+        409
+      );
+    }
+
+    if (order.paymentStatus !== "PENDING") {
+      throw createError(
+        "El estado de pago no permite confirmar la seña",
+        "DEPOSIT_NOT_CONFIRMABLE",
+        409
+      );
+    }
+
+    return prisma.order.update({
+      where: { id: orderId },
+      data: {
+        paymentStatus: "DEPOSIT_PAID",
+        depositConfirmedById: confirmedById,
+        depositConfirmedAt: new Date(),
+      },
+      ...orderItemsInclude,
+    });
+  },
+
+  /**
+   * Creación de orden BORRADOR por el bot de WhatsApp. Origen BOT, sin revisar.
+   * El bot solo propone `items` ya resueltos a `{ variantId, quantity }`; acá el
+   * server valida catálogo/precio y resuelve TODO lo monetario y la seña. El bot
+   * nunca toca `paymentStatus`, `depositAmount` ni `tenantId`.
+   *
+   * @param {object} p
+   * @param {number} p.tenantId        resuelto del phone_number_id, nunca del LLM
+   * @param {Array}  p.items           `[{ variantId, quantity }]`
+   * @param {string|null} [p.contactPhone]   wa_id del cliente
+   * @param {string|null} [p.contactName]
+   * @param {string|null} [p.creationContext] snapshot de la conversación
+   */
+  async createDraft({
+    tenantId,
+    items,
+    contactPhone = null,
+    contactName = null,
+    creationContext = null,
+  }) {
+    if (!Array.isArray(items) || items.length === 0) {
+      throw createError("La orden no tiene items", "EMPTY_ORDER", 400);
+    }
+
+    // Merge de items repetidos por variante: la unique [orderId, variantId] lo
+    // exige y el bot podría proponer la misma variante en dos renglones.
+    const mergedMap = new Map();
+    for (const it of items) {
+      mergedMap.set(
+        it.variantId,
+        (mergedMap.get(it.variantId) ?? 0) + it.quantity
+      );
+    }
+    const mergedItems = [...mergedMap].map(([variantId, quantity]) => ({
+      variantId,
+      quantity,
+    }));
+
+    const config = await prisma.tenantConfig.findUnique({
+      where: { tenantId },
+      select: { depositEnabled: true, depositPercentage: true },
+    });
+    const requiresDeposit = config?.depositEnabled ?? false;
+    const depositPercentage = config?.depositPercentage ?? 50;
+
+    return prisma.$transaction(async (tx) => {
+      const { pricedItems, total } = await priceItems(
+        tx,
+        tenantId,
+        mergedItems,
+        { checkStock: false }
+      );
+
+      const depositAmount = requiresDeposit
+        ? roundMoney((total * depositPercentage) / 100)
+        : null;
+
+      const newOrder = await tx.order.create({
+        data: {
+          tenantId,
+          userId: null,
+          origin: "BOT",
+          status: "PENDING",
+          paymentStatus: "PENDING",
+          total,
+          contactPhone,
+          contactName,
+          requiresDeposit,
+          depositAmount,
+          creationContext,
+          orderItems: {
+            create: pricedItems.map(({ variantId, quantity, price }) => ({
+              variantId,
+              quantity,
+              price,
+            })),
+          },
+        },
+        ...orderItemsInclude,
+      });
+
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId: newOrder.id,
+          fromStatus: null,
+          toStatus: "PENDING",
+          note: "Pedido creado por el bot",
+          changedById: null,
+        },
+      });
+
+      return newOrder;
+    });
   },
 };

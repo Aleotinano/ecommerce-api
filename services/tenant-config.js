@@ -48,6 +48,8 @@ export const TenantConfigModel = {
           locale: true,
           showOutOfStock: true,
           allowCartGuest: true,
+          depositEnabled: true,
+          depositPercentage: true,
         },
       });
 

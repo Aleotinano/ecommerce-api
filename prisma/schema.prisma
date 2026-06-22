@@ -66,6 +66,18 @@ model TenantConfig {
   showOutOfStock Boolean @default(false)
   allowCartGuest Boolean @default(true)
 
+  // Seña / depósito: si depositEnabled es true, las órdenes del tenant exigen un
+  // depósito (depositPercentage % del total) antes de pasar a producción.
+  depositEnabled    Boolean @default(false)
+  depositPercentage Int     @default(50)
+
+  // WhatsApp Business: el `phone_number_id` del numero de la marca (Meta Graph
+  // API). Identifica al tenant cuando llega un mensaje por el webhook de WhatsApp.
+  whatsappPhoneNumberId String? @unique
+  // Access token de la Graph API de la marca, cifrado AES-256-GCM (lib/crypto.js).
+  // null = usar el token global de env (WHATSAPP_ACCESS_TOKEN).
+  whatsappAccessToken   String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -180,12 +192,12 @@ model CartItem {
 model Order {
   id            Int                  @id @default(autoincrement())
   tenantId      Int
-  userId        Int
+  userId        Int?
   status        OrderStatus          @default(PENDING)
   total         Float
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
-  user          User                 @relation(fields: [userId], references: [id])
+  user          User?                @relation(fields: [userId], references: [id])
   tenant        Tenant               @relation(fields: [tenantId], references: [id])
   orderItems    OrderItem[]
   statusHistory OrderStatusHistory[]
@@ -195,6 +207,23 @@ model Order {
   paymentId     String?
   mercadoPagoId String?       @unique
   preferenceId  String?
+
+  // Procedencia + revisión (órdenes creadas por el bot nacen sin revisar).
+  origin       OrderOrigin @default(ADMIN)
+  contactPhone String? // wa_id del cliente de WhatsApp (órdenes BOT)
+  contactName  String?
+  reviewedById Int?
+  reviewedAt   DateTime?
+
+  // Seña / depósito: comportamiento opcional por tenant (TenantConfig.depositEnabled).
+  // depositAmount es snapshot pactado al crear; NO se recalcula desde TenantConfig.
+  requiresDeposit      Boolean   @default(false)
+  depositAmount        Float?
+  depositConfirmedById Int?
+  depositConfirmedAt   DateTime?
+
+  // Snapshot del fragmento de conversación que originó la orden (Redis tiene TTL).
+  creationContext String?
 
   @@index([tenantId])
 }
@@ -282,6 +311,13 @@ enum PaymentStatus {
   REJECTED
   IN_PROCESS
   REFUNDED
+  DEPOSIT_PAID
+  PAID_IN_FULL
+}
+
+enum OrderOrigin {
+  ADMIN
+  BOT
 }
 
 enum Role {

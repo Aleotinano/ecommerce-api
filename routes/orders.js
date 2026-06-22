@@ -3,7 +3,12 @@ import { OrderController } from "../controllers/orders.js";
 import { verifyToken } from "../middleware/auth.js";
 import { requireRole } from "../middleware/role.js";
 import { validate } from "../middleware/validate.js";
-import { orderStatus, orderQuery } from "../schemas/order.schema.js";
+import {
+  orderStatus,
+  orderQuery,
+  orderReview,
+  orderConfirmDeposit,
+} from "../schemas/order.schema.js";
 import { validateId } from "../schemas/id.schema.js";
 
 export const ordersRouter = Router();
@@ -13,6 +18,8 @@ const roleRequired = ["ADMIN", "STAFF"];
 const validation = {
   id: validate({ params: validateId }),
   update: validate({ body: orderStatus }),
+  review: validate({ body: orderReview }),
+  confirmDeposit: validate({ body: orderConfirmDeposit }),
   query: validate({ query: orderQuery }),
 };
 
@@ -42,4 +49,24 @@ ordersRouter.patch(
   validation.id,
   validation.update,
   OrderController.update
+);
+
+// Revisar/validar un pedido (procedencia BOT) — corrección inline opcional
+ordersRouter.post(
+  "/:id/review",
+  verifyToken,
+  requireRole(roleRequired),
+  validation.id,
+  validation.review,
+  OrderController.review
+);
+
+// Confirmar la seña de un pedido (el dueño verificó la transferencia)
+ordersRouter.post(
+  "/:id/confirm-deposit",
+  verifyToken,
+  requireRole(roleRequired),
+  validation.id,
+  validation.confirmDeposit,
+  OrderController.confirmDeposit
 );

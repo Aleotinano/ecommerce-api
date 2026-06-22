@@ -82,10 +82,17 @@ export class OrderController {
 
       const formattedOrders = orders.map((order) => ({
         id: order.id,
-        usuario: {
-          id: order.user.id,
-          username: order.user.username,
-        },
+        // Las órdenes del bot no tienen usuario registrado: usuario queda null y
+        // el cliente se identifica por contactName/contactPhone.
+        usuario: order.user
+          ? { id: order.user.id, username: order.user.username }
+          : null,
+        origin: order.origin,
+        contactName: order.contactName,
+        contactPhone: order.contactPhone,
+        reviewedAt: order.reviewedAt,
+        requiresDeposit: order.requiresDeposit,
+        depositAmount: order.depositAmount,
         status: order.status,
         paymentStatus: order.paymentStatus,
         total: order.total,
@@ -173,6 +180,71 @@ export class OrderController {
           status: order.status,
           paymentStatus: order.paymentStatus,
           total: order.total,
+          updatedAt: order.updatedAt,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async review(req, res, next) {
+    try {
+      const { id: orderId } = req.params;
+      const { items } = req.body ?? {};
+
+      const order = await OrderModel.reviewOrder({
+        tenantId: req.tenantId,
+        orderId,
+        reviewedById: req.user.id,
+        items: items ?? null,
+      });
+
+      return res.json({
+        message: "Orden revisada exitosamente",
+        order: {
+          id: order.id,
+          status: order.status,
+          paymentStatus: order.paymentStatus,
+          total: order.total,
+          requiresDeposit: order.requiresDeposit,
+          depositAmount: order.depositAmount,
+          reviewedAt: order.reviewedAt,
+          updatedAt: order.updatedAt,
+          productos: order.orderItems.map((item) => ({
+            nombre: item.variant.product?.name ?? item.variant.sku,
+            cantidad: item.quantity,
+            precio: item.price,
+            subtotal: item.price * item.quantity,
+            color: item.variant.color,
+            size: item.variant.size,
+          })),
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async confirmDeposit(req, res, next) {
+    try {
+      const { id: orderId } = req.params;
+
+      const order = await OrderModel.confirmDeposit({
+        tenantId: req.tenantId,
+        orderId,
+        confirmedById: req.user.id,
+      });
+
+      return res.json({
+        message: "Seña confirmada exitosamente",
+        order: {
+          id: order.id,
+          status: order.status,
+          paymentStatus: order.paymentStatus,
+          total: order.total,
+          depositAmount: order.depositAmount,
+          depositConfirmedAt: order.depositConfirmedAt,
           updatedAt: order.updatedAt,
         },
       });

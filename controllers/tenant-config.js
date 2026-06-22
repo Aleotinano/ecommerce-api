@@ -46,6 +46,8 @@ export class TenantConfigController {
         locale,
         showOutOfStock,
         allowCartGuest,
+        depositEnabled,
+        depositPercentage,
       } = req.body;
 
       const data = {};
@@ -72,6 +74,8 @@ export class TenantConfigController {
       if (locale !== undefined) data.locale = locale;
       if (showOutOfStock !== undefined) data.showOutOfStock = showOutOfStock;
       if (allowCartGuest !== undefined) data.allowCartGuest = allowCartGuest;
+      if (depositEnabled !== undefined) data.depositEnabled = depositEnabled;
+      if (depositPercentage !== undefined) data.depositPercentage = depositPercentage;
 
       const config = await TenantConfigModel.update({
         tenantId: parseInt(tenantId),

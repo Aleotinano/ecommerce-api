@@ -154,6 +154,19 @@ export const updateTenantConfig = z
       .boolean({ invalid_type_error: "allowCartGuest debe ser booleano" })
       .nullable()
       .optional(),
+
+    depositEnabled: z
+      .boolean({ invalid_type_error: "depositEnabled debe ser booleano" })
+      .nullable()
+      .optional(),
+
+    depositPercentage: z
+      .number({ invalid_type_error: "depositPercentage debe ser un número" })
+      .int("depositPercentage debe ser entero")
+      .min(0, "depositPercentage no puede ser menor a 0")
+      .max(100, "depositPercentage no puede superar 100")
+      .nullable()
+      .optional(),
   })
   .refine((data) => Object.values(data).some((value) => value !== undefined), {
     message: "No hay cambios para actualizar",

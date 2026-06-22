@@ -11,6 +11,29 @@ export const orderStatus = z.object({
   note: z.string().max(500, "La nota no puede superar 500 caracteres").optional(),
 });
 
+// Revisión admin: corrección inline opcional de cantidades. Nunca acepta
+// precio/total (el server los re-resuelve).
+export const orderReview = z.object({
+  items: z
+    .array(
+      z.object({
+        variantId: z.coerce
+          .number({ invalid_type_error: "variantId debe ser un número" })
+          .int("variantId debe ser entero")
+          .positive("variantId inválido"),
+        quantity: z.coerce
+          .number({ invalid_type_error: "quantity debe ser un número" })
+          .int("quantity debe ser entero")
+          .positive("quantity debe ser mayor a 0"),
+      })
+    )
+    .optional(),
+});
+
+export const orderConfirmDeposit = z.object({
+  note: z.string().max(500, "La nota no puede superar 500 caracteres").optional(),
+});
+
 export const orderQuery = z.object({
   status: z
     .enum(ORDER_STATUSES, {
