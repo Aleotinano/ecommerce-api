@@ -1,0 +1,657 @@
+# ARCHITECTURE.md
+
+> Documento técnico generado a partir del código real del repositorio. No describe
+> intenciones ni roadmap: solo lo que está implementado. Lo que no existe en el código se
+> marca como **no presente** o **TODO**.
+>
+> **Alcance:** este repositorio es **solo backend** (API HTTP). No contiene una aplicación
+> frontend (ver §10).
+
+---
+
+## 1. Stack y setup
+
+### Lenguaje / runtime
+- **Node.js, ESM puro** (`"type": "module"` en `package.json`). Entry point: `app.js`
+  (`"main": "app.js"`).
+- No hay build de TypeScript del backend: el código de runtime es `.js`. TypeScript está
+  como devDependency (hay `prisma.config.ts`, `lib/cloudinary.ts` y `tsx`), pero la app se
+  ejecuta con `node app.js`.
+
+### Package manager
+- **pnpm 10.24.0** (declarado en `package.json` → `"packageManager": "pnpm@10.24.0..."`).
+- Existe `pnpm-workspace.yaml` y `pnpm-lock.yaml`.
+
+### Dependencias principales (de `package.json`)
+
+| Categoría | Paquetes (versión exacta del `package.json`) |
+|---|---|
+| HTTP / server | `express@5.2.1`, `helmet@^8.1.0`, `compression@1.8.1`, `cors@2.8.5`, `cookie-parser@1.4.7`, `morgan@1.10.1` |
+| Logging | `pino@^9.14.0`, `pino-http@^10.5.0` (dev: `pino-pretty`) |
+| DB / ORM | `@prisma/adapter-pg@7.3.0`, `@prisma/client-runtime-utils@^7.4.2`, `pg@8.17.2` (dev: `prisma@7.3.0`, `@prisma/client@7.3.0`) |
+| Auth / crypto | `jsonwebtoken@9.0.3`, `argon2@0.44.0` |
+| Validación | `zod@4.3.6` |
+| Rate limit / cache | `express-rate-limit@^8.2.1`, `rate-limit-redis@^4.2.0`, `ioredis@^5.4.1` |
+| Pagos | `mercadopago@^2.12.0` |
+| Imágenes / uploads | `cloudinary@^2.9.0`, `multer@^2.1.1` |
+| Email | `nodemailer@^6.10.1` |
+| Dev / test | `vitest@^4.1.6`, `supertest@^7.2.2`, `eslint@9.39.2` + `standard@17.1.2`, `nodemon@3.1.11`, `typescript@5.9.3`, `tsx@4.21.0`, `dotenv@17.2.3` |
+
+> Nota: ESLint usa el preset `standard` (`eslintConfig.extends: "standard"`).
+
+### Scripts (`package.json`)
+
+| Script | Comando | Para qué |
+|---|---|---|
+| `start` | `node app.js` | Arranca el servidor |
+| `dev` | `nodemon app.js` | Desarrollo con reload |
+| `test` | `vitest run` | Tests (una pasada) |
+| `test:watch` | `vitest` | Tests en watch |
+| `seed` | `node prisma/seed.js` | Seed base |
+| `seed:stats` | `node prisma/seed-stats.js` | Seed de datos para stats |
+| `seed:config` | `node prisma/seed-tenant-config.js` | Seed de `TenantConfig` |
+| `seed:catalog` | `node prisma/seed-catalog.js` | Seed de catálogo |
+
+### Infraestructura local
+- `docker-compose.yml` levanta **solo Redis** (`redis:7-alpine`, puerto `6379`, AOF
+  `--appendonly yes`, `--maxmemory 256mb --maxmemory-policy allkeys-lru`).
+- **PostgreSQL no está en el compose** → la base de datos es externa/manual (se conecta vía
+  `DATABASE_URL`).
+
+### Variables de entorno
+
+Fuente única de verdad: `schemas/env.schema.js` (validado con zod en `config.js` mediante
+`envSchema.parse(process.env)`). Se listan **solo las claves** (sin valores). `*` = requerida
+(falla el arranque si falta); el resto es opcional o tiene default.
+
+| Clave | Requerida | Default / nota |
+|---|---|---|
+| `NODE_ENV` | no | `development` (`development`\|`production`\|`test`) |
+| `PORT` | no | `3001` |
+| `DATABASE_URL` | **sí** | string no vacío |
+| `SECRET_JWT_KEY` | **sí** | firma de JWT |
+| `BASE_URL` | **sí** | URL |
+| `APP_URL` | no | cae a `BASE_URL` |
+| `STORE_APP_URL` | no | `http://localhost:3000` |
+| `PUBLIC_KEY` | **sí** | (MercadoPago public key) |
+| `ACCESS_TOKEN` | **sí** | (MercadoPago access token) |
+| `CLOUDINARY_CLOUD_NAME` | **sí** | leída directo por `lib/cloudinary.js` (ver §11) |
+| `CLOUDINARY_API_KEY` | **sí** | idem |
+| `CLOUDINARY_API_SECRET` | **sí** | idem |
+| `CLOUDINARY_FOLDER` | no | `e-commerce-express` |
+| `ORIGINS` | no | CSV de orígenes CORS permitidos |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | no | SMTP nodemailer |
+| `SMTP_SECURE` | no | `"true"`/`"false"` → boolean (default false) |
+| `MAIL_FROM` | no | `no-reply@localhost` |
+| `LOG_LEVEL` | no | `info` en prod, `debug` fuera de prod |
+| `REDIS_URL` | no | si falta usa `localhost:6379` |
+| `CACHE_ENABLED` | no | boolean: `true` salvo que sea exactamente `"false"` |
+| `LLM_PROVIDER` | no | `gemini` (\|`anthropic`) |
+| `ANTHROPIC_API_KEY` | no | — |
+| `ANTHROPIC_MODEL` | no | `claude-haiku-4-5` |
+| `GEMINI_API_KEY` | no | — |
+| `GEMINI_MODEL` | no | `gemini-2.0-flash` |
+
+Hay archivos `.env` y `.env.test` en el repo (no se documenta su contenido).
+
+---
+
+## 2. Estructura de carpetas
+
+Árbol principal (2-3 niveles, excluyendo `node_modules`):
+
+```
+e-commerce-express-1/
+├── app.js                  # Bootstrap Express: middlewares globales + montaje de routers
+├── config.js               # Carga/valida env (DEFAULTS); única fuente de config
+├── prisma.config.ts        # Config de Prisma CLI
+├── docker-compose.yml      # Solo Redis
+├── vitest.config.js
+├── routes/                 # Definición de endpoints (Router de Express) por feature
+│   └── store/              # Sub-API "storefront" (auth, products, categories, cart, orders, config, mercadopago)
+├── controllers/            # Handlers HTTP: parsean req, llaman al service, arman respuesta
+│   └── store/              # Controllers de la storefront
+├── services/               # Lógica de negocio. Cada feature exporta un objeto `XModel`
+│   ├── stats/              # Dashboard: queries.js, builders.js, order-helpers.js, utils.js, constants.js, README.md
+│   └── content-suggestions/# index.js (fachada) + selection.js, angles.js, queries.js, cost-guard.js
+├── lib/                    # Infra/integraciones: prisma, redis, cache, logger, mailer, cloudinary, tokens, slug, imageManager
+│   └── llm/                # Cliente LLM: index.js, prompt.js, parse.js, fallback.js
+│       └── providers/      # anthropic.js, gemini.js (fetch directo, sin SDK)
+├── middleware/             # auth, role, tenant, cors, rateLimit, validate, upload, errorHandler, httpLogger
+├── schemas/                # Schemas zod (env, auth, product, order, stats, content-suggestion, etc.)
+├── helpers/                # error.js (createError), password.js (argon2), etc.
+├── utils/                  # Utilidades varias
+├── prisma/
+│   ├── schema.prisma       # Modelo de datos
+│   ├── migrations/         # 12 migraciones SQL
+│   └── seed*.js            # Seeds (base, stats, tenant-config, catalog)
+├── generated/prisma/       # Cliente Prisma generado (output custom, fuera de node_modules)
+├── tests/                  # Tests (vitest + supertest)
+├── front-md-guia/          # GUÍAS markdown de integración para un frontend externo (no es código)
+├── config/                 # (config auxiliar)
+├── tmp/                    # temporales
+└── .agents/                # (configuración de agentes)
+```
+
+`app.js` aplica los middlewares globales en este orden: `helmet()` → `middleWare()` (CORS) →
+`express.json({ limit: "10kb" })` → `cookieParser()` → `compression()` → `httpLogger` →
+`generalLimiter`, y luego monta los routers; cierra con `notFoundHandler` + `errorHandler`.
+
+---
+
+## 3. Modelo de datos (Prisma)
+
+Fuente: `prisma/schema.prisma`. Datasource `postgresql`; **el `datasource db` no declara
+`url`** (la conexión se inyecta vía `@prisma/adapter-pg` con `DATABASE_URL`, ver `lib/prisma.js`).
+Generador con `output = "../generated/prisma"`.
+
+### Modelos
+
+| Modelo | Campos clave (tipo) | Relaciones | `tenantId` |
+|---|---|---|---|
+| **Tenant** | `id`, `slug @unique`, `name`, `isActive=true`, `createdAt`, `updatedAt` | 1-N: users, categories, products, variants, carts, orders, contentSuggestions; 1-1: config | N/A (es el tenant) |
+| **TenantConfig** | branding (`logoUrl`, `storeName`, `storeTagline`…), contacto, social, SEO, políticas, `currency=ARS`, `locale=es-AR`, `showOutOfStock=false`, `allowCartGuest=true` | 1-1 `Tenant` (`onDelete: Cascade`) | **Sí** (`tenantId @unique`) |
+| **User** | `id`, `username`, `email`, `password`, `role: Role=CUSTOMER`, `emailVerified=false`, `emailVerificationTokenHash?`, `emailVerificationExpiresAt?` | 1-1 cart, 1-N orders, N-1 tenant | **Sí** |
+| **Categories** | `id`, `name`, `description?`, `icon?`, `isActive=true`, `parentId?` (self-relation árbol) | self `parent`/`children`, 1-N products, N-1 tenant | **Sí** |
+| **Product** | `id`, `name`, `description?`, `price: Float`, `img?`, `imgPublicId?`, `categoryId?`, `isActive=true`, `createdAt` | 1-N variants, N-1 category, N-1 tenant, 1-N contentSuggestions | **Sí** |
+| **ProductVariant** | `id`, `productId`, `color?`, `size?`, `price: Float?`, `stock: Int`, `sku`, `img?`, `imgPublicId?`, `isActive=true` | N-1 product (`onDelete: Cascade`), N-1 tenant, 1-N cartItems, 1-N orderItems | **Sí** |
+| **Cart** | `id`, `userId @unique`, `createdAt`, `updatedAt` | 1-1 user, N-1 tenant, 1-N items | **Sí** |
+| **CartItem** | `id`, `cartId`, `variantId`, `quantity=1`, `createdAt` | N-1 cart, N-1 variant | **No** (scope vía Cart) |
+| **Order** | `id`, `userId`, `status: OrderStatus=PENDING`, `total: Float`, `paymentStatus: PaymentStatus=PENDING`, `paymentMethod?`, `paymentId?`, `mercadoPagoId? @unique`, `preferenceId?`, `createdAt`, `updatedAt` | N-1 user, N-1 tenant, 1-N orderItems, 1-N statusHistory | **Sí** |
+| **OrderStatusHistory** | `id`, `orderId`, `fromStatus?`, `toStatus`, `note?`, `changedById?`, `createdAt` | N-1 order (`onDelete: Cascade`) | **No** (scope vía Order) |
+| **OrderItem** | `id`, `orderId`, `variantId`, `quantity`, `price: Float` | N-1 order (`onDelete: Cascade`), N-1 variant | **No** (scope vía Order) |
+| **ContentSuggestion** | `id`, `productId`, `angle: SuggestionAngle`, `status: SuggestionStatus=SUGGESTED`, `source: SuggestionSource=AUTO`, `date @db.Date`, `copy?`, `hashtags: String[]=[]`, `model?`, `generatedAt?`, `createdAt`, `updatedAt` | N-1 tenant, N-1 product | **Sí** |
+
+### Constraints / índices únicos relevantes
+
+| Modelo | Constraint |
+|---|---|
+| Tenant | `slug @unique` |
+| TenantConfig | `tenantId @unique`, `@@index([tenantId])` |
+| User | `@@unique([tenantId, username])`, `@@unique([tenantId, email])`, `@@index([tenantId])` |
+| Categories | `@@unique([tenantId, name])`, `@@index([tenantId])` |
+| Product | `@@index([tenantId])` |
+| ProductVariant | `@@unique([tenantId, sku])`, `@@index([tenantId])` |
+| Cart | `userId @unique`, `@@index([tenantId])` |
+| CartItem | `@@unique([cartId, variantId])` |
+| Order | `mercadoPagoId @unique`, `@@index([tenantId])` |
+| OrderStatusHistory | `@@index([orderId])` |
+| OrderItem | `@@unique([orderId, variantId])` |
+| ContentSuggestion | `@@unique([tenantId, date, productId, angle])`, `@@index([tenantId])` |
+
+### Enums
+
+- `SuggestionAngle`: `BEST_SELLER`, `NEW_ARRIVAL`, `LOW_STOCK`, `NO_RECENT_SALES`
+- `SuggestionStatus`: `SUGGESTED`, `USED`, `DISMISSED`
+- `SuggestionSource`: `AUTO`, `MANUAL`
+- `OrderStatus`: `PENDING`, `PROCESSING`, `COMPLETED`, `CANCELLED`
+- `PaymentStatus`: `PENDING`, `APPROVED`, `REJECTED`, `IN_PROCESS`, `REFUNDED`
+- `Role`: `ADMIN`, `STAFF`, `CUSTOMER`
+
+### Migraciones
+
+12 migraciones en `prisma/migrations/` (cronológicas): `..._initial_multi_tenant`,
+`..._email_global_unique`, `..._email_verification`, `..._add_tenant_config`,
+`..._add_product_price`, `..._expand_roles_storefront`, `..._variant_price_optional`,
+`..._add_order_status_history`, `..._add_content_suggestions`, `..._product_price_required`,
+`..._suggestions_multi_source`, `..._add_suggestion_status`.
+
+---
+
+## 4. Multi-tenancy
+
+Hay **dos mecanismos distintos** de resolución de tenant según la familia de rutas:
+
+### A. API de administración (`/orders`, `/products`, `/stats`, `/content-suggestions`, …)
+- El `tenantId` proviene **del JWT**. `verifyToken` (`middleware/auth.js`) decodifica la
+  cookie `access_token`, exige `decoded.tenantId` (si falta → 401 "Token sin tenant") y
+  setea `req.tenantId = decoded.tenantId`.
+- No hay lookup de tenant en DB en este camino: se confía en el claim del token.
+
+### B. API storefront (`/store/*`)
+- `resolveTenantFromSlug` (`middleware/tenant.js`), montado globalmente en
+  `routes/store/index.js` antes de las sub-rutas. Resuelve el **slug** desde:
+  1. **Subdominio** del host (`extractSlugFromHost`): toma el primer label del hostname,
+     ignora hosts locales (`localhost`, `127.0.0.1`, `::1`, `0.0.0.0`) y subdominios
+     `www`/`api`/`app`; requiere ≥3 labels.
+  2. Header **`X-Tenant-Slug`** (fallback).
+- Con el slug busca el `Tenant` en DB (`select id, slug, name, isActive`); si no existe →
+  404 `TENANT_NOT_FOUND`, si está inactivo → 403 `TENANT_INACTIVE`. Setea
+  `req.tenantId`, `req.tenantSlug` y `req.tenant`.
+- (Existe también `resolveTenantSlug`, que solo setea `req.tenantSlug` sin tocar la DB; no
+  se observa montado en los routers actuales.)
+
+### Inyección del scope en queries
+- **No hay extensión/middleware de Prisma que filtre por tenant automáticamente.** El
+  scoping es **manual**: cada método de service agrega `tenantId` en el `where` (p. ej.
+  `prisma.product.findFirst({ where: { id, tenantId } })`). Los controllers pasan
+  `req.tenantId` explícito a cada método del service. Ver §11 (riesgo).
+
+---
+
+## 5. Autenticación
+
+### Emisión del JWT
+- Se firma con `DEFAULTS.SECRET_JWT_KEY`, `expiresIn: "8h"`.
+- **Payload idéntico** en admin (`controllers/users.js → login`) y storefront
+  (`controllers/store/auth.js → login`):
+  `{ id, username, role, email, tenantId }`.
+
+### Transporte del token (asimétrico admin vs store)
+- **Admin**: el token se devuelve en una **cookie** `access_token`
+  (`httpOnly: true`, `sameSite: "strict"`, `secure: NODE_ENV==="production"`,
+  `maxAge: 8h`). `verifyToken` **lee solo la cookie** (`req.cookies.access_token`).
+- **Store**: el login **no setea cookie**; devuelve el `token` en el **body** de la
+  respuesta para usarse como `Authorization: Bearer <token>`.
+
+### Validación
+- `verifyToken` (admin): cookie obligatoria; exige `tenantId` en el token.
+- `attachUser` (admin, auth opcional): si hay cookie válida setea `req.user`/`req.tenantId`,
+  si no, ambos `null`.
+- `verifyStoreToken` (store): `extractToken` acepta **Bearer o cookie**; además valida que
+  `decoded.tenantId === req.tenantId` (el tenant resuelto por slug), si no → 403.
+- `optionalStoreAuth` (store): igual que el anterior pero no obliga; setea `req.user=null`
+  si no hay/no coincide el token.
+- Roles: `requireRole(allowedRoles)` (`middleware/role.js`) compara `req.user.role` contra
+  la lista permitida (401 si no hay user, 403 si el rol no aplica).
+
+### Passwords y verificación de email
+- Passwords con **argon2** (`helpers/password.js`: `hashPassword`/`verifyPassword`).
+- Verificación de email: `lib/tokens.js` genera un token aleatorio (`randomBytes(32)` hex),
+  guarda su **hash sha256** (`emailVerificationTokenHash`) y un `expiresAt` (TTL **24 h**,
+  `EMAIL_VERIFICATION_TTL_MS`). El email se envía con `lib/mailer.js` (nodemailer).
+- `login`/`loginForTenant` **exigen `emailVerified === true`** (si no → 403
+  `EMAIL_NOT_VERIFIED`). El registro admin crea `Tenant` + `User(role=ADMIN)` en una
+  transacción; el registro store crea `User(role=CUSTOMER)` en el tenant resuelto.
+
+---
+
+## 6. API — Endpoints
+
+Prefijos de montaje (de `app.js`): `/orders`, `/products`, `/variants`, `/categories`,
+`/cart`, `/users`, `/mercadopago`, `/stats`, `/content-suggestions`, `/auth`, `/test`,
+`/tenant-config`, `/store`.
+
+Convenciones de middleware citadas: `verifyToken` (cookie admin), `requireRole([...])`,
+`validate({ body|params|query })` (zod; `query` validada queda en `req.search`),
+`uploadImage` + `normalizeMultipartBody` (multer/cloudinary), limiters de `rateLimit.js`.
+
+### `/auth` (admin) — `routes/users.js`
+
+| Método | Ruta | Middleware | Controller → Service |
+|---|---|---|---|
+| POST | `/auth/register` | `registerLimiter`, `validate(body)` | `usersController.register` → `UserModel.register` |
+| POST | `/auth/login` | `loginLimiter`, `validate(body)` | `usersController.login` → `UserModel.login` (firma JWT, set cookie) |
+| POST | `/auth/logout` | — | `usersController.logout` (clear cookie) |
+| GET | `/auth/me` | `verifyToken` | `usersController.me` → `UserModel.me` |
+| GET | `/auth/verify-email` | `validate(query)` | `usersController.verifyEmail` → `UserModel.verifyEmail` |
+| POST | `/auth/resend-verification` | `validate(body)` | `usersController.resendVerification` → `UserModel.resendVerification` |
+
+### `/orders` (admin) — `routes/orders.js`
+
+| Método | Ruta | Middleware | Controller → Service |
+|---|---|---|---|
+| POST | `/orders` | `verifyToken` | `OrderController.create` → `OrderModel.create` |
+| GET | `/orders` | `verifyToken`, `validate(query)` | `OrderController.getAll` → `OrderModel.getAll` |
+| GET | `/orders/all` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(query)` | `OrderController.getUserOrders` → `OrderModel.getUserOrders` |
+| GET | `/orders/:id` | `verifyToken`, `validate(params)` | `OrderController.getById` → `OrderModel.getUserOrderById` |
+| PATCH | `/orders/:id` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params,body)` | `OrderController.update` → `OrderModel.updateOrderStatus` |
+
+### `/products` (admin) — `routes/productos.js`
+
+| Método | Ruta | Middleware | Controller → Service |
+|---|---|---|---|
+| GET | `/products` | `verifyToken`, `validate(query)` | `productsController.getAll` → `ProductModel.getAll` |
+| GET | `/products/options` | `verifyToken` | `productsController.getVariantOptions` → `ProductModel.getVariantOptions` |
+| GET | `/products/:id` | `verifyToken`, `validate(params)` | `productsController.getById` → `ProductModel.getById` |
+| POST | `/products` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `uploadImage`, `normalizeMultipartBody`, `validate(body)` | `productsController.create` → `ProductModel.create` |
+| PATCH | `/products/:id/category` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params,body)` | `productsController.assignCategory` → `ProductModel.assignCategory` |
+| PATCH | `/products/:id` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `uploadImage`, `normalizeMultipartBody`, `requireBodyOrImage`, `validate(params,body)` | `productsController.edit` → `ProductModel.edit` |
+| DELETE | `/products/:id` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params)` | `productsController.delete` → `ProductModel.delete` |
+
+### `/variants` (admin) — `routes/variants.js`
+
+| Método | Ruta | Middleware | Controller → Service |
+|---|---|---|---|
+| GET | `/variants/:productId` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params)` | `variantsController.getAll` → `VariantModel.getVariants` |
+| POST | `/variants/:productId` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `uploadImage`, `normalizeMultipartBody`, `validate(params,body)` | `variantsController.create` → `VariantModel.createVariant` |
+| PATCH | `/variants/:productId/:id` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `uploadImage`, `normalizeMultipartBody`, `requireBodyOrImage`, `validate(params,body)` | `variantsController.edit` → `VariantModel.editVariant` |
+| DELETE | `/variants/:productId/:id` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params)` | `variantsController.delete` → `VariantModel.deleteVariant` |
+
+### `/categories` (admin) — `routes/categories.js`
+
+| Método | Ruta | Middleware | Controller → Service |
+|---|---|---|---|
+| GET | `/categories` | `verifyToken` | `CategoryController.getAll` → `CategoryModel.getAll` |
+| GET | `/categories/tree` | `verifyToken` | `CategoryController.getTree` → `CategoryModel.getTree` |
+| GET | `/categories/:id` | `verifyToken`, `validate(params)` | `CategoryController.getById` → `CategoryModel.getById` |
+| POST | `/categories` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(body)` | `CategoryController.create` → `CategoryModel.create` |
+| PATCH | `/categories/:id` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params,body)` | `CategoryController.edit` → `CategoryModel.edit` |
+| DELETE | `/categories/:id` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params)` | `CategoryController.delete` → `CategoryModel.delete` |
+
+### `/cart` (admin) — `routes/cart.js`
+
+| Método | Ruta | Middleware | Controller → Service |
+|---|---|---|---|
+| GET | `/cart` | `verifyToken` | `cartController.getCart` → `CartModel.getCart` |
+| POST | `/cart/:variantId` | `verifyToken`, `validate(params)` | `cartController.add` → `CartModel.add` |
+| PATCH | `/cart/:variantId` | `verifyToken`, `validate(params)` | `cartController.remove` → `CartModel.remove` |
+| DELETE | `/cart` | `verifyToken` | `cartController.clear` → `CartModel.clear` |
+
+### `/users` (admin) — `routes/role.js`
+
+| Método | Ruta | Middleware | Controller → Service |
+|---|---|---|---|
+| PATCH | `/users/:id` | `verifyToken`, `requireRole(["ADMIN"])`, `validate(params,body)` | `roleController.edit` → `roleModel.edit` |
+
+### `/mercadopago` — `routes/mercadopago.js`
+
+| Método | Ruta | Middleware | Handler |
+|---|---|---|---|
+| GET | `/mercadopago/success` | — | inline (200, texto; loguea query) |
+| GET | `/mercadopago/failure` | — | inline (200, texto) |
+| GET | `/mercadopago/pending` | — | inline (200, texto) |
+| POST | `/mercadopago/webhook` | `webhookLimiter` | `mercadopagoController.getWebhook` |
+| POST | `/mercadopago/:id` | `verifyToken`, `validate(params: validateId)` | `mercadopagoController.create` |
+
+### `/stats` (admin) — `routes/stats.js`
+
+| Método | Ruta | Middleware | Controller → Service |
+|---|---|---|---|
+| GET | `/stats/dashboard` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(query: StatsQuery)` | `StatsController.get` → `StatsModel.getDashboard` |
+
+### `/content-suggestions` (admin) — `routes/content-suggestions.js`
+
+Todas con `verifyToken` + `requireRole(["ADMIN","STAFF"])`.
+
+| Método | Ruta | Validación | Controller → Service |
+|---|---|---|---|
+| GET | `/content-suggestions` | `validate(query: suggestionRangeQuery)` (range 7\|15\|30, default 7) | `ContentSuggestionController.getRange` → `ContentSuggestionModel.getRange` |
+| GET | `/content-suggestions/today` | — | `getToday` → `ContentSuggestionModel.getToday` |
+| GET | `/content-suggestions/products/:productId/angles` | `validate(params: productIdParam)` | `getProductAngles` → `ContentSuggestionModel.getProductAngles` |
+| POST | `/content-suggestions/products/:productId/generate` | `validate(params, body: generateBody)` | `generateForProduct` → `ContentSuggestionModel.generateForProduct` |
+| POST | `/content-suggestions/refine` | `validate(body: refineBody)` | `refineProductCopy` → `ContentSuggestionModel.refineProductCopy` |
+
+### `/tenant-config` — `routes/tenant-config.js`
+
+| Método | Ruta | Middleware | Controller → Service |
+|---|---|---|---|
+| GET | `/tenant-config/:tenantId` | `attachUser`, `validate(params)` | `TenantConfigController.get` → `TenantConfigModel.get` |
+| PATCH | `/tenant-config/:tenantId` | `verifyToken`, `requireRole(["ADMIN"])`, `validate(params,body)` | `TenantConfigController.update` → `TenantConfigModel.update` |
+| PATCH | `/tenant-config/:tenantId/logo` | `verifyToken`, `requireRole(["ADMIN"])`, `uploadImage`, `normalizeMultipartBody`, `validate(params)` | `TenantConfigController.uploadLogo` → `TenantConfigModel.uploadLogo` |
+| DELETE | `/tenant-config/:tenantId/logo` | `verifyToken`, `requireRole(["ADMIN"])`, `validate(params)` | `TenantConfigController.deleteLogo` → `TenantConfigModel.deleteLogo` |
+
+### `/test` — `routes/test.js`
+
+| Método | Ruta | Middleware | Handler |
+|---|---|---|---|
+| GET | `/test/:id` | `verifyToken`, `requireRole(["ADMIN"])` | inline: devuelve `{ id, username, role }` del token (ruta de prueba/debug, ver §11) |
+
+### Storefront `/store/*`
+
+Montaje en `routes/store/index.js`: **todo `/store/*` aplica `storeCors()` + `resolveTenantFromSlug`** antes de las sub-rutas. Auth = `verifyStoreToken` (obligatoria, Bearer/cookie) u `optionalStoreAuth` (pública con user opcional).
+
+**`/store/auth`** — `routes/store/auth.js`
+
+| Método | Ruta | Middleware | Controller → Service |
+|---|---|---|---|
+| POST | `/store/auth/register` | `registerLimiter`, `validate(body)` | `StoreAuthController.register` → `UserModel.registerCustomer` |
+| POST | `/store/auth/login` | `loginLimiter`, `validate(body)` | `StoreAuthController.login` → `UserModel.loginForTenant` (devuelve token en body) |
+| POST | `/store/auth/logout` | — | `StoreAuthController.logout` |
+| GET | `/store/auth/me` | `verifyStoreToken` | `StoreAuthController.me` (lee `req.user`) |
+| GET | `/store/auth/verify-email` | `validate(query)` | `StoreAuthController.verifyEmail` → `UserModel.verifyEmail` |
+| POST | `/store/auth/resend-verification` | `validate(body)` | `StoreAuthController.resendVerification` → `UserModel.resendVerification` |
+
+**`/store/products`** — `routes/store/products.js` (lectura pública)
+
+| Método | Ruta | Middleware | Controller → Service |
+|---|---|---|---|
+| GET | `/store/products` | `optionalStoreAuth`, `validate(query)` | `StoreProductsController.getAll` → `ProductModel.getAll` |
+| GET | `/store/products/options` | `optionalStoreAuth` | `StoreProductsController.getVariantOptions` → `ProductModel.getVariantOptions` |
+| GET | `/store/products/:id` | `optionalStoreAuth`, `validate(params)` | `StoreProductsController.getById` → `ProductModel.getById` |
+
+**`/store/categories`** — `routes/store/categories.js` (lectura pública)
+
+| Método | Ruta | Middleware | Controller → Service |
+|---|---|---|---|
+| GET | `/store/categories` | `optionalStoreAuth` | `StoreCategoriesController.getAll` → `CategoryModel.getAll` |
+| GET | `/store/categories/tree` | `optionalStoreAuth` | `StoreCategoriesController.getTree` → `CategoryModel.getTree` |
+| GET | `/store/categories/:id` | `optionalStoreAuth`, `validate(params)` | `StoreCategoriesController.getById` → `CategoryModel.getById` |
+
+**`/store/cart`** — `routes/store/cart.js` (reusa `cartController`)
+
+| Método | Ruta | Middleware | Controller → Service |
+|---|---|---|---|
+| GET | `/store/cart` | `verifyStoreToken` | `cartController.getCart` → `CartModel.getCart` |
+| POST | `/store/cart/:variantId` | `verifyStoreToken`, `validate(params)` | `cartController.add` → `CartModel.add` |
+| PATCH | `/store/cart/:variantId` | `verifyStoreToken`, `validate(params)` | `cartController.remove` → `CartModel.remove` |
+| DELETE | `/store/cart` | `verifyStoreToken` | `cartController.clear` → `CartModel.clear` |
+
+**`/store/orders`** — `routes/store/orders.js` (reusa `OrderController`)
+
+| Método | Ruta | Middleware | Controller → Service |
+|---|---|---|---|
+| POST | `/store/orders` | `verifyStoreToken` | `OrderController.create` → `OrderModel.create` |
+| GET | `/store/orders` | `verifyStoreToken`, `validate(query)` | `OrderController.getAll` → `OrderModel.getAll` |
+| GET | `/store/orders/:id` | `verifyStoreToken`, `validate(params)` | `OrderController.getById` → `OrderModel.getUserOrderById` |
+
+**`/store/config`** — `routes/store/config.js`
+
+| Método | Ruta | Middleware | Controller → Service |
+|---|---|---|---|
+| GET | `/store/config` | — (tenant ya resuelto por slug) | `StoreConfigController.get` → `TenantConfigModel.get` |
+
+**`/store/mercadopago`** — `routes/store/mercadopago.js`
+
+| Método | Ruta | Middleware | Controller → Service |
+|---|---|---|---|
+| POST | `/store/mercadopago/:id` | `verifyStoreToken`, `validate(params)` | `mercadopagoController.create` → `mercadopagoModel.create` |
+
+### Rate limiters (`middleware/rateLimit.js`)
+- `generalLimiter`: 200 req / 15 min (global; `skip` cuando **no** es producción).
+- `loginLimiter`: 5 / 15 min, key por `email`, `skipSuccessfulRequests`.
+- `registerLimiter`: 10 / 60 min.
+- `webhookLimiter`: 30 / 60 s.
+- Usan store de Redis (`rate-limit-redis`) con prefijos `rl:general:`/`rl:login:`/`rl:register:`/`rl:webhook:`; si Redis no está, caen a store en memoria.
+
+---
+
+## 7. Capa de servicios
+
+### Convención
+- Cada feature simple es `services/<feature>.js` y exporta un objeto **`XModel`** con
+  métodos `async` (p. ej. `UserModel`, `ProductModel`, `OrderModel`, `CategoryModel`,
+  `CartModel`, `VariantModel`, `StatsModel`, `TenantConfigModel`, `mercadopagoModel`,
+  `roleModel`).
+- Features grandes son **carpetas** con `index.js` (la fachada `XModel`) y submódulos
+  puros: `services/stats/` y `services/content-suggestions/`.
+- Los **controllers pasan `tenantId` explícito** a cada método; los services lo usan en el
+  `where` (scoping manual, §4).
+
+### `services/stats/`
+- Fachada: **`StatsModel.getDashboard({ tenantId, days = 30, lowStockThreshold = 5 })`**
+  (`services/stats.js`). Calcula período actual y previo (`addDays`/`startOfDay`).
+- `queries.js → Data({ tenantId, currentStart, now, previousStart })`: 3 queries en
+  paralelo (`Promise.all`) **scoped por `tenantId`**: `currentOrders` (con cadena
+  `orderItems → variant → product → category/variants`), `previousOrders` (liviano) y
+  `allProducts`.
+- `builders.js`: `buildDailySeries`, `buildOrderStatusPanel`, `buildRevenueByCategory`,
+  `buildProductRanking` (top 5, con etiquetas operativas: `best_seller`, `low_stock`,
+  `out_of_stock`, `forgotten`, `no_variants`, `stable`).
+- `order-helpers.js`: `isCompletedOrder`, `sumCompletedRevenue`, `sumCompletedUnits`,
+  `getOrderUnits`. `utils.js`: `startOfDay`, `addDays`, `round`, `percentageChange`,
+  `buildMetric` (KPI `{ current, previous, changePct }`). `constants.js`: `DAY_IN_MS`,
+  `ORDER_STATUS_KEYS`.
+- **Criterio:** revenue/units cuentan **solo órdenes `COMPLETED`**
+  (`meta.criteria.revenueBasedOn = "COMPLETED_ORDERS"`, `rankingSize: 5`).
+
+### `services/content-suggestions/`
+Fachada `ContentSuggestionModel` (`index.js`). Firma común: `{ tenantId, ..., now = new Date() }`.
+
+| Método | Qué hace |
+|---|---|
+| `getToday({ tenantId, now })` | Sugerencia **AUTO** del día. Cache Redis → busca fila `source: "AUTO"` del día → si no, `selectProduct` (Fase 1) + `generateCopy` (LLM) + persiste (`source: AUTO`). Maneja carrera `P2002` re-leyendo. **No consume cuota LLM** (ver §11). |
+| `getProductAngles({ tenantId, productId, now })` | Ángulos aplicables a un producto (reusa `anglesForProduct`). |
+| `generateForProduct({ tenantId, productId, angle, now })` | Copy on-demand de un (producto, ángulo). Cache → fila DB (dedupe por unique compuesto) → valida que el ángulo aplique → `consumeLlmQuota` → `generateCopy` → persiste `source: MANUAL` → cachea. 422 si el ángulo no aplica. |
+| `refineProductCopy({ tenantId, productId, angle, mode, instruction, baseCopy, baseHashtags, now })` | Variación efímera de un copy ya generado. `consumeLlmQuota` + `refineCopy`. **No persiste.** |
+| `getRange({ tenantId, range, now })` | Timeline de `range` días (incl. hoy); rellena días sin sugerencia con `suggestion: null`. Sin cache. |
+
+- **Selección (Fase 1)** en `selection.js` + `angles.js`:
+  - `selectProduct({ tenantId, now })`: carga datos (`loadSelectionData`: órdenes
+    `COMPLETED` de la ventana, catálogo, última sugerencia), suma unidades por producto, y
+    **rota los ángulos** por `ANGLE_ORDER` arrancando en el siguiente al último usado; gana
+    el primer ángulo con candidato. Si ninguno → 422 `NO_SUGGESTION_CANDIDATE`.
+  - `anglesForProduct({ tenantId, productId, now })`: filtra `ANGLE_ORDER` por
+    `ANGLE_PREDICATES` aplicados al producto enriquecido (404 si no es del tenant).
+  - Constantes: `LOW_STOCK_THRESHOLD = 5`, `NEW_ARRIVAL_DAYS = 30`, ventana de ventas
+    `WINDOW_DAYS = 30`. `ANGLE_PREDICATES` y `ANGLE_SELECTORS` son la **única fuente de
+    verdad** compartida entre selección diaria y tab de producto.
+- `cost-guard.js`: `consumeLlmQuota` (ver §8). `queries.js`: `loadSelectionData`.
+
+---
+
+## 8. Cliente LLM (`lib/llm/`)
+
+### Fachada (`lib/llm/index.js`)
+```
+generateCopy({ product, angle, config, refinement }) -> { copy, hashtags, model }
+refineCopy({ product, angle, config, mode, instruction, baseCopy, baseHashtags }) -> { copy, hashtags, model }
+```
+- **Best-effort: nunca lanza** (igual que `lib/mailer`). Si el provider falla, no hay API
+  key, o el JSON es inválido, devuelve un **fallback** con `model: null`:
+  - En generación normal: `buildFallbackCopy` (template determinista, `fallback.js`).
+  - En refinamiento: devuelve el `baseCopy`/`baseHashtags` intactos.
+- `refineCopy` reusa `generateCopy` agregando un bloque `refinement`. **No persiste.**
+- Provider elegido por `DEFAULTS.LLM.PROVIDER` (`LLM_PROVIDER`) vía mapa `PROVIDERS`
+  (`anthropic`, `gemini`); fallback de selección = `geminiProvider`. `MAX_TOKENS = 1024`.
+
+### Providers (fetch directo, sin SDK)
+Cada provider expone un getter `model` y `generate({ system, user, maxTokens })`.
+
+- **`providers/anthropic.js`**: `POST https://api.anthropic.com/v1/messages`, headers
+  `x-api-key` + `anthropic-version: 2023-06-01`; body `{ model, max_tokens, system,
+  messages:[{role:"user",content:user}] }`. Sin `temperature` ni prefills (evita 400 en
+  Opus 4.x). Lee el texto de `data.content[0].text`. Lanza si falta `ANTHROPIC_API_KEY` o
+  si `!res.ok`.
+- **`providers/gemini.js`**: `POST .../v1beta/models/<model>:generateContent?key=<API_KEY>`;
+  `system` va en `systemInstruction`, `generationConfig.responseMimeType:
+  "application/json"`. Lee `data.candidates[0].content.parts[0].text`.
+
+### Construcción del prompt (`lib/llm/prompt.js`)
+- `buildPrompt({ product, angle, config, refinement }) -> { system, user }` (texto plano,
+  provider-agnostic).
+- `system`: rol de community manager con datos de marca de `TenantConfig` (`storeName`,
+  `storeTagline`, `storeDescription`, `currency`), instrucciones de tono y formato, y exige
+  **responder solo JSON** `{ copy, hashtags }` (copy ≤280 chars, 3-6 hashtags reales).
+- `user`: datos del producto (`name`, `description`, `category.name`, `price`) + el
+  **brief del ángulo** (`ANGLE_BRIEFS`). Para refinamiento agrega el copy previo + la
+  consigna (`REFINEMENT_BRIEFS` para `shorter`/`informal`/`salesy`, o `instruction` libre
+  en modo `custom`).
+
+### Parseo (`lib/llm/parse.js`)
+- `parseLlmJson(text)`: quita fences ```` ```json ````, recorta del primer `{` al último
+  `}`, `JSON.parse`, valida que `copy` sea string no vacío, normaliza hashtags (fuerza `#`,
+  sin espacios) y limita a **6** (`MAX_HASHTAGS`). Devuelve `null` si no se pudo (la
+  fachada cae al fallback).
+
+### System prompt y caché
+- El system prompt se **reconstruye en cada llamada** (no se cachea el prompt). Lo que se
+  cachea en Redis es el **resultado** (`copy`/sugerencia), ver §9.
+
+### Cost guard / rate limit del LLM (`services/content-suggestions/cost-guard.js`)
+- `consumeLlmQuota({ tenantId, now })`: `INCR` de un contador diario por tenant en Redis;
+  en el primer incremento setea `EXPIRE` hasta el fin del día **UTC**. Si supera
+  `DAILY_LLM_LIMIT = 15` → 429 `LLM_DAILY_LIMIT`. **Best-effort:** si Redis falla,
+  *degrada abierto* (deja pasar). Solo se invoca cuando realmente se va a llamar al LLM
+  (un cache/DB hit no consume cuota).
+
+---
+
+## 9. Redis
+
+Cliente: `lib/redis.js` (ioredis, singleton lazy, `lazyConnect`, reconnect con backoff).
+**Deshabilitado** si `CACHE_ENABLED` es `false` (`getRedis()` devuelve `null` y todo
+degrada sin romper). URL desde `REDIS_URL` o `localhost:6379`.
+
+### Usos
+1. **Caché de aplicación** (`lib/cache.js`): `get`/`set`/`wrap` (JSON), `del`, `delPattern`
+   (vía `scanStream`). TTL con **jitter del 10%** (`withJitter`). Helpers de namespacing:
+   `tenantNs(tenantId) = "t<id>"`, `hashParams` (sha1 truncado a 12).
+2. **Rate limiting** (`middleware/rateLimit.js`, `rate-limit-redis`).
+3. **Cost guard del LLM** (`cost-guard.js`).
+
+### Patrones de key y TTLs
+
+| Uso | Patrón de key | TTL |
+|---|---|---|
+| Sugerencia AUTO del día | `t<tenantId>:content-suggestion:<YYYY-MM-DD>` | `SUGGESTION_TTL` = 6 h (+jitter) |
+| Copy on-demand (producto+ángulo) | `t<tenantId>:content-copy:<YYYY-MM-DD>:<productId>:<angle>` | 6 h (+jitter) |
+| Contador de cuota LLM | `t<tenantId>:content-llm-count:<YYYY-MM-DD>` | hasta fin de día UTC |
+| Rate limit | prefijos `rl:general:` / `rl:login:` / `rl:register:` / `rl:webhook:` | ventana del limiter |
+
+> `getRange` (timeline) **no** usa caché, para reflejar al instante cambios de status y
+> regeneraciones.
+
+---
+
+## 10. Frontend — **NO PRESENTE**
+
+**No existe una aplicación frontend en este repositorio.** No hay proyecto Next.js, ni
+páginas/rutas, ni cliente HTTP, ni componentes UI. Por lo tanto, los puntos pedidos
+(estructura de rutas/páginas Next.js, consumo de la API/cliente HTTP, convenciones de
+componentes y librerías UI) son **TODO / fuera de este repo** (el frontend, si existe,
+vive en otro repositorio).
+
+Lo único relacionado es `front-md-guia/`, una carpeta de **guías de integración en
+markdown** (documentación, no código), que describe cómo un frontend externo (los propios
+docs asumen **Next.js**) debería consumir esta API:
+
+| Archivo | Tema |
+|---|---|
+| `FRONTEND_INTEGRATION.md` | Integración general con la API |
+| `FRONTEND_CONTENT_SUGGESTIONS.md` | Consumo de la feature de sugerencias |
+| `FRONTEND_CONTENT_SUGGESTIONS_TIMELINE.md` | Timeline de sugerencias |
+| `FRONTEND_ORDER_TRACKING.md` | Seguimiento de órdenes |
+| `FRONTEND_PRICING.md` | Precios |
+| `FRONTEND_PRODUCT_PRICE_REQUIRED.md` | Precio obligatorio en producto |
+| `TESTING_MULTITENANT.md` | Cómo probar el comportamiento multi-tenant |
+
+---
+
+## 11. GAPS / INCONSISTENCIAS
+
+- **Comentario desactualizado en `services/content-suggestions/index.js` (`getToday`).** El
+  comentario dice *"El unique (tenantId, date) asegura una sola por dia"*, pero el unique
+  real del schema es `@@unique([tenantId, date, productId, angle])` (4 columnas). La
+  unicidad de la sugerencia AUTO del día **no** la garantiza ese constraint, sino el
+  `findFirst({ where: { tenantId, date, source: "AUTO" } })`. En teoría podrían coexistir
+  varias filas AUTO del mismo día con distinto producto/ángulo.
+- **Sin scoping de tenant automático.** No hay extensión/middleware de Prisma que filtre por
+  `tenantId`. Cada query debe agregar `tenantId` a mano → si un método lo olvida, hay
+  riesgo de fuga de datos entre tenants. Es una convención, no una garantía del ORM.
+- **Asimetría de autenticación admin vs store.** El admin viaja por **cookie** y
+  `verifyToken` **solo lee la cookie** (no acepta `Authorization: Bearer`), mientras que la
+  storefront acepta **Bearer o cookie** (`extractToken`). Existe `extractToken` en
+  `middleware/auth.js` pero `verifyToken` no lo usa. Un cliente "admin" que mande Bearer no
+  autenticará.
+- **Credenciales de Cloudinary fuera de `config.js`.** `env.schema` exige
+  `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET`, pero `DEFAULTS`
+  solo expone `CLOUDINARY_FOLDER`. `lib/cloudinary.js` lee las credenciales **directo de
+  `process.env`** (no pasa por `DEFAULTS`). Funciona, pero rompe la convención de "toda la
+  config pasa por `config.js`".
+- **Archivo duplicado de Cloudinary.** Conviven `lib/cloudinary.js` y `lib/cloudinary.ts`.
+  El runtime ESM usa el `.js`; el `.ts` no se ejecuta como parte de la app.
+- **`datasource db` sin `url` en el schema.** La conexión va por `@prisma/adapter-pg`
+  (`lib/prisma.js`) con `DATABASE_URL`. El cliente se genera fuera de `node_modules`
+  (`generated/prisma`), por lo que requiere `prisma generate` para existir.
+- **Postgres no está en `docker-compose.yml`** (solo Redis). El compose no levanta toda la
+  infra; la DB es externa/manual.
+- **`getToday` no consume cuota de LLM.** La sugerencia AUTO del día puede invocar al LLM
+  sin pasar por `consumeLlmQuota`; el cost guard (`DAILY_LLM_LIMIT = 15`) solo aplica a
+  `generateForProduct` y `refineProductCopy`.
+- **Ruta de prueba expuesta.** `GET /test/:id` (`routes/test.js`) es un endpoint de
+  debug que solo devuelve los claims del token (protegido por `verifyToken` +
+  `requireRole(["ADMIN"])`). Conviene revisar si debe existir en producción.
+- **`generalLimiter` se desactiva fuera de producción** (`skip: (req) => !isProd`): en
+  desarrollo/test no hay rate limit general.
+```
