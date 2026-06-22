@@ -88,6 +88,9 @@ async function buildTenant({ slug, name, adminUsername, adminEmail, customerUser
 }
 
 export async function seedTenants() {
+  // ContentSuggestion referencia Product con FK RESTRICT: hay que limpiarla antes
+  // de borrar productos o el reseed falla.
+  await prisma.contentSuggestion.deleteMany();
   await prisma.cartItem.deleteMany();
   await prisma.cart.deleteMany();
   await prisma.orderItem.deleteMany();

@@ -29,3 +29,31 @@ export const suggestionRangeQuery = z.object({
 export const suggestionQuery = z.object({
   date: z.coerce.date().optional(),
 });
+
+/** Modos de refinamiento del copy. `custom` requiere instruccion libre. */
+export const REFINEMENT_MODES = ["shorter", "informal", "salesy", "custom"];
+
+/** Param :productId compartido por los endpoints del tab de producto. */
+export const productIdParam = z.object({
+  productId: z.coerce.number().int().positive(),
+});
+
+/** Body de POST /products/:productId/generate. */
+export const generateBody = z.object({
+  angle: z.enum(SUGGESTION_ANGLES),
+});
+
+/** Body de POST /refine: pide una variacion de un copy ya generado. */
+export const refineBody = z
+  .object({
+    productId: z.coerce.number().int().positive(),
+    angle: z.enum(SUGGESTION_ANGLES),
+    mode: z.enum(REFINEMENT_MODES),
+    instruction: z.string().trim().min(1).max(280).optional(),
+    baseCopy: z.string().trim().min(1).max(2000),
+    baseHashtags: z.array(z.string().trim().max(80)).max(20).default([]),
+  })
+  .refine((data) => data.mode !== "custom" || Boolean(data.instruction), {
+    message: "El modo 'custom' requiere una instruccion",
+    path: ["instruction"],
+  });

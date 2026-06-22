@@ -229,8 +229,9 @@ model ContentSuggestion {
   tenantId  Int
   productId Int
   angle     SuggestionAngle
-  status    SuggestionStatus @default(SUGGESTED)
-  date      DateTime         @db.Date
+  status    SuggestionStatus  @default(SUGGESTED)
+  source    SuggestionSource  @default(AUTO)
+  date      DateTime          @db.Date
 
   // Campos de IA (Fase 2) — nullable por ahora
   copy        String?
@@ -244,7 +245,9 @@ model ContentSuggestion {
   tenant  Tenant  @relation(fields: [tenantId], references: [id])
   product Product @relation(fields: [productId], references: [id])
 
-  @@unique([tenantId, date])
+  // Identidad natural = dimension del cache on-demand (tenant+dia+producto+angulo).
+  // Dedupe tanto la sugerencia automatica del dia como las generaciones manuales.
+  @@unique([tenantId, date, productId, angle])
   @@index([tenantId])
 }
 
@@ -259,6 +262,11 @@ enum SuggestionStatus {
   SUGGESTED
   USED
   DISMISSED
+}
+
+enum SuggestionSource {
+  AUTO
+  MANUAL
 }
 
 enum OrderStatus {

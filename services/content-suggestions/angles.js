@@ -5,9 +5,16 @@
  * Forma de cada producto en `products`:
  *   { id, name, isActive, createdAt, variants: [{ stock, isActive }], units }
  * donde `units` son las unidades vendidas en COMPLETED dentro de la ventana.
+ *
+ * La logica de "que califica para cada angulo" vive en ANGLE_PREDICATES (una sola
+ * fuente de verdad): los selectores la reusan para elegir el destacado del dia, y
+ * el tab de producto la reusa para filtrar que angulos aplican a un producto.
  */
 
 export const LOW_STOCK_THRESHOLD = 5;
+
+/** Ventana (dias) para considerar a un producto "recien llegado". */
+export const NEW_ARRIVAL_DAYS = 30;
 
 /** Orden de rotacion de los angulos. */
 export const ANGLE_ORDER = [
@@ -32,42 +39,47 @@ const hasLowStock = (product) => {
   return stock > 0 && stock <= LOW_STOCK_THRESHOLD;
 };
 
-/** Producto activo con mas unidades vendidas en la ventana. */
-const bestSeller = (products) => {
-  const sold = products
-    .filter((product) => product.isActive && product.units > 0)
-    .sort((a, b) => b.units - a.units);
-
-  return sold[0]?.id ?? null;
+/** Creado dentro de la ventana de novedades respecto a `now`. */
+const isRecent = (product, now) => {
+  const ageMs = now.getTime() - product.createdAt.getTime();
+  return ageMs <= NEW_ARRIVAL_DAYS * 24 * 60 * 60 * 1000;
 };
 
-/** Producto activo con createdAt mas reciente. */
-const newArrival = (products) => {
-  const active = products
-    .filter((product) => product.isActive)
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-
-  return active[0]?.id ?? null;
+/**
+ * Predicado por angulo: dado un producto enriquecido, decide si ese angulo le
+ * aplica. Fuente unica de verdad compartida entre la seleccion del dia y el tab.
+ */
+export const ANGLE_PREDICATES = {
+  BEST_SELLER: (product) => product.isActive && product.units > 0,
+  NEW_ARRIVAL: (product, now = new Date()) =>
+    product.isActive && isRecent(product, now),
+  LOW_STOCK: (product) => product.isActive && hasLowStock(product),
+  NO_RECENT_SALES: (product) =>
+    product.isActive && product.units === 0 && hasAvailableStock(product),
 };
 
-/** Producto activo con alguna variante activa en stock bajo (>0 y <=umbral). */
-const lowStock = (products) => {
-  const candidates = products
-    .filter((product) => product.isActive && hasLowStock(product))
-    .sort((a, b) => b.units - a.units);
+/** Producto con mas unidades vendidas entre los que califican como BEST_SELLER. */
+const bestSeller = (products) =>
+  products
+    .filter((product) => ANGLE_PREDICATES.BEST_SELLER(product))
+    .sort((a, b) => b.units - a.units)[0]?.id ?? null;
 
-  return candidates[0]?.id ?? null;
-};
+/** Producto recien llegado con createdAt mas reciente. */
+const newArrival = (products, now) =>
+  products
+    .filter((product) => ANGLE_PREDICATES.NEW_ARRIVAL(product, now))
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0]?.id ?? null;
 
-/** Producto activo, con stock disponible, sin ventas en la ventana. */
-const noRecentSales = (products) => {
-  const candidates = products.filter(
-    (product) =>
-      product.isActive && product.units === 0 && hasAvailableStock(product)
-  );
+/** Producto con stock bajo; desempata por mas vendido. */
+const lowStock = (products) =>
+  products
+    .filter((product) => ANGLE_PREDICATES.LOW_STOCK(product))
+    .sort((a, b) => b.units - a.units)[0]?.id ?? null;
 
-  return candidates[0]?.id ?? null;
-};
+/** Producto con stock disponible y sin ventas en la ventana. */
+const noRecentSales = (products) =>
+  products.filter((product) => ANGLE_PREDICATES.NO_RECENT_SALES(product))[0]
+    ?.id ?? null;
 
 export const ANGLE_SELECTORS = {
   BEST_SELLER: bestSeller,

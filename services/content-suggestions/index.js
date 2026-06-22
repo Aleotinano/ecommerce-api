@@ -1,9 +1,11 @@
 import prisma from "../../lib/prisma.js";
 import { get, set, tenantNs } from "../../lib/cache.js";
+import { createError } from "../../helpers/error.js";
 import { startOfDay, addDays } from "../stats/utils.js";
 import { TenantConfigModel } from "../tenant-config.js";
-import { generateCopy } from "../../lib/llm/index.js";
-import { selectProduct } from "./selection.js";
+import { generateCopy, refineCopy } from "../../lib/llm/index.js";
+import { selectProduct, anglesForProduct } from "./selection.js";
+import { consumeLlmQuota } from "./cost-guard.js";
 
 /** Producto incluido en la respuesta (la imagen sale del catalogo). */
 const productInclude = {
@@ -20,15 +22,40 @@ const productInclude = {
   },
 };
 
-/** TTL del cache de la sugerencia del dia (6 h). El unique(tenantId,date) ya
- * garantiza una por dia; el cache solo evita relecturas. */
+/** TTL del cache de sugerencias (6 h). El unique a nivel DB ya dedupe; el cache
+ * solo evita relecturas y regeneraciones dentro del dia. */
 const SUGGESTION_TTL = 6 * 60 * 60;
 
-const suggestionKey = (tenantId, date) =>
-  `${tenantNs(tenantId)}:content-suggestion:${date.toISOString().slice(0, 10)}`;
-
-/** Clave por dia (YYYY-MM-DD) consistente con suggestionKey. */
+/** Clave por dia (YYYY-MM-DD) consistente con las cache keys. */
 const dayKey = (date) => date.toISOString().slice(0, 10);
+
+const suggestionKey = (tenantId, date) =>
+  `${tenantNs(tenantId)}:content-suggestion:${dayKey(date)}`;
+
+/** Cache de la generacion on-demand por (tenant + dia + producto + angulo). */
+const copyKey = (tenantId, date, productId, angle) =>
+  `${tenantNs(tenantId)}:content-copy:${dayKey(date)}:${productId}:${angle}`;
+
+/** Campos del producto que necesita el prompt del LLM. */
+const productForPrompt = {
+  id: true,
+  name: true,
+  description: true,
+  price: true,
+  category: { select: { name: true } },
+};
+
+/** Carga un producto del tenant para alimentar el prompt; 404 si no existe. */
+const loadProductForPrompt = async (tenantId, productId) => {
+  const product = await prisma.product.findFirst({
+    where: { id: productId, tenantId },
+    select: productForPrompt,
+  });
+  if (!product) {
+    throw createError("Producto no encontrado", "PRODUCT_NOT_FOUND", 404);
+  }
+  return product;
+};
 
 /** Forma liviana de la sugerencia para la timeline. */
 const toTimelineSuggestion = (s) => ({
@@ -65,8 +92,8 @@ export const ContentSuggestionModel = {
       return cached;
     }
 
-    const existing = await prisma.contentSuggestion.findUnique({
-      where: { tenantId_date: { tenantId, date } },
+    const existing = await prisma.contentSuggestion.findFirst({
+      where: { tenantId, date, source: "AUTO" },
       include: productInclude,
     });
 
@@ -77,16 +104,7 @@ export const ContentSuggestionModel = {
 
     const { productId, angle } = await selectProduct({ tenantId, now });
 
-    const product = await prisma.product.findFirst({
-      where: { id: productId, tenantId },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        price: true,
-        category: { select: { name: true } },
-      },
-    });
+    const product = await loadProductForPrompt(tenantId, productId);
 
     const config = await loadBrandConfig(tenantId);
 
@@ -105,6 +123,101 @@ export const ContentSuggestionModel = {
           productId,
           angle,
           date,
+          source: "AUTO",
+          copy,
+          hashtags,
+          model,
+          generatedAt: new Date(),
+        },
+        include: productInclude,
+      });
+    } catch (error) {
+      // Carrera: ya existe una fila para (tenant, date, productId, angle). Re-leer
+      // la automatica del dia (puede ser otra combinacion si hubo regeneracion).
+      if (error.code === "P2002") {
+        suggestion =
+          (await prisma.contentSuggestion.findFirst({
+            where: { tenantId, date, source: "AUTO" },
+            include: productInclude,
+          })) ??
+          (await prisma.contentSuggestion.findUnique({
+            where: {
+              tenantId_date_productId_angle: { tenantId, date, productId, angle },
+            },
+            include: productInclude,
+          }));
+      } else {
+        throw error;
+      }
+    }
+
+    await set(cacheKey, suggestion, SUGGESTION_TTL);
+    return suggestion;
+  },
+
+  /**
+   * Lista los angulos que aplican a un producto puntual (tab de producto), reusando
+   * los predicados de Fase 1. Devuelve briefs legibles para los chips del front.
+   */
+  async getProductAngles({ tenantId, productId, now = new Date() }) {
+    const angles = await anglesForProduct({ tenantId, productId, now });
+    return { productId, angles };
+  },
+
+  /**
+   * Genera (o sirve cacheada/persistida) el copy de un producto para un angulo
+   * puntual. Flujo: cache Redis -> fila en DB (dedupe por unique compuesto) ->
+   * guarda de costo + LLM -> persiste (source MANUAL) -> cachea. Valida que el
+   * angulo realmente aplique al producto antes de gastar una llamada al LLM.
+   */
+  async generateForProduct({ tenantId, productId, angle, now = new Date() }) {
+    const date = startOfDay(now);
+    const cacheKey = copyKey(tenantId, date, productId, angle);
+
+    const cached = await get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const existing = await prisma.contentSuggestion.findUnique({
+      where: {
+        tenantId_date_productId_angle: { tenantId, date, productId, angle },
+      },
+      include: productInclude,
+    });
+    if (existing) {
+      await set(cacheKey, existing, SUGGESTION_TTL);
+      return existing;
+    }
+
+    const applicable = await anglesForProduct({ tenantId, productId, now });
+    if (!applicable.includes(angle)) {
+      throw createError(
+        "Ese angulo no aplica a este producto",
+        "ANGLE_NOT_APPLICABLE",
+        422
+      );
+    }
+
+    const product = await loadProductForPrompt(tenantId, productId);
+    const config = await loadBrandConfig(tenantId);
+
+    await consumeLlmQuota({ tenantId, now });
+    const { copy, hashtags, model } = await generateCopy({
+      product,
+      angle,
+      config,
+    });
+
+    let suggestion;
+    try {
+      suggestion = await prisma.contentSuggestion.create({
+        data: {
+          tenantId,
+          productId,
+          angle,
+          date,
+          source: "MANUAL",
           copy,
           hashtags,
           model,
@@ -115,7 +228,9 @@ export const ContentSuggestionModel = {
     } catch (error) {
       if (error.code === "P2002") {
         suggestion = await prisma.contentSuggestion.findUnique({
-          where: { tenantId_date: { tenantId, date } },
+          where: {
+            tenantId_date_productId_angle: { tenantId, date, productId, angle },
+          },
           include: productInclude,
         });
       } else {
@@ -125,6 +240,38 @@ export const ContentSuggestionModel = {
 
     await set(cacheKey, suggestion, SUGGESTION_TTL);
     return suggestion;
+  },
+
+  /**
+   * Pide una variacion de un copy ya generado (mas corto / informal / vendedor /
+   * cambio libre). Consume cuota de LLM y devuelve la variacion SIN persistir: es
+   * una exploracion efimera que el front decide si usa.
+   */
+  async refineProductCopy({
+    tenantId,
+    productId,
+    angle,
+    mode,
+    instruction,
+    baseCopy,
+    baseHashtags = [],
+    now = new Date(),
+  }) {
+    const product = await loadProductForPrompt(tenantId, productId);
+    const config = await loadBrandConfig(tenantId);
+
+    await consumeLlmQuota({ tenantId, now });
+    const { copy, hashtags, model } = await refineCopy({
+      product,
+      angle,
+      config,
+      mode,
+      instruction,
+      baseCopy,
+      baseHashtags,
+    });
+
+    return { productId, angle, copy, hashtags, model };
   },
 
   /**

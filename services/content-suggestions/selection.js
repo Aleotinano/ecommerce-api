@@ -1,7 +1,7 @@
 import { createError } from "../../helpers/error.js";
 import { addDays, startOfDay } from "../stats/utils.js";
 import { loadSelectionData } from "./queries.js";
-import { ANGLE_ORDER, ANGLE_SELECTORS } from "./angles.js";
+import { ANGLE_ORDER, ANGLE_PREDICATES, ANGLE_SELECTORS } from "./angles.js";
 
 /** Ventana de dias para "mas vendido" y "sin ventas recientes" (igual a stats). */
 const WINDOW_DAYS = 30;
@@ -58,7 +58,7 @@ export const selectProduct = async ({ tenantId, now = new Date() }) => {
 
   for (let offset = 0; offset < ANGLE_ORDER.length; offset += 1) {
     const angle = ANGLE_ORDER[(start + offset) % ANGLE_ORDER.length];
-    const productId = ANGLE_SELECTORS[angle](enriched);
+    const productId = ANGLE_SELECTORS[angle](enriched, now);
 
     if (productId) {
       return { productId, angle };
@@ -70,4 +70,31 @@ export const selectProduct = async ({ tenantId, now = new Date() }) => {
     "NO_SUGGESTION_CANDIDATE",
     422
   );
+};
+
+/**
+ * Devuelve los angulos que aplican a un producto puntual, reusando los predicados
+ * de Fase 1 (no ofrece "stock bajo" si tiene stock de sobra, etc.). Mantiene el
+ * orden de ANGLE_ORDER. Lanza 404 si el producto no es del tenant.
+ *
+ * @returns {Promise<string[]>} angulos aplicables
+ */
+export const anglesForProduct = async ({ tenantId, productId, now = new Date() }) => {
+  const windowStart = startOfDay(addDays(now, -(WINDOW_DAYS - 1)));
+
+  const { completedOrders, products } = await loadSelectionData({
+    tenantId,
+    windowStart,
+    now,
+  });
+
+  const product = products.find((p) => p.id === productId);
+  if (!product) {
+    throw createError("Producto no encontrado", "PRODUCT_NOT_FOUND", 404);
+  }
+
+  const salesByProduct = buildSalesByProduct(completedOrders);
+  const enriched = { ...product, units: salesByProduct.get(product.id) ?? 0 };
+
+  return ANGLE_ORDER.filter((angle) => ANGLE_PREDICATES[angle](enriched, now));
 };
