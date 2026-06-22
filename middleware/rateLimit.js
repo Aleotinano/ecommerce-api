@@ -50,7 +50,7 @@ const rateLimitHandler = (req, res, _next, options) => {
   });
 };
 
-let generalStore, loginStore, registerStore, webhookStore;
+let generalStore, loginStore, registerStore, webhookStore, chatStore;
 
 try {
   generalStore = createStore("rl:general:");
@@ -74,6 +74,12 @@ try {
   webhookStore = createStore("rl:webhook:");
 } catch {
   webhookStore = undefined;
+}
+
+try {
+  chatStore = createStore("rl:chat:");
+} catch {
+  chatStore = undefined;
 }
 
 export const generalLimiter = rateLimit({
@@ -117,5 +123,18 @@ export const webhookLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => ipKeyGenerator(req.ip),
   store: webhookStore,
+  handler: rateLimitHandler,
+});
+
+// Chatbot publico (POST /store/chat/message): rate limit por IP. Complementa el
+// cost guard por tenant (services/chat/cost-guard.js): este frena ráfagas de una
+// misma IP, aquel frena el consumo total de LLM por tienda.
+export const chatLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 20,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
+  store: chatStore,
   handler: rateLimitHandler,
 });

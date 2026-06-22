@@ -22,6 +22,7 @@ import { mercadopagoRouter } from "./routes/mercadopago.js";
 import { statsRouter } from "./routes/stats.js";
 import { contentSuggestionsRouter } from "./routes/content-suggestions.js";
 import { storeRouter } from "./routes/store/index.js";
+import { whatsappWebhookRouter } from "./routes/webhooks/whatsapp.js";
 
 // Middlewares
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
@@ -34,6 +35,11 @@ const app = express();
 
 app.use(helmet());
 app.use(middleWare());
+
+// Webhook de WhatsApp: montado ANTES del express.json global porque valida la
+// firma sobre el RAW body (el router parsea con su propio verify -> req.rawBody).
+app.use("/webhooks/whatsapp", whatsappWebhookRouter);
+
 app.use(express.json({ limit: "10kb" }));
 app.use(cookieParser());
 app.use(compression());

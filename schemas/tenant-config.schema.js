@@ -90,6 +90,24 @@ export const updateTenantConfig = z
       .nullable()
       .optional(),
 
+    // phone_number_id del numero de WhatsApp Business (Graph API), no el telefono.
+    // null para desconectar.
+    whatsappPhoneNumberId: z
+      .string({ invalid_type_error: "phone_number_id debe ser texto" })
+      .regex(/^\d{5,20}$/, "phone_number_id inválido (solo dígitos)")
+      .nullable()
+      .optional(),
+
+    // Access token de la Graph API de la marca. Se cifra antes de guardar y
+    // nunca se devuelve por la API. null para desconectar (usa token de env).
+    whatsappAccessToken: z
+      .string({ invalid_type_error: "El access token debe ser texto" })
+      .min(1, "El access token no puede estar vacío")
+      .max(500, "El access token es demasiado largo")
+      .trim()
+      .nullable()
+      .optional(),
+
     seoTitle: z
       .string({ invalid_type_error: "SEO title debe ser texto" })
       .max(60, "SEO title debe tener max 60 caracteres")

@@ -36,6 +36,8 @@ export class TenantConfigController {
         socialYoutube,
         socialPinterest,
         socialWhatsapp,
+        whatsappPhoneNumberId,
+        whatsappAccessToken,
         seoTitle,
         seoDescription,
         seoKeywords,
@@ -64,6 +66,8 @@ export class TenantConfigController {
       if (socialYoutube !== undefined) data.socialYoutube = socialYoutube;
       if (socialPinterest !== undefined) data.socialPinterest = socialPinterest;
       if (socialWhatsapp !== undefined) data.socialWhatsapp = socialWhatsapp;
+      if (whatsappPhoneNumberId !== undefined) data.whatsappPhoneNumberId = whatsappPhoneNumberId;
+      if (whatsappAccessToken !== undefined) data.whatsappAccessToken = whatsappAccessToken;
       if (seoTitle !== undefined) data.seoTitle = seoTitle;
       if (seoDescription !== undefined) data.seoDescription = seoDescription;
       if (seoKeywords !== undefined) data.seoKeywords = seoKeywords;

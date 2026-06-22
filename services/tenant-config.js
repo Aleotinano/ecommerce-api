@@ -5,6 +5,7 @@ import {
   deleteCloudinaryImage,
 } from "../lib/imageManager.js";
 import { wrap, del, tenantNs } from "../lib/cache.js";
+import { encryptSecret } from "../lib/crypto.js";
 
 const TENANT_CONFIG_TTL = 600;
 
@@ -38,6 +39,7 @@ export const TenantConfigModel = {
           socialYoutube: true,
           socialPinterest: true,
           socialWhatsapp: true,
+          whatsappPhoneNumberId: true,
           seoTitle: true,
           seoDescription: true,
           seoKeywords: true,
@@ -75,6 +77,15 @@ export const TenantConfigModel = {
       throw createError("El tenant no existe", "TENANT_NOT_FOUND", 404);
     }
 
+    // El access token es un secreto: se cifra en reposo (AES-256-GCM). null se
+    // guarda tal cual (desconectar -> usa el token global de env).
+    if (data.whatsappAccessToken != null) {
+      data = {
+        ...data,
+        whatsappAccessToken: encryptSecret(data.whatsappAccessToken),
+      };
+    }
+
     const config = await prisma.tenantConfig.upsert({
       where: { tenantId },
       update: data,
@@ -98,6 +109,7 @@ export const TenantConfigModel = {
         socialYoutube: true,
         socialPinterest: true,
         socialWhatsapp: true,
+        whatsappPhoneNumberId: true,
         seoTitle: true,
         seoDescription: true,
         seoKeywords: true,

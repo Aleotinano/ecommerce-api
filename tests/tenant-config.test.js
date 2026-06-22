@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { randomBytes } from "node:crypto";
 import request from "supertest";
 import prisma from "../lib/prisma.js";
 import { app } from "../app.js";
+import { decryptSecret } from "../lib/crypto.js";
 import { seedTenants, seedTenantConfig, cookieFor } from "./helpers.js";
 
 let acme;
@@ -10,6 +12,10 @@ let acmeAdminCookie;
 let shopcoAdminCookie;
 
 beforeAll(async () => {
+  // El access token de WhatsApp se cifra en reposo (lib/crypto lee la clave de
+  // env en runtime). La seteamos para los tests de token de abajo.
+  process.env.WHATSAPP_TOKEN_ENC_KEY ||= randomBytes(32).toString("hex");
+
   const tenants = await seedTenants();
   acme = tenants.acme;
   shopco = tenants.shopco;
@@ -115,6 +121,53 @@ describe("PATCH /tenant-config/:tenantId", () => {
       .patch(`/tenant-config/${acme.id}`)
       .set("Cookie", acmeAdminCookie)
       .send({ currency: "PESOS" });
+
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("PATCH /tenant-config/:tenantId - whatsappAccessToken", () => {
+  it("guarda el token cifrado y NO lo devuelve en la respuesta", async () => {
+    const plainToken = "EAAG_token_de_la_marca_123";
+
+    const res = await request(app)
+      .patch(`/tenant-config/${acme.id}`)
+      .set("Cookie", acmeAdminCookie)
+      .send({ whatsappAccessToken: plainToken });
+
+    expect(res.status).toBe(200);
+    // Nunca se expone por la API.
+    expect(res.body.config.whatsappAccessToken).toBeUndefined();
+
+    // En la DB esta cifrado (no es el texto plano) y se puede descifrar de vuelta.
+    const row = await prisma.tenantConfig.findUnique({
+      where: { tenantId: acme.id },
+      select: { whatsappAccessToken: true },
+    });
+    expect(row.whatsappAccessToken).not.toBe(plainToken);
+    expect(decryptSecret(row.whatsappAccessToken)).toBe(plainToken);
+  });
+
+  it("null desconecta el token (lo guarda null)", async () => {
+    const res = await request(app)
+      .patch(`/tenant-config/${acme.id}`)
+      .set("Cookie", acmeAdminCookie)
+      .send({ whatsappAccessToken: null });
+
+    expect(res.status).toBe(200);
+
+    const row = await prisma.tenantConfig.findUnique({
+      where: { tenantId: acme.id },
+      select: { whatsappAccessToken: true },
+    });
+    expect(row.whatsappAccessToken).toBeNull();
+  });
+
+  it("token vacío → 400", async () => {
+    const res = await request(app)
+      .patch(`/tenant-config/${acme.id}`)
+      .set("Cookie", acmeAdminCookie)
+      .send({ whatsappAccessToken: "" });
 
     expect(res.status).toBe(400);
   });

@@ -44,5 +44,21 @@ export const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().default("claude-haiku-4-5"),
   GEMINI_API_KEY: z.string().optional(),
-  GEMINI_MODEL: z.string().default("gemini-2.0-flash"),
+  GEMINI_MODEL: z.string().default("gemini-2.5-flash"),
+
+  CHAT_DAILY_LIMIT: z.coerce.number().int().positive().default(500),
+
+  // WhatsApp (canal de entrada del chatbot). Todas OPCIONALES: si faltan, el
+  // modulo de WhatsApp queda inactivo y la app arranca igual. En prod el numero
+  // saliente sale de la DB por tenant; en dev WHATSAPP_PHONE_NUMBER_ID es el
+  // numero de prueba.
+  WHATSAPP_VERIFY_TOKEN: z.string().optional(),
+  WHATSAPP_APP_SECRET: z.string().optional(),
+  WHATSAPP_ACCESS_TOKEN: z.string().optional(),
+  WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
+  WHATSAPP_GRAPH_API_VERSION: z.string().default("v21.0"),
+  // Clave para cifrar el access token per-tenant en reposo (AES-256-GCM, ver
+  // lib/crypto.js). 32 bytes en hex (64 chars) o base64. Sin ella no se guardan
+  // ni se usan tokens de DB (se cae al token global de env).
+  WHATSAPP_TOKEN_ENC_KEY: z.string().optional(),
 });
