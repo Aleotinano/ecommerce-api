@@ -122,20 +122,22 @@ loguea y devuelve `FALLBACK_REPLY` en vez de un 500 crudo.
 ## Integraciones externas
 
 El proveedor LLM (Gemini o Anthropic, según `LLM_PROVIDER`), vía [[Cliente LLM]]. El chat usa el
-camino **`runTurn`** (function calling), no `generate`.
+camino **`runTurn`** (function calling), no `generate`. **`runTurn` está implementado en ambos
+providers** (`providers/gemini.js` y `providers/anthropic.js`), así que el chatbot es
+provider-agnóstico: corre con Gemini o con Claude real según `LLM_PROVIDER`.
 
-> [!warning] El chat **solo funciona con Gemini hoy**
-> `runTurn` está implementado en `providers/gemini.js`; en `providers/anthropic.js` **lanza
-> `ANTHROPIC_CHAT_NOT_IMPLEMENTED`**. Con `LLM_PROVIDER=anthropic`, el loop captura el throw y
-> devuelve `FALLBACK_REPLY` en cada turno → el chat queda inútil. (Nota: el ajuste de
-> `ANTHROPIC_BASE_URL` para apuntar el adapter a Ollama en dev solo cubre `generate`/sugerencias de
-> contenido, **no** el chat — ver [[Cliente LLM]].)
+> [!note] Probar el chat en dev con Ollama: **no aplica por este camino**
+> El ajuste de `ANTHROPIC_BASE_URL` para apuntar el adapter a Ollama (ver [[Cliente LLM]]) sirve para
+> `generate` (sugerencias de contenido), **no** para el chat: el `/v1/messages` de Ollama **crashea al
+> recibir `tools`**. Para probar el chat con el provider Anthropic hay que usar `api.anthropic.com`
+> (key real) o un adapter OpenAI-compat (`/v1/chat/completions`, que Ollama sí soporta con tools).
 
 ## Deuda técnica / cosas raras
 
-- `[código-muerto]` / `[riesgo]` — **`anthropicProvider.runTurn` no implementado.** El chat asume
-  Gemini; cambiar de provider lo rompe en silencio (cae al fallback amable). Decisión en Preguntas
-  abiertas: implementarlo o documentar `LLM_PROVIDER=anthropic` como no soportado para chat.
+- `[nota]` — **`runTurn` de Anthropic verificado solo estructuralmente.** La implementación
+  (traducción tools↔`input_schema`, mensajes↔`tool_use`/`tool_result`, parseo) se validó con el body
+  que arma + el parseo, pero **falta una corrida real contra `api.anthropic.com`** con key. Acción =
+  test end-to-end cuando haya `ANTHROPIC_API_KEY`.
 - `[nota]` — **Stateless sin persistencia.** No se guarda ningún turno del chat web (`TODO(persistencia)`
   en `index.js`). El contrato ya está preparado para sumarla sin cambiar la firma del endpoint.
 - `[nota]` — **`createDraftOrder` atado a `kind === "whatsapp"`** en dos lugares (`prompt.js` vía
@@ -144,8 +146,8 @@ camino **`runTurn`** (function calling), no `generate`.
 
 ## Preguntas abiertas / mejoras candidatas
 
-- ¿Implementar `runTurn` en el adapter Anthropic (para usar Claude/Ollama en el chat) o declarar
-  oficialmente que el chat es Gemini-only?
+- ¿Sumar un adapter OpenAI-compat para poder probar el chat con tools contra Ollama en dev (hoy solo
+  Gemini o Anthropic-real sirven para el chat)?
 - ¿Persistir la conversación (analítica, continuidad cross-device, auditoría de pedidos del bot)?
 - ¿Habilitar `createDraftOrder` para clientes logueados en web, o queda exclusivo de canales tipo
   WhatsApp por diseño?
