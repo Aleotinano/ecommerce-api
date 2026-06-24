@@ -36,6 +36,7 @@ export const DEFAULTS = {
     ANTHROPIC: {
       API_KEY: env.ANTHROPIC_API_KEY,
       MODEL: env.ANTHROPIC_MODEL,
+      BASE_URL: env.ANTHROPIC_BASE_URL,
     },
     GEMINI: {
       API_KEY: env.GEMINI_API_KEY,

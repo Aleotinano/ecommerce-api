@@ -1,7 +1,7 @@
 ---
 tags: [servicio, dominio/ordenes]
 estado: refactor-pendiente
-ultima-revision: 2026-06-20
+ultima-revision: 2026-06-24
 ---
 
 # Órdenes
@@ -14,13 +14,22 @@ notificación por email al cliente.
 ## Modelo de datos
 Fuente: `prisma/schema.prisma` (modelos `Order`, `OrderItem`, `OrderStatusHistory`).
 
-- **`Order`** — `tenantId`, `userId`, `status` (`OrderStatus`, default `PENDING`), `total`,
-  `paymentStatus` (`PaymentStatus`, default `PENDING`), `paymentMethod`, `paymentId`,
-  `mercadoPagoId` (único), `preferenceId`, timestamps.
+- **`Order`** — `tenantId`, `userId` (**ahora nullable**: las órdenes del bot nacen sin usuario),
+  `status` (`OrderStatus`, default `PENDING`), `total`, `paymentStatus` (`PaymentStatus`, default
+  `PENDING`), `paymentMethod`, `paymentId`, `mercadoPagoId` (único), `preferenceId`, timestamps.
+  - **Procedencia + revisión:** `origin` (`OrderOrigin`, default `ADMIN`), `contactPhone` (wa_id del
+    cliente de WhatsApp), `contactName`, `reviewedById`, `reviewedAt`.
+  - **Seña / depósito:** `requiresDeposit` (default `false`), `depositAmount` (snapshot pactado al
+    crear, **no** se recalcula desde `TenantConfig`), `depositConfirmedById`, `depositConfirmedAt`.
+  - **`creationContext`** — snapshot del fragmento de conversación que originó la orden del bot (el
+    history vive en Redis con TTL, así que la orden guarda su propio contexto).
 - **`OrderItem`** — `orderId`, `variantId`, `quantity`, `price`. **`price` es un snapshot**: se copia
   al crear la orden y no se recalcula después. Único `(orderId, variantId)`.
 - **`OrderStatusHistory`** — `orderId`, `fromStatus`, `toStatus`, `note`, `changedById`, `createdAt`.
   Una fila por cada transición (incluida la creación, con `fromStatus = null`).
+- **Enums relacionados** (`prisma/schema.prisma`): `OrderOrigin` = `ADMIN` | `BOT`. `PaymentStatus`
+  incorpora `DEPOSIT_PAID` y `PAID_IN_FULL` (además de `PENDING`/`APPROVED`/`REJECTED`/`IN_PROCESS`/
+  `REFUNDED`) para modelar la seña.
 
 > [!note] Scoping por `tenantId`
 > Toda lectura/escritura filtra por `tenantId` (`where: { ..., tenantId }` en
@@ -81,30 +90,56 @@ Fuente: `services/orders.js:OrderModel.updateOrderStatus`
   ([services/orders.js:233-247](services/orders.js#L233-L247)).
 - **No-op:** si el estado destino es igual al actual, devuelve la orden sin cambios
   ([services/orders.js:249-251](services/orders.js#L249-L251)).
-- **Quién dispara:** la creación (`null → PENDING`) la dispara el **cliente** al hacer checkout; el
-  resto de transiciones las dispara **admin/staff** (`PATCH /:id`, `requireRole(["ADMIN","STAFF"])`).
-  No hay disparador de sistema ni de bot.
+- **Quién dispara:** la creación (`null → PENDING`) la dispara el **cliente** al hacer checkout o el
+  **bot** al crear un borrador (`createDraft`, ver abajo); el resto de transiciones las dispara
+  **admin/staff** (`PATCH /:id`, `requireRole(["ADMIN","STAFF"])`). No hay disparador de sistema.
 - **Efecto colateral por destino:** `COMPLETED` re-valida y descuenta stock. `PROCESSING` y
   `CANCELLED` no tocan stock. *(El stock reservado en `PENDING`/`PROCESSING` no se descuenta hasta
   `COMPLETED` y una cancelación no lo "libera" porque nunca se descontó.)*
+- **Guards de "bueno para producir" (al pasar a `PROCESSING` o `COMPLETED`)**
+  ([services/orders.js:285-309](services/orders.js#L285-L309)):
+  - Si `origin === "BOT"` y `reviewedById == null` → `ORDER_NOT_REVIEWED` (409). Un humano debe
+    revisar primero.
+  - Si `requiresDeposit` y `paymentStatus` ∉ {`DEPOSIT_PAID`, `PAID_IN_FULL`, `APPROVED`} →
+    `DEPOSIT_NOT_CONFIRMED` (409). La seña debe estar confirmada.
+  - `CANCELLED` queda libre (siempre se puede cancelar). Si el tenant no usa seña y la orden es
+    `ADMIN`, ningún guard aplica → comportamiento idéntico al flujo clásico.
 
-> [!todo] TBD: flujo de seña no implementado en el código
-> El modelo producción-a-pedido de Desvare (borrador en `PENDIENTE_SEÑA`, transferencia bancaria del
-> 50%, confirmación humana desde el admin que avanza la orden) **no existe en este repositorio**. El
-> enum `OrderStatus` (`prisma/schema.prisma`) no tiene `PENDIENTE_SEÑA` y `updateOrderStatus` no
-> contempla anticipos, transferencias ni porcentajes. Hay **un solo camino**: orden normal.
->
-> **Dónde colgaría el segundo camino (diseño previsto, NO en el código — no citar como verdad):**
-> `PENDIENTE_SEÑA` sería un estado **previo** a `PENDING`, no una rama de la máquina actual:
-> `PENDIENTE_SEÑA → (admin confirma la seña) → PENDING → …`. Disparadores esperados, separando entrada
-> y salida:
-> - **Entrada** a `PENDIENTE_SEÑA`: la crea el flujo de compra (bot / cliente vía [[WhatsApp]] o
->   [[Chat de tienda]]) al generar el borrador — *no* el admin.
-> - **Salida** (`PENDIENTE_SEÑA → PENDING`): la dispara **admin/staff** a mano tras ver la
->   transferencia del 50%.
->
-> Esto contrasta con la máquina actual, donde la creación entra directo en `PENDING`. Cuando se
-> implemente, reemplazar este bloque por la doc real con citas al código.
+## Flujo de seña / pedidos del bot
+
+> [!note] El diseño implementado **difiere** del TBD anterior
+> El TBD histórico preveía un estado `PENDIENTE_SEÑA` **previo** a `PENDING`. La implementación real
+> **no agregó un estado nuevo**: la orden nace directo en `PENDING` y la seña/revisión se modelan con
+> **flags + guards** (`origin`, `reviewedById`, `requiresDeposit`, `paymentStatus`) sobre la máquina
+> existente. La seña es **opcional por tenant** (`TenantConfig.depositEnabled`, `depositPercentage`).
+
+**Alta del borrador (`OrderModel.createDraft`,
+[services/orders.js:533](services/orders.js#L533)).** La crea el bot de [[WhatsApp]] vía la tool
+`createDraftOrder` (ver [[Chat de tienda]]). El bot solo pasa `items` ya resueltos a
+`{ variantId, quantity }`; el server valida catálogo/precio (`priceItems`, **sin** chequeo de stock —
+es a-pedido), resuelve `total`, y si `TenantConfig.depositEnabled` setea `requiresDeposit = true` y
+`depositAmount = total * depositPercentage/100`. Nace con `origin = "BOT"`, `userId = null` y los
+datos de contacto (`contactPhone = wa_id`, `contactName`, `creationContext`). El bot **nunca** toca
+`paymentStatus`, `depositAmount` ni `tenantId`.
+
+**Revisión humana (`reviewOrder`, [services/orders.js:394](services/orders.js#L394) →
+`POST /:id/review`).** Marca `reviewedById`/`reviewedAt`. Solo sobre órdenes en `PENDING`
+(`ORDER_NOT_PENDING` si no). Permite **corrección inline de cantidades**: si llegan `items`
+(`[{ variantId, quantity }]`, deben pertenecer a la orden), re-resuelve precio y `total`
+**server-side** y, si la orden lleva seña, recalcula `depositAmount`. **No** mueve `status` ni
+`paymentStatus`.
+
+**Confirmación de la seña (`confirmDeposit`, [services/orders.js:484](services/orders.js#L484) →
+`POST /:id/confirm-deposit`).** El dueño verifica la transferencia "a ojo" y confirma: mueve
+`paymentStatus → DEPOSIT_PAID` y sella `depositConfirmedById`/`At`. **No** mueve `status`. Solo opera
+si `requiresDeposit` (`DEPOSIT_NOT_REQUIRED`) y `paymentStatus === "PENDING"`
+(`DEPOSIT_NOT_CONFIRMABLE`), para no pisar un `APPROVED`/`PAID_IN_FULL` escrito por el webhook de
+[[MercadoPago]]. Es **independiente** de `reviewOrder` (la seña suele confirmarse días después).
+
+Camino típico de una orden del bot con seña:
+`createDraft (PENDING, BOT, requiresDeposit)` → `review` (humano valida, opcional corrige) →
+`confirmDeposit` (paymentStatus = DEPOSIT_PAID) → `PATCH /:id` a `PROCESSING`/`COMPLETED` (ya pasa
+ambos guards).
 
 ## Endpoints
 
@@ -117,6 +152,8 @@ Fuente: `services/orders.js:OrderModel.updateOrderStatus`
 | GET | `/all` | Lista **todas** las órdenes del tenant (filtro `search` por usuario/producto) | `ADMIN` / `STAFF` |
 | GET | `/:id` | Detalle de una orden propia, con `timeline` de estados | Usuario autenticado |
 | PATCH | `/:id` | Cambia el `status` (con `note` opcional) | `ADMIN` / `STAFF` |
+| POST | `/:id/review` | Marca un pedido (BOT) como revisado; corrección inline opcional de cantidades (`orderReview`) | `ADMIN` / `STAFF` |
+| POST | `/:id/confirm-deposit` | Confirma la seña → `paymentStatus = DEPOSIT_PAID` (`orderConfirmDeposit`) | `ADMIN` / `STAFF` |
 
 ### Storefront — `routes/store/orders.js` (auth `verifyStoreToken`)
 
@@ -142,7 +179,7 @@ Validación de payload: `schemas/order.schema.js` (`orderStatus`, `orderQuery`);
 - No hay otras integraciones externas directas en este servicio (el pago vive en [[MercadoPago]]).
 
 ## Deuda técnica / cosas raras
-Etiquetas por tipo de acción — ver convención en [[_index]].
+Etiquetas por tipo de acción — ver convención en [[App]].
 
 - `[bug]` **Decremento de stock sobre snapshot pre-transacción** (ver warning arriba): potencial
   sobreventa bajo concurrencia. Acción = rediseño transaccional (lock / `SELECT ... FOR UPDATE` /
@@ -160,6 +197,8 @@ Etiquetas por tipo de acción — ver convención en [[_index]].
   sobreventa?
 - ¿Debería una cancelación "devolver" stock? Hoy no aplica porque el stock solo se descuenta en
   `COMPLETED`, pero si esa regla cambia habría que revisarlo.
-- ¿Falta un estado intermedio para producción-a-pedido (el "flujo de seña" TBD de arriba)?
+- El flujo de seña/producción-a-pedido **ya está implementado** (ver "Flujo de seña / pedidos del
+  bot"), resuelto con flags + guards en vez de un estado `PENDIENTE_SEÑA`. ¿Conviene igualmente un
+  estado explícito para visibilizarlo en el timeline, o los flags alcanzan?
 - ¿El cliente del storefront debería poder cancelar su propia orden en `PENDING`? Hoy solo
   `ADMIN`/`STAFF` pueden cambiar estado.

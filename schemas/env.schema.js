@@ -43,6 +43,10 @@ export const envSchema = z.object({
   LLM_PROVIDER: z.enum(["gemini", "anthropic"]).default("gemini"),
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().default("claude-haiku-4-5"),
+  // Base URL del adapter Anthropic. En prod apunta a api.anthropic.com; en dev se
+  // puede apuntar a un server con compat de la Messages API (p. ej. Ollama en
+  // http://localhost:11434). El request se arma igual: POST {base}/v1/messages.
+  ANTHROPIC_BASE_URL: z.string().url().default("https://api.anthropic.com"),
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().default("gemini-2.5-flash"),
 
