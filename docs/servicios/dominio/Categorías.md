@@ -10,7 +10,7 @@ ultima-revision: 2026-06-20
 > Stub generado en Fase 3. Fuentes a leer: `services/categories.js`, `controllers/categories.js`,
 > `controllers/store/categories.js`, `routes/categories.js`, `routes/store/categories.js`,
 > `schemas/category.schema.js`. Ojo el árbol `parent`/`children` del modelo `Categories`.
-> `estado: TBD` hasta documentar (ver convención en [[_index]]).
+> `estado: TBD` hasta documentar (ver convención en [[App]]).
 
 ## Propósito
 > [!todo] Pendiente de documentar

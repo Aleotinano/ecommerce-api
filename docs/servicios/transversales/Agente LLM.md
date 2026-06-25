@@ -10,7 +10,7 @@ ultima-revision: 2026-06-20
 > Stub generado en Fase 3. Fuentes a leer: `lib/llm/agent.js`, `lib/llm/tools/` (`schema.js`).
 > Loop de agente con tool-calling sobre el catálogo, montado por [[Chat de tienda]]. Distinguir de
 > [[Cliente LLM]] (generación one-shot de copy): esto es el loop multi-turno con herramientas.
-> `estado: TBD` (ver convención en [[_index]]).
+> `estado: TBD` (ver convención en [[App]]).
 
 ## Propósito
 > [!todo] Pendiente de documentar

@@ -11,7 +11,7 @@ ultima-revision: 2026-06-20
 > `lib/llm/prompt.js`, `lib/llm/parse.js`, `lib/llm/fallback.js`, `lib/llm/providers/anthropic.js`,
 > `lib/llm/providers/gemini.js`, `schemas/env.schema.js`. Fachada provider-agnóstica (`LLM_PROVIDER`,
 > default `gemini`); **best-effort, nunca lanza**: fallback por template con `model: null`. Lo consume
-> [[Sugerencias de contenido]] y [[Agente LLM]]. `estado: TBD` (ver convención en [[_index]]).
+> [[Sugerencias de contenido]] y [[Agente LLM]]. `estado: TBD` (ver convención en [[App]]).
 
 ## Propósito
 > [!todo] Pendiente de documentar

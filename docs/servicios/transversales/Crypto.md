@@ -9,7 +9,7 @@ ultima-revision: 2026-06-20
 > [!todo] Pendiente de documentar
 > Stub generado en Fase 3. Fuentes a leer: `lib/crypto.js`. Cifrado AES-256-GCM usado para guardar el
 > access token por tenant de [[WhatsApp]] (`TenantConfig.whatsappAccessToken`). Capturar: derivación de
-> clave, env requerido, formato del payload cifrado. `estado: TBD` (ver convención en [[_index]]).
+> clave, env requerido, formato del payload cifrado. `estado: TBD` (ver convención en [[App]]).
 
 ## Propósito
 > [!todo] Pendiente de documentar

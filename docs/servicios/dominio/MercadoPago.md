@@ -10,7 +10,7 @@ ultima-revision: 2026-06-20
 > Stub generado en Fase 3. Fuentes a leer: `services/mercadopago.js`, `controllers/mercadopago.js`,
 > `routes/mercadopago.js`, `routes/store/mercadopago.js`. Capturar: preferencias, webhook de pago,
 > cómo mueve `paymentStatus`/`paymentId` de la orden vía `extraData` de `OrderModel.updateOrderStatus`
-> (relación con [[Órdenes]]). `estado: TBD` (ver convención en [[_index]]).
+> (relación con [[Órdenes]]). `estado: TBD` (ver convención en [[App]]).
 
 ## Propósito
 > [!todo] Pendiente de documentar

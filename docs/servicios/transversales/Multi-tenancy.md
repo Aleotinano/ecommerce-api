@@ -9,7 +9,7 @@ ultima-revision: 2026-06-20
 > [!todo] Pendiente de documentar
 > Stub generado en Fase 3. Fuentes a leer: `middleware/tenant.js`, modelo `Tenant` y los `@@index([tenantId])`
 > de `prisma/schema.prisma`. Invariante transversal: `req.tenantId` lo resuelve/inyecta el middleware y
-> **nunca llega del cliente**; toda query de dominio scopea por `tenantId`. `estado: TBD` (ver [[_index]]).
+> **nunca llega del cliente**; toda query de dominio scopea por `tenantId`. `estado: TBD` (ver [[App]]).
 
 ## Propósito
 > [!todo] Pendiente de documentar

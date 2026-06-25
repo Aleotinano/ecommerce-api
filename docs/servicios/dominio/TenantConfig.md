@@ -12,7 +12,7 @@ ultima-revision: 2026-06-20
 > contacto, SEO, políticas, WhatsApp).
 > **Aviso (memoria del proyecto):** agregar un campo exige tocar el **whitelist manual del controller**,
 > no alcanza con schema + prisma. Alimenta el system prompt de [[Sugerencias de contenido]] y guarda
-> el token de [[WhatsApp]] cifrado con [[Crypto]]. `estado: TBD` (ver convención en [[_index]]).
+> el token de [[WhatsApp]] cifrado con [[Crypto]]. `estado: TBD` (ver convención en [[App]]).
 
 ## Propósito
 > [!todo] Pendiente de documentar

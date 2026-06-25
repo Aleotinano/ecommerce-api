@@ -10,7 +10,7 @@ ultima-revision: 2026-06-20
 > Stub generado en Fase 3. Fuentes a leer: `middleware/auth.js` (`verifyToken`, `verifyStoreToken`),
 > `lib/tokens.js`. Capturar los **dos** flujos de autenticación Bearer (backoffice vs storefront) y cómo
 > cada uno deja `req.user` / `req.tenantId`. Relación con [[Usuarios y Auth]], [[Roles]],
-> [[Multi-tenancy]]. `estado: TBD` (ver convención en [[_index]]).
+> [[Multi-tenancy]]. `estado: TBD` (ver convención en [[App]]).
 
 ## Propósito
 > [!todo] Pendiente de documentar

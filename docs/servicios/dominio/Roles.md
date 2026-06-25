@@ -9,7 +9,7 @@ ultima-revision: 2026-06-20
 > [!todo] Pendiente de documentar
 > Stub generado en Fase 3. Fuentes a leer: `services/role.js`, `controllers/role.js`, `routes/role.js`,
 > `middleware/role.js`, `schemas/role.schema.js`. Enum `Role` = `ADMIN | STAFF | CUSTOMER`; el
-> `requireRole([...])` protege rutas de backoffice. `estado: TBD` (ver convención en [[_index]]).
+> `requireRole([...])` protege rutas de backoffice. `estado: TBD` (ver convención en [[App]]).
 
 ## Propósito
 > [!todo] Pendiente de documentar

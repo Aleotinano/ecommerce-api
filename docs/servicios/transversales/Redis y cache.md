@@ -8,7 +8,7 @@ ultima-revision: 2026-06-20
 
 > [!todo] Pendiente de documentar
 > Stub generado en Fase 3. Fuentes a leer: `lib/cache.js` (`get`, `set`, `tenantNs`), `lib/redis.js`
-> (`getRedis`). Patrón de namespacing por tenant y degradación ante Redis caído. `estado: TBD` (ver [[_index]]).
+> (`getRedis`). Patrón de namespacing por tenant y degradación ante Redis caído. `estado: TBD` (ver [[App]]).
 
 > [!warning] No pintar la degradación como uniforme
 > La política es **MIXTA**, no todo "degradar-abierto":

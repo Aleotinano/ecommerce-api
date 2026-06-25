@@ -10,7 +10,7 @@ ultima-revision: 2026-06-20
 > Stub generado en Fase 3. Fuentes a leer: `middleware/rateLimit.js`. Distinguir de los cost-guards de
 > aplicación (`services/chat/cost-guard.js`, `services/content-suggestions/cost-guard.js`,
 > `services/whatsapp/rate-limit.js`), que son límites por tenant/identidad a nivel servicio, no el
-> middleware HTTP. `estado: TBD` (ver convención en [[_index]]).
+> middleware HTTP. `estado: TBD` (ver convención en [[App]]).
 
 ## Propósito
 > [!todo] Pendiente de documentar

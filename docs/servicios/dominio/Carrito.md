@@ -9,7 +9,7 @@ ultima-revision: 2026-06-20
 > [!todo] Pendiente de documentar
 > Stub generado en Fase 3. Fuentes a leer: `services/cart.js`, `controllers/cart.js`, `routes/cart.js`,
 > `routes/store/cart.js`. Modelos `Cart` / `CartItem` (un carrito por usuario, ítem único por variante).
-> El carrito lo consume y vacía [[Órdenes]] al crear la orden. `estado: TBD` (ver convención en [[_index]]).
+> El carrito lo consume y vacía [[Órdenes]] al crear la orden. `estado: TBD` (ver convención en [[App]]).
 
 ## Propósito
 > [!todo] Pendiente de documentar

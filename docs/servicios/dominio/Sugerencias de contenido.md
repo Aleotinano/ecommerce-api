@@ -135,7 +135,7 @@ Validación: `schemas/content-suggestion.schema.js` (`generateBody`, `refineBody
   (`lib/llm/fallback.js`, `lib/llm/index.js`).
 
 ## Deuda técnica / cosas raras
-Etiquetas por tipo de acción — ver convención en [[_index]].
+Etiquetas por tipo de acción — ver convención en [[App]].
 
 - `[comentario-miente]` **El comentario del unique contradice el schema.** `index.js` dice *"El unique
   (tenantId, date) asegura una sola por dia"*

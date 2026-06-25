@@ -10,7 +10,7 @@ ultima-revision: 2026-06-20
 > Stub generado en Fase 3. Fuentes a leer: `lib/cloudinary.js`, `lib/imageManager.js`, `middleware/upload.js`.
 > Subida/borrado en Cloudinary; los modelos guardan `*PublicId` para poder borrar el asset
 > (`Product.imgPublicId`, `ProductVariant.imgPublicId`, `TenantConfig.logoPublicId`). Lo consumen
-> [[Productos]], [[Variantes]] y [[TenantConfig]]. `estado: TBD` (ver convención en [[_index]]).
+> [[Productos]], [[Variantes]] y [[TenantConfig]]. `estado: TBD` (ver convención en [[App]]).
 
 ## Propósito
 > [!todo] Pendiente de documentar
