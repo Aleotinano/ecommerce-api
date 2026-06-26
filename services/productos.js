@@ -2,6 +2,11 @@ import prisma from "../lib/prisma.js";
 import { createError } from "../helpers/error.js";
 import { generateSku } from "../utils/sku.js";
 import { wrap, delPattern, hashParams, tenantNs } from "../lib/cache.js";
+import { addDays, startOfDay } from "./stats/utils.js";
+import {
+  ANGLE_PREDICATES,
+  WINDOW_DAYS,
+} from "./content-suggestions/angles.js";
 
 const PRODUCTS_LIST_TTL = 180;
 const PRODUCT_DETAIL_TTL = 300;
@@ -174,6 +179,75 @@ export const ProductModel = {
         orderBy: { id: "asc" },
       });
     });
+  },
+
+  /**
+   * Productos destacados por ÁNGULO de marketing (BEST_SELLER, NEW_ARRIVAL, ...).
+   * Reusa `ANGLE_PREDICATES` (fuente única compartida con Sugerencias): enriquece el
+   * catálogo activo con las unidades vendidas en COMPLETED dentro de la ventana, filtra
+   * con el predicado del ángulo y ordena con el sentido de ese ángulo. Devuelve productos
+   * completos (con variants) para que el storefront renderice las cartas. Sin cache:
+   * depende de ventas, refleja al toque. El precio/stock se resuelven server-side.
+   */
+  async getByAngle({ tenantId, angle, limit = 4 }) {
+    const predicate = ANGLE_PREDICATES[angle];
+    if (!predicate) {
+      throw createError("Ángulo inválido", "INVALID_ANGLE", 400);
+    }
+
+    const now = new Date();
+    const windowStart = startOfDay(addDays(now, -(WINDOW_DAYS - 1)));
+
+    const [products, completedOrders] = await Promise.all([
+      prisma.product.findMany({
+        where: { tenantId, isActive: true },
+        include: {
+          variants: { where: { isActive: true }, orderBy: { id: "asc" } },
+        },
+        orderBy: { id: "asc" },
+      }),
+      prisma.order.findMany({
+        where: {
+          tenantId,
+          status: "COMPLETED",
+          createdAt: { gte: windowStart, lte: now },
+        },
+        select: {
+          orderItems: {
+            select: {
+              quantity: true,
+              variant: { select: { productId: true } },
+            },
+          },
+        },
+      }),
+    ]);
+
+    const unitsByProduct = new Map();
+    for (const order of completedOrders) {
+      for (const item of order.orderItems) {
+        const pid = item.variant?.productId;
+        if (pid == null) continue;
+        unitsByProduct.set(pid, (unitsByProduct.get(pid) ?? 0) + item.quantity);
+      }
+    }
+
+    // Sentido de orden por ángulo (mismo criterio que ANGLE_SELECTORS, pero para una lista).
+    const sorters = {
+      BEST_SELLER: (a, b) => b.units - a.units,
+      LOW_STOCK: (a, b) => b.units - a.units,
+      NEW_ARRIVAL: (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+      NO_RECENT_SALES: (a, b) => a.id - b.id,
+    };
+    const sorter = sorters[angle] ?? ((a, b) => a.id - b.id);
+
+    return products
+      .map((product) => ({ ...product, units: unitsByProduct.get(product.id) ?? 0 }))
+      .filter((product) => predicate(product, now))
+      .sort(sorter)
+      .slice(0, limit)
+      // eslint-disable-next-line no-unused-vars
+      .map(({ units, ...product }) => product);
   },
 
   async getVariantOptions({ tenantId }) {

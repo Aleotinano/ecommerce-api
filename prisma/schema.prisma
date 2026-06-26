@@ -23,6 +23,7 @@ model Tenant {
   orders             Order[]
   config             TenantConfig?
   contentSuggestions ContentSuggestion[]
+  pageSpec           TenantPageSpec?
 }
 
 model TenantConfig {
@@ -278,6 +279,24 @@ model ContentSuggestion {
   // Identidad natural = dimension del cache on-demand (tenant+dia+producto+angulo).
   // Dedupe tanto la sugerencia automatica del dia como las generaciones manuales.
   @@unique([tenantId, date, productId, angle])
+  @@index([tenantId])
+}
+
+// Spec del Page Builder por tenant: borrador editable + publicado que sirve el storefront.
+// El publishedSpec se guarda YA normalizado (frontera on-write); el draftSpec es lo que
+// edita el admin/IA. Ver docs/page-builder (repo frontend).
+model TenantPageSpec {
+  id            Int       @id @default(autoincrement())
+  tenantId      Int       @unique
+  draftSpec     Json?
+  publishedSpec Json?
+  version       Int       @default(0)
+  publishedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
   @@index([tenantId])
 }
 

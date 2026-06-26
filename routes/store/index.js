@@ -9,6 +9,7 @@ import { storeOrdersRouter } from "./orders.js";
 import { storeConfigRouter } from "./config.js";
 import { storeMercadopagoRouter } from "./mercadopago.js";
 import { storeChatRouter } from "./chat.js";
+import { storePageRouter } from "./page.js";
 
 export const storeRouter = Router();
 
@@ -21,5 +22,6 @@ storeRouter.use("/categories", storeCategoriesRouter);
 storeRouter.use("/cart", storeCartRouter);
 storeRouter.use("/orders", storeOrdersRouter);
 storeRouter.use("/config", storeConfigRouter);
+storeRouter.use("/page", storePageRouter);
 storeRouter.use("/mercadopago", storeMercadopagoRouter);
 storeRouter.use("/chat", storeChatRouter);

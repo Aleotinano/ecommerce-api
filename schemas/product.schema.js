@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { createVariant } from "./variant.schema.js";
+import { SUGGESTION_ANGLES } from "./content-suggestion.schema.js";
 
 export const createProduct = z.object({
   name: z
@@ -101,6 +102,9 @@ export const productQuery = z
       .optional(),
     variantColor: z.string().optional(),
     variantSize: z.string().optional(),
+    // Destacados por ángulo de marketing (Page Builder → OfertContainer). Reusa el
+    // mismo enum que Sugerencias; la resolución reusa ANGLE_PREDICATES (fuente única).
+    angle: z.enum(SUGGESTION_ANGLES).optional(),
     minPrice: z.coerce
       .number({ invalid_type_error: "El precio mínimo debe ser un número" })
       .positive("El precio mínimo debe ser mayor a 0")

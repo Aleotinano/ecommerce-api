@@ -12,7 +12,19 @@ export class StoreProductsController {
         maxPrice,
         limit,
         offset,
+        angle,
       } = req.search;
+
+      // Destacados por ángulo (Page Builder → OfertContainer): otra resolución,
+      // misma ruta. Reusa ANGLE_PREDICATES server-side.
+      if (angle) {
+        const products = await ProductModel.getByAngle({
+          tenantId: req.tenantId,
+          angle,
+          limit,
+        });
+        return res.json(products);
+      }
 
       const pagination = await ProductModel.getAll({
         tenantId: req.tenantId,
