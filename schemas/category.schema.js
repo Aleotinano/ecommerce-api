@@ -19,6 +19,12 @@ export const createCategory = z.object({
     .nullable()
     .optional(),
 
+  imageUrl: z
+    .string({ invalid_type_error: "La imagen debe ser texto" })
+    .url("La URL de la imagen no es válida")
+    .nullable()
+    .optional(),
+
   isActive: z
     .boolean({ invalid_type_error: "El valor debe ser booleano" })
     .optional(),
@@ -49,6 +55,12 @@ export const updateCategory = z
     icon: z
       .string({ invalid_type_error: "El icono debe ser texto" })
       .min(1, "El icono no puede estar vacío")
+      .nullable()
+      .optional(),
+
+    imageUrl: z
+      .string({ invalid_type_error: "La imagen debe ser texto" })
+      .url("La URL de la imagen no es válida")
       .nullable()
       .optional(),
 

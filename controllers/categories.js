@@ -39,7 +39,7 @@ export class CategoryController {
 
   static async create(req, res, next) {
     try {
-      const { name, description, isActive, icon, parentId } = req.body;
+      const { name, description, isActive, icon, imageUrl, parentId } = req.body;
 
       const category = await CategoryModel.create({
         tenantId: req.tenantId,
@@ -47,6 +47,7 @@ export class CategoryController {
         description,
         isActive,
         icon,
+        imageUrl,
         parentId,
       });
 
@@ -62,7 +63,7 @@ export class CategoryController {
   static async edit(req, res, next) {
     try {
       const { id } = req.params;
-      const { name, description, isActive, icon, parentId } = req.body;
+      const { name, description, isActive, icon, imageUrl, parentId } = req.body;
 
       const category = await CategoryModel.edit({
         tenantId: req.tenantId,
@@ -71,6 +72,7 @@ export class CategoryController {
         description,
         isActive,
         icon,
+        imageUrl,
         parentId,
       });
 

@@ -106,7 +106,7 @@ export const CategoryModel = {
     return category;
   },
 
-  async create({ tenantId, name, description, isActive, icon, parentId }) {
+  async create({ tenantId, name, description, isActive, icon, imageUrl, parentId }) {
     const result = await prisma.$transaction(async (tx) => {
       const exists = await tx.categories.findFirst({
         where: { tenantId, name },
@@ -129,6 +129,7 @@ export const CategoryModel = {
           description: description ?? null,
           isActive: isActive ?? true,
           icon: icon ?? null,
+          imageUrl: imageUrl ?? null,
           parentId: parentId ?? null,
         },
       });
@@ -138,7 +139,7 @@ export const CategoryModel = {
     return result;
   },
 
-  async edit({ tenantId, id, name, description, isActive, icon, parentId }) {
+  async edit({ tenantId, id, name, description, isActive, icon, imageUrl, parentId }) {
     const result = await prisma.$transaction(async (tx) => {
       const category = await tx.categories.findFirst({
         where: { id, tenantId },
@@ -174,6 +175,7 @@ export const CategoryModel = {
           ...(description !== undefined && { description }),
           ...(isActive !== undefined && { isActive }),
           ...(icon !== undefined && { icon }),
+          ...(imageUrl !== undefined && { imageUrl }),
           ...(parentId !== undefined && { parentId }),
         },
         include: {
