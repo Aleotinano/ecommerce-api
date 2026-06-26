@@ -42,6 +42,13 @@ export const DEFAULTS = {
       API_KEY: env.GEMINI_API_KEY,
       MODEL: env.GEMINI_MODEL,
     },
+    // Generacion de imagenes (image-to-image): provider independiente del LLM de
+    // texto (LLM_PROVIDER puede ser anthropic, que no genera imagenes). Reusa
+    // GEMINI_API_KEY (no tiene key propia). Ver lib/llm/image.js.
+    IMAGE: {
+      PROVIDER: env.IMAGE_PROVIDER,
+      GEMINI_MODEL: env.GEMINI_IMAGE_MODEL,
+    },
   },
   CHAT: {
     DAILY_LIMIT: env.CHAT_DAILY_LIMIT,
