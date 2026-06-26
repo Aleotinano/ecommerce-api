@@ -1,10 +1,12 @@
 import { createError } from "../../helpers/error.js";
 import { addDays, startOfDay } from "../stats/utils.js";
 import { loadSelectionData } from "./queries.js";
-import { ANGLE_ORDER, ANGLE_PREDICATES, ANGLE_SELECTORS } from "./angles.js";
-
-/** Ventana de dias para "mas vendido" y "sin ventas recientes" (igual a stats). */
-const WINDOW_DAYS = 30;
+import {
+  ANGLE_ORDER,
+  ANGLE_PREDICATES,
+  ANGLE_SELECTORS,
+  WINDOW_DAYS,
+} from "./angles.js";
 
 /** Suma unidades vendidas por productId recorriendo orderItems -> variant. */
 const buildSalesByProduct = (completedOrders) => {

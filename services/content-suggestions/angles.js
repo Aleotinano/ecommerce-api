@@ -16,6 +16,9 @@ export const LOW_STOCK_THRESHOLD = 5;
 /** Ventana (dias) para considerar a un producto "recien llegado". */
 export const NEW_ARRIVAL_DAYS = 30;
 
+/** Ventana (dias) de ventas para "mas vendido" y "sin ventas recientes" (igual a stats). */
+export const WINDOW_DAYS = 30;
+
 /** Orden de rotacion de los angulos. */
 export const ANGLE_ORDER = [
   "BEST_SELLER",
