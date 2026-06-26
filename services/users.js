@@ -57,6 +57,10 @@ async function dispatchVerificationEmail({ user, tenantName, audience = "admin" 
 export const UserModel = {
   async register({ username, password, email, tenantName }) {
     const slug = slugify(tenantName);
+    // El alta solo pide el nombre de la tienda; el admin recibe un username
+    // genérico. Es el primer usuario del tenant, así que "admin" siempre queda
+    // libre (unicidad es por tenant: tenantId_username).
+    const adminUsername = username?.trim() || "admin";
 
     if (await tenantSlugExists(slug)) {
       const suggestions = await suggestSlugAlternatives(slug, tenantSlugExists);
@@ -79,11 +83,20 @@ export const UserModel = {
       const user = await tx.user.create({
         data: {
           tenantId: tenant.id,
-          username,
+          username: adminUsername,
           email,
           password: hashedPassword,
           role: "ADMIN",
           emailVerified: autoVerify,
+        },
+      });
+
+      // Inicializa la configuración del tenant para que la pantalla de config
+      // tenga un row (sino GET /tenant-config/:id devuelve 404).
+      await tx.tenantConfig.create({
+        data: {
+          tenantId: tenant.id,
+          storeName: tenantName,
         },
       });
 
