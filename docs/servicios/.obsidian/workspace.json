@@ -178,10 +178,21 @@
   },
   "active": "d98ebbbd4d1946cb",
   "lastOpenFiles": [
-    "_index.md",
+    "App.md",
+    "App.md",
+    "dominio/Sugerencias de contenido — Imágenes (propuesta).md.tmp.32352.4da146475fef",
+    "dominio/Sugerencias de contenido — Imágenes (propuesta).md",
+    "dominio/Sugerencias de contenido — Imágenes (propuesta).md.tmp.32352.25d827f68d46",
+    "dominio/Sugerencias de contenido — Imágenes (propuesta).md.tmp.32352.efde1d8b40c6",
+    "dominio/Sugerencias de contenido — Imágenes (propuesta).md.tmp.32352.c8ca1ef8d50a",
+    "dominio/Sugerencias de contenido — Imágenes (propuesta).md.tmp.32352.c66983b60e09",
+    "dominio/Sugerencias de contenido — Imágenes (propuesta).md.tmp.32352.44c492374e28",
+    "dominio/Sugerencias de contenido — Imágenes (propuesta).md.tmp.32352.5fbc1f14bc5f",
+    "dominio/Sugerencias de contenido — Imágenes (propuesta).md.tmp.32352.9041e3d0e681",
+    "dominio/Sugerencias de contenido.md",
+    "_index.md.tmp.32352.0bbd2d3834e2",
+    "_index.md.tmp.32352.74c2a640e58e",
     "dominio/Productos.md",
-    "_index.md.tmp.11812.d060e2cd07ea",
-    "_index.md.tmp.11812.89973ebe1a27",
     "transversales/Almacenamiento de imágenes.md",
     "transversales/Rate limiting.md",
     "transversales/Mailer.md",
@@ -193,7 +204,6 @@
     "transversales/Multi-tenancy.md",
     "dominio/WhatsApp.md",
     "dominio/Chat de tienda.md",
-    "dominio/Sugerencias de contenido.md",
     "dominio/TenantConfig.md",
     "dominio/Roles.md",
     "dominio/Usuarios y Auth.md",
@@ -203,9 +213,6 @@
     "dominio/Carrito.md",
     "dominio/Variantes.md",
     "dominio/Categorías.md",
-    "transversales",
-    "dominio",
-    "Chat de tienda.md",
-    "MercadoPago.md"
+    "Chat de tienda.md"
   ]
 }

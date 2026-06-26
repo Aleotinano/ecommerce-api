@@ -11,7 +11,7 @@ ultima-revision: 2026-06-20
 > (`queries.js`, `builders.js`, `order-helpers.js`, `utils.js`, `constants.js`),
 > `controllers/stats.js`, `routes/stats.js`, `schemas/stats.schema.js`. Sus utilidades
 > (`startOfDay`, `addDays`, ventana de 30 días) las reusa [[Sugerencias de contenido]].
-> `estado: TBD` (ver convención en [[_index]]).
+> `estado: TBD` (ver convención en [[App]]).
 
 ## Propósito
 > [!todo] Pendiente de documentar

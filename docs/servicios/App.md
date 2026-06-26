@@ -1,7 +1,7 @@
 ---
 tags: [indice, servicios]
 estado: en-desarrollo
-ultima-revision: 2026-06-24
+ultima-revision: 2026-06-20
 ---
 
 # Índice de servicios
@@ -11,7 +11,8 @@ Prisma + PostgreSQL + Redis, ESM). El código es la única fuente de verdad: lo 
 código se marca como `> [!todo] TBD`.
 
 > [!note] Estado de la documentación
-> - ✅ Documentados: [[Órdenes]], [[Sugerencias de contenido]], [[Chat de tienda]], [[WhatsApp]]
+> - ✅ Documentados: [[Órdenes]], [[Sugerencias de contenido]]
+> - 📐 Propuestas (diseño, sin código): [[Sugerencias de contenido — Imágenes (propuesta)]]
 > - 🟡 Stubs (pendientes de documentar): el resto
 >
 > Estructura: los servicios viven en `dominio/` y las abstracciones en `transversales/`; este índice
@@ -51,6 +52,7 @@ Dentro de "Deuda técnica" cada ítem se etiqueta por **tipo de acción**, para 
 - [[Roles]] — roles `ADMIN`/`STAFF`/`CUSTOMER` y autorización. `services/role.js`, `middleware/role.js`.
 - [[TenantConfig]] — configuración de marca por tenant (branding, contacto, SEO, políticas, WhatsApp). `services/tenant-config.js`.
 - [[Sugerencias de contenido]] — sugerencia diaria de contenido para redes generada con LLM (modelo push, una por día). `services/content-suggestions/*`.
+- [[Sugerencias de contenido — Imágenes (propuesta)]] — **propuesta (sin código)**: reorientar la feature a la imagen publicitaria generada por IA como entregable principal, con copy/hashtags complementarios.
 - [[Chat de tienda]] — asistente conversacional del storefront con tools sobre el catálogo. `services/chat/*`.
 - [[WhatsApp]] — webhook de WhatsApp Business (Meta Graph API), resolución de tenant por número. `services/whatsapp/*`.
 

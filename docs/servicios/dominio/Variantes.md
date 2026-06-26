@@ -9,7 +9,7 @@ ultima-revision: 2026-06-20
 > [!todo] Pendiente de documentar
 > Stub generado en Fase 3. Fuentes a leer: `services/variants.js`, `controllers/variants.js`,
 > `routes/variants.js`, `schemas/variant.schema.js`. Claves: `stock`, `sku` único por tenant,
-> precio que cae a `Product.price` (ver `helpers/price.js`). `estado: TBD` (ver convención en [[_index]]).
+> precio que cae a `Product.price` (ver `helpers/price.js`). `estado: TBD` (ver convención en [[App]]).
 
 ## Propósito
 > [!todo] Pendiente de documentar

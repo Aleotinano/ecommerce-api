@@ -11,7 +11,7 @@ ultima-revision: 2026-06-20
 > `controllers/store/auth.js`, `routes/users.js`, `routes/store/auth.js`, `schemas/auth.schema.js`,
 > `schemas/store-auth.schema.js`. Capturar: registro/login, verificación de email
 > (`emailVerificationTokenHash`), y los **dos** esquemas de token (`verifyToken` vs `verifyStoreToken`).
-> Relación con [[Auth y tokens]] y [[Roles]]. `estado: TBD` (ver convención en [[_index]]).
+> Relación con [[Auth y tokens]] y [[Roles]]. `estado: TBD` (ver convención en [[App]]).
 
 ## Propósito
 > [!todo] Pendiente de documentar

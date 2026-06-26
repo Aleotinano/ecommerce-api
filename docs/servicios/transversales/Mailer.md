@@ -10,7 +10,7 @@ ultima-revision: 2026-06-20
 > Stub generado en Fase 3. Fuentes a leer: `lib/mailer.js` (`sendMail`, `buildOrderStatusEmail`, y los
 > builders de verificación de email). Best-effort (no rompe el flujo del caller). Lo consumen [[Órdenes]]
 > (cambio de estado) y [[Usuarios y Auth]] (verificación). Capturar flags/modo mock de envío.
-> `estado: TBD` (ver convención en [[_index]]).
+> `estado: TBD` (ver convención en [[App]]).
 
 ## Propósito
 > [!todo] Pendiente de documentar

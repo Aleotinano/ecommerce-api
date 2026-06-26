@@ -135,7 +135,7 @@ Validación: `schemas/content-suggestion.schema.js` (`generateBody`, `refineBody
   (`lib/llm/fallback.js`, `lib/llm/index.js`).
 
 ## Deuda técnica / cosas raras
-Etiquetas por tipo de acción — ver convención en [[_index]].
+Etiquetas por tipo de acción — ver convención en [[App]].
 
 - `[comentario-miente]` **El comentario del unique contradice el schema.** `index.js` dice *"El unique
   (tenantId, date) asegura una sola por dia"*
@@ -157,6 +157,22 @@ Etiquetas por tipo de acción — ver convención en [[_index]].
   temporal correcto.
 
 ## Preguntas abiertas / mejoras candidatas
+
+> [!info] Visión a futuro
+> La reorientación de la feature hacia la **imagen publicitaria generada por IA** como entregable
+> principal (con copy/hashtags pasando a complementarios) vive en
+> [[Sugerencias de contenido — Imágenes (propuesta)]]. Este doc describe el código vigente (solo texto).
+
+> [!note] Cross-repo: el enum `angle` ahora lo referencia el Page Builder
+> El **Page Builder** del frontend (repo `e-commerce-nextjs`) reusa este mismo enum `SuggestionAngle`:
+> su bloque `OfertContainer` muestra destacados *por ángulo* (`BEST_SELLER`, etc.) y la resolución
+> real planeada server-side reusaría `ANGLE_PREDICATES` de esta feature (`/products?angle=…`). Eso
+> abre una **decisión arquitectónica abierta**: ¿el enum `angle` es fuente única compartida (en
+> `packages/shared`) entre Sugerencias y Page Builder, o se duplica? (recomendación del autor:
+> compartido, porque es lógica de negocio, no de UI). Detalle en
+> `docs/page-builder/items/Roadmap y Decisiones.md` → "Decisión 1 — Enum de `angle` compartido"
+> del repo frontend.
+
 - ¿Agregar endpoints para marcar una sugerencia como `USED` / `DISMISSED` y darle sentido al enum
   `SuggestionStatus`?
 - ¿El push diario debería contar contra el cost-guard (o tener su propio presupuesto)?
