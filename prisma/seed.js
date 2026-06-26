@@ -93,10 +93,10 @@ const ACME_PRODUCTS = [
     category: "Remeras",
     ...image("remeras1"),
     variants: [
-      { color: "Negro", size: "S", price: 14990, stock: 40, sku: "TEE-STD-BLK-S", ...image("remeras1") },
-      { color: "Negro", size: "M", price: 14990, stock: 25, sku: "TEE-STD-BLK-M", ...image("remeras1") },
+      { color: "#000000", size: "S", price: 14990, stock: 40, sku: "TEE-STD-BLK-S", ...image("remeras1") },
+      { color: "#000000", size: "M", price: 14990, stock: 25, sku: "TEE-STD-BLK-M", ...image("remeras1") },
       // Sin stock: con showOutOfStock=false NO debería aparecer en la tienda.
-      { color: "Crema", size: "L", price: 14990, stock: 0, sku: "TEE-STD-CRM-L", ...image("remeras2") },
+      { color: "#F5F5DC", size: "L", price: 14990, stock: 0, sku: "TEE-STD-CRM-L", ...image("remeras2") },
     ],
   },
   {
@@ -106,8 +106,8 @@ const ACME_PRODUCTS = [
     price: 16990, // precio a nivel producto: las variantes con price null lo heredan
     ...image("remeras5"),
     variants: [
-      { color: "Crema", size: "M", price: null, stock: 18, sku: "TEE-CAR-CRM-M", ...image("remeras5") },
-      { color: "Crema", size: "L", price: null, stock: 6, sku: "TEE-CAR-CRM-L", ...image("remeras5") }, // poco stock
+      { color: "#F5F5DC", size: "M", price: null, stock: 18, sku: "TEE-CAR-CRM-M", ...image("remeras5") },
+      { color: "#F5F5DC", size: "L", price: null, stock: 6, sku: "TEE-CAR-CRM-L", ...image("remeras5") }, // poco stock
     ],
   },
   {
@@ -116,8 +116,8 @@ const ACME_PRODUCTS = [
     category: "Remeras",
     ...image("remeras6"),
     variants: [
-      { color: "Crema", size: "M", price: 15990, stock: 30, sku: "TEE-MID-CRM-M", ...image("remeras6") },
-      { color: "Crema", size: "L", price: 15990, stock: 12, sku: "TEE-MID-CRM-L", ...image("remeras6") },
+      { color: "#F5F5DC", size: "M", price: 15990, stock: 30, sku: "TEE-MID-CRM-M", ...image("remeras6") },
+      { color: "#F5F5DC", size: "L", price: 15990, stock: 12, sku: "TEE-MID-CRM-L", ...image("remeras6") },
     ],
   },
   {
@@ -126,8 +126,8 @@ const ACME_PRODUCTS = [
     category: "Remeras",
     ...image("remeras4"),
     variants: [
-      { color: "Verde", size: "M", price: 13990, stock: 22, sku: "TEE-BOX-GRN-M", ...image("remeras10") },
-      { color: "Negro", size: "L", price: 13990, stock: 0, sku: "TEE-BOX-BLK-L", ...image("remeras4") }, // sin stock
+      { color: "#2E7D32", size: "M", price: 13990, stock: 22, sku: "TEE-BOX-GRN-M", ...image("remeras10") },
+      { color: "#000000", size: "L", price: 13990, stock: 0, sku: "TEE-BOX-BLK-L", ...image("remeras4") }, // sin stock
     ],
   },
   {
@@ -136,8 +136,8 @@ const ACME_PRODUCTS = [
     category: "Remeras",
     ...image("remeras7"),
     variants: [
-      { color: "Gris", size: "M", price: 17990, stock: 9, sku: "TEE-PHO-GRY-M", ...image("remeras7") },
-      { color: "Gris", size: "L", price: 17990, stock: 4, sku: "TEE-PHO-GRY-L", ...image("remeras7") }, // poco stock
+      { color: "#808080", size: "M", price: 17990, stock: 9, sku: "TEE-PHO-GRY-M", ...image("remeras7") },
+      { color: "#808080", size: "L", price: 17990, stock: 4, sku: "TEE-PHO-GRY-L", ...image("remeras7") }, // poco stock
     ],
   },
   // --- Zapatillas ----------------------------------------------------------
@@ -147,9 +147,9 @@ const ACME_PRODUCTS = [
     category: "Zapatillas",
     ...image("zapas1"),
     variants: [
-      { color: "Blanco", size: "40", price: 39990, stock: 10, sku: "ZAP-CRT-WHT-40", ...image("zapas1") },
-      { color: "Blanco", size: "41", price: 39990, stock: 7, sku: "ZAP-CRT-WHT-41", ...image("zapas1") },
-      { color: "Blanco", size: "42", price: 39990, stock: 0, sku: "ZAP-CRT-WHT-42", ...image("zapas2") }, // sin stock
+      { color: "#FFFFFF", size: "40", price: 39990, stock: 10, sku: "ZAP-CRT-WHT-40", ...image("zapas1") },
+      { color: "#FFFFFF", size: "41", price: 39990, stock: 7, sku: "ZAP-CRT-WHT-41", ...image("zapas1") },
+      { color: "#FFFFFF", size: "42", price: 39990, stock: 0, sku: "ZAP-CRT-WHT-42", ...image("zapas2") }, // sin stock
     ],
   },
   {
@@ -158,8 +158,8 @@ const ACME_PRODUCTS = [
     category: "Zapatillas",
     ...image("zapas4"),
     variants: [
-      { color: "Marron", size: "41", price: 45990, stock: 5, sku: "ZAP-SDE-BRN-41", ...image("zapas4") },
-      { color: "Marron", size: "42", price: 45990, stock: 3, sku: "ZAP-SDE-BRN-42", ...image("zapas4") }, // poco stock
+      { color: "#5C4033", size: "41", price: 45990, stock: 5, sku: "ZAP-SDE-BRN-41", ...image("zapas4") },
+      { color: "#5C4033", size: "42", price: 45990, stock: 3, sku: "ZAP-SDE-BRN-42", ...image("zapas4") }, // poco stock
     ],
   },
   {
@@ -169,8 +169,8 @@ const ACME_PRODUCTS = [
     price: 42990, // precio a nivel producto
     ...image("zapas6"),
     variants: [
-      { color: "Azul", size: "42", price: null, stock: 14, sku: "ZAP-SKT-BLU-42", ...image("zapas6") },
-      { color: "Azul", size: "43", price: null, stock: 8, sku: "ZAP-SKT-BLU-43", ...image("zapas7") },
+      { color: "#1E3A8A", size: "42", price: null, stock: 14, sku: "ZAP-SKT-BLU-42", ...image("zapas6") },
+      { color: "#1E3A8A", size: "43", price: null, stock: 8, sku: "ZAP-SKT-BLU-43", ...image("zapas7") },
     ],
   },
   // --- Gorras --------------------------------------------------------------
@@ -180,8 +180,8 @@ const ACME_PRODUCTS = [
     category: "Gorras",
     ...image("gorras2"),
     variants: [
-      { color: "Negro", size: "U", price: 11990, stock: 20, sku: "CAP-LA-BLK-U", ...image("gorras2") },
-      { color: "Azul", size: "U", price: 11990, stock: 15, sku: "CAP-LA-BLU-U", ...image("gorras8") },
+      { color: "#000000", size: "U", price: 11990, stock: 20, sku: "CAP-LA-BLK-U", ...image("gorras2") },
+      { color: "#1E3A8A", size: "U", price: 11990, stock: 15, sku: "CAP-LA-BLU-U", ...image("gorras8") },
     ],
   },
   {
@@ -190,8 +190,8 @@ const ACME_PRODUCTS = [
     category: "Gorras",
     ...image("gorras5"),
     variants: [
-      { color: "Celeste", size: "U", price: 12990, stock: 0, sku: "CAP-SRF-CEL-U", ...image("gorras5") }, // sin stock
-      { color: "Crema", size: "U", price: 12990, stock: 11, sku: "CAP-SRF-CRM-U", ...image("gorras7") },
+      { color: "#87CEEB", size: "U", price: 12990, stock: 0, sku: "CAP-SRF-CEL-U", ...image("gorras5") }, // sin stock
+      { color: "#F5F5DC", size: "U", price: 12990, stock: 11, sku: "CAP-SRF-CRM-U", ...image("gorras7") },
     ],
   },
   {
@@ -200,7 +200,7 @@ const ACME_PRODUCTS = [
     category: "Gorras",
     ...image("gorras9"),
     variants: [
-      { color: "Verde", size: "U", price: 13990, stock: 6, sku: "CAP-CTR-GRN-U", ...image("gorras9") }, // poco stock
+      { color: "#2E7D32", size: "U", price: 13990, stock: 6, sku: "CAP-CTR-GRN-U", ...image("gorras9") }, // poco stock
     ],
   },
 ];
@@ -234,8 +234,8 @@ const SHOPCO_PRODUCTS = [
     description: "Bluetooth 5.0 con cancelación de ruido.",
     category: "Audio",
     variants: [
-      { color: "Negro", size: null, price: 25000, stock: 15, sku: "SHC-AUR-N" },
-      { color: "Blanco", size: null, price: 25000, stock: 3, sku: "SHC-AUR-B" }, // poco stock
+      { color: "#000000", size: null, price: 25000, stock: 15, sku: "SHC-AUR-N" },
+      { color: "#FFFFFF", size: null, price: 25000, stock: 3, sku: "SHC-AUR-B" }, // poco stock
     ],
   },
   {
@@ -245,7 +245,7 @@ const SHOPCO_PRODUCTS = [
     price: 18000,
     variants: [
       // shopco tiene showOutOfStock=true: este SÍ debería verse aunque esté en 0.
-      { color: "Negro", size: null, price: null, stock: 0, sku: "SHC-PAR-N" },
+      { color: "#000000", size: null, price: null, stock: 0, sku: "SHC-PAR-N" },
     ],
   },
 ];

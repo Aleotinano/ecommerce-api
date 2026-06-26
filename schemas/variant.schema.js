@@ -3,6 +3,10 @@ import { z } from "zod";
 export const createVariant = z.object({
   color: z
     .string({ invalid_type_error: "El color debe ser texto" })
+    .regex(
+      /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/,
+      "El color debe ser un HEX válido (ej: #1A2B3C o #ABC)"
+    )
     .nullable()
     .optional(),
   size: z
@@ -37,6 +41,10 @@ export const updateVariant = z
   .object({
     color: z
       .string({ invalid_type_error: "El color debe ser texto" })
+      .regex(
+        /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/,
+        "El color debe ser un HEX válido (ej: #1A2B3C o #ABC)"
+      )
       .nullable()
       .optional(),
     size: z
