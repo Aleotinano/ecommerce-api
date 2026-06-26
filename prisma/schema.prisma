@@ -24,6 +24,7 @@ model Tenant {
   config             TenantConfig?
   contentSuggestions ContentSuggestion[]
   pageSpec           TenantPageSpec?
+  suggestionImages   SuggestionImage[]
 }
 
 model TenantConfig {
@@ -275,6 +276,7 @@ model ContentSuggestion {
 
   tenant  Tenant  @relation(fields: [tenantId], references: [id])
   product Product @relation(fields: [productId], references: [id])
+  images  SuggestionImage[]
 
   // Identidad natural = dimension del cache on-demand (tenant+dia+producto+angulo).
   // Dedupe tanto la sugerencia automatica del dia como las generaciones manuales.
@@ -298,6 +300,30 @@ model TenantPageSpec {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
+}
+
+// Variantes de imagen publicitaria generadas por IA para una sugerencia (1->N).
+// Cada generacion produce varias variantes; el usuario elige una (chosen=true) y
+// las otras se limpian (Cloudinary + DB). La imagen base se guarda LIMPIA: el
+// texto/precio en pantalla se aplica como overlay al mostrar/descargar, no se
+// quema en el asset. Ver docs: "Sugerencias de contenido — Imagenes (propuesta)".
+model SuggestionImage {
+  id            Int      @id @default(autoincrement())
+  suggestionId  Int
+  tenantId      Int
+  imageUrl      String // secure_url de Cloudinary
+  imagePublicId String // para poder borrar el asset
+  options       Json     @default("{}") // { imagen, infoEnPantalla, precioEnPantalla }
+  model         String? // modelo de imagen usado (null si hubo degradacion)
+  prompt        String // prompt final que genero la variante (trazabilidad)
+  chosen        Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  suggestion ContentSuggestion @relation(fields: [suggestionId], references: [id], onDelete: Cascade)
+  tenant     Tenant            @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@index([suggestionId])
 }
 
 enum SuggestionAngle {

@@ -49,6 +49,10 @@ export const envSchema = z.object({
   ANTHROPIC_BASE_URL: z.string().url().default("https://api.anthropic.com"),
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().default("gemini-2.5-flash"),
+  // Generacion de imagenes (image-to-image), independiente del LLM de texto.
+  // Reusa GEMINI_API_KEY. Por ahora solo Gemini soporta generacion de imagenes.
+  IMAGE_PROVIDER: z.enum(["gemini"]).default("gemini"),
+  GEMINI_IMAGE_MODEL: z.string().default("gemini-2.5-flash-image"),
 
   CHAT_DAILY_LIMIT: z.coerce.number().int().positive().default(500),
 
