@@ -27,10 +27,10 @@ usersRouter.get("/me", verifyToken, usersController.me);
 usersRouter.get(
   "/verify-email",
   validation.verifyEmail,
-  usersController.verifyEmail
+  usersController.verifyEmail,
 );
 usersRouter.post(
   "/resend-verification",
   validation.resendVerification,
-  usersController.resendVerification
+  usersController.resendVerification,
 );

@@ -106,7 +106,28 @@ export const CategoryModel = {
     return category;
   },
 
-  async create({ tenantId, name, description, isActive, icon, imageUrl, parentId }) {
+  async getByIdForManagement({ tenantId, id }) {
+    const category = await prisma.categories.findFirst({
+      where: { id, tenantId },
+    });
+
+    if (!category) {
+      throw createError("La categoría no existe", "CATEGORY_NOT_FOUND", 404);
+    }
+
+    return category;
+  },
+
+  async create({
+    tenantId,
+    name,
+    description,
+    isActive,
+    icon,
+    imageUrl,
+    imgPublicId,
+    parentId,
+  }) {
     const result = await prisma.$transaction(async (tx) => {
       const exists = await tx.categories.findFirst({
         where: { tenantId, name },
@@ -130,6 +151,7 @@ export const CategoryModel = {
           isActive: isActive ?? true,
           icon: icon ?? null,
           imageUrl: imageUrl ?? null,
+          imgPublicId: imgPublicId ?? null,
           parentId: parentId ?? null,
         },
       });
@@ -139,7 +161,17 @@ export const CategoryModel = {
     return result;
   },
 
-  async edit({ tenantId, id, name, description, isActive, icon, imageUrl, parentId }) {
+  async edit({
+    tenantId,
+    id,
+    name,
+    description,
+    isActive,
+    icon,
+    imageUrl,
+    imgPublicId,
+    parentId,
+  }) {
     const result = await prisma.$transaction(async (tx) => {
       const category = await tx.categories.findFirst({
         where: { id, tenantId },
@@ -176,6 +208,7 @@ export const CategoryModel = {
           ...(isActive !== undefined && { isActive }),
           ...(icon !== undefined && { icon }),
           ...(imageUrl !== undefined && { imageUrl }),
+          ...(imgPublicId !== undefined && { imgPublicId }),
           ...(parentId !== undefined && { parentId }),
         },
         include: {

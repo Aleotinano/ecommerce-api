@@ -1,4 +1,14 @@
 import { CategoryModel } from "../services/categories.js";
+import {
+  deleteCloudinaryImage,
+  uploadImageToCloudinary,
+} from "../lib/imageManager.js";
+import {
+  cleanupUploadedImage,
+  getUploadedImageFile,
+} from "../middleware/upload.js";
+
+const CATEGORY_IMAGE_ENTITY = "categories";
 
 export class CategoryController {
   static async getAll(req, res, next) {
@@ -38,8 +48,17 @@ export class CategoryController {
   }
 
   static async create(req, res, next) {
+    const uploadedFile = getUploadedImageFile(req);
+    let uploadedImage;
+
     try {
       const { name, description, isActive, icon, imageUrl, parentId } = req.body;
+
+      if (uploadedFile) {
+        uploadedImage = await uploadImageToCloudinary(uploadedFile.path, {
+          entity: CATEGORY_IMAGE_ENTITY,
+        });
+      }
 
       const category = await CategoryModel.create({
         tenantId: req.tenantId,
@@ -47,7 +66,8 @@ export class CategoryController {
         description,
         isActive,
         icon,
-        imageUrl,
+        imageUrl: uploadedImage?.img ?? imageUrl,
+        imgPublicId: uploadedImage?.imgPublicId ?? null,
         parentId,
       });
 
@@ -56,14 +76,42 @@ export class CategoryController {
         category: category,
       });
     } catch (error) {
+      if (uploadedImage?.imgPublicId) {
+        await deleteCloudinaryImage(uploadedImage.imgPublicId).catch(() => {});
+      }
       next(error);
+    } finally {
+      await cleanupUploadedImage(req).catch(() => {});
     }
   }
 
   static async edit(req, res, next) {
+    const uploadedFile = getUploadedImageFile(req);
+    let uploadedImage;
+
     try {
       const { id } = req.params;
+      const existing = await CategoryModel.getByIdForManagement({
+        tenantId: req.tenantId,
+        id,
+      });
       const { name, description, isActive, icon, imageUrl, parentId } = req.body;
+
+      const imageData = {};
+      let shouldDeletePreviousImage = false;
+
+      if (uploadedFile) {
+        uploadedImage = await uploadImageToCloudinary(uploadedFile.path, {
+          entity: CATEGORY_IMAGE_ENTITY,
+        });
+        imageData.imageUrl = uploadedImage.img;
+        imageData.imgPublicId = uploadedImage.imgPublicId;
+        shouldDeletePreviousImage = Boolean(existing.imgPublicId);
+      } else if (imageUrl !== undefined && imageUrl !== existing.imageUrl) {
+        imageData.imageUrl = imageUrl;
+        imageData.imgPublicId = null;
+        shouldDeletePreviousImage = Boolean(existing.imgPublicId);
+      }
 
       const category = await CategoryModel.edit({
         tenantId: req.tenantId,
@@ -72,13 +120,22 @@ export class CategoryController {
         description,
         isActive,
         icon,
-        imageUrl,
         parentId,
+        ...imageData,
       });
+
+      if (shouldDeletePreviousImage) {
+        await deleteCloudinaryImage(existing.imgPublicId);
+      }
 
       res.json({ message: "Categoria editada", category: category });
     } catch (error) {
+      if (uploadedImage?.imgPublicId) {
+        await deleteCloudinaryImage(uploadedImage.imgPublicId).catch(() => {});
+      }
       next(error);
+    } finally {
+      await cleanupUploadedImage(req).catch(() => {});
     }
   }
 
@@ -90,6 +147,11 @@ export class CategoryController {
         tenantId: req.tenantId,
         id,
       });
+
+      if (category.imgPublicId) {
+        await deleteCloudinaryImage(category.imgPublicId).catch(() => {});
+      }
+
       res.json({ message: "Categoria eliminada", category });
     } catch (error) {
       next(error);

@@ -75,9 +75,10 @@ export const updateCategory = z
       .nullable()
       .optional(),
   })
-  .refine((data) => Object.values(data).some((value) => value !== undefined), {
-    message: "No hay cambios para actualizar",
-  });
+  // Sin `.refine` de "al menos un campo": el caso vacío (ni body ni imagen) ya lo
+  // corta `requireBodyOrImage` en la ruta, y ese refine rechazaba los updates que
+  // mandan SOLO una imagen (que viaja en req.files, no en req.body).
+  .strip();
 
 export const categoryId = z.object({
   id: z.coerce

@@ -3,6 +3,11 @@ import { CategoryController } from "../controllers/categories.js";
 import { verifyToken } from "../middleware/auth.js";
 import { requireRole } from "../middleware/role.js";
 import { validate } from "../middleware/validate.js";
+import {
+  normalizeMultipartBody,
+  requireBodyOrImage,
+  uploadImage,
+} from "../middleware/upload.js";
 import { createCategory, updateCategory } from "../schemas/category.schema.js";
 import { validateId } from "../schemas/id.schema.js";
 
@@ -31,6 +36,8 @@ categoriesRouter.post(
   "/",
   verifyToken,
   requireRole(roleRequired),
+  uploadImage,
+  normalizeMultipartBody,
   validation.create,
   CategoryController.create
 );
@@ -39,6 +46,9 @@ categoriesRouter.patch(
   "/:id",
   verifyToken,
   requireRole(roleRequired),
+  uploadImage,
+  normalizeMultipartBody,
+  requireBodyOrImage,
   validation.update,
   CategoryController.edit
 );

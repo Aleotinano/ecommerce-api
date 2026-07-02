@@ -19,7 +19,10 @@ const createStore = (prefix = "rl:") => {
       prefix,
     });
   } catch (error) {
-    logger.warn({ error: error.message }, "failed to create redis store, using in-memory");
+    logger.warn(
+      { error: error.message },
+      "failed to create redis store, using in-memory",
+    );
     return undefined;
   }
 };
@@ -37,13 +40,12 @@ const rateLimitHandler = (req, res, _next, options) => {
   const identifier = req.body?.email || req.ip;
   logger.warn(
     { identifier, endpoint: req.path, remaining: req.rateLimit?.remaining },
-    "rate limit exceeded"
+    "rate limit exceeded",
   );
 
   return res.status(options.statusCode ?? 429).json({
     error: {
-      message:
-        "Demasiadas solicitudes. Por favor intenta de nuevo más tarde.",
+      message: "Demasiadas solicitudes. Por favor intenta de nuevo más tarde.",
       code: "RATE_LIMIT_EXCEEDED",
       retryAfter: retryAfterSeconds,
     },

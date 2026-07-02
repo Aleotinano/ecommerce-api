@@ -116,6 +116,7 @@ model Categories {
   description String?
   icon        String?
   imageUrl    String?
+  imgPublicId String?
   isActive    Boolean      @default(true)
   parentId    Int?
   parent      Categories?  @relation("CategoryToSubcategories", fields: [parentId], references: [id])

@@ -73,9 +73,10 @@ export const updateProduct = z
       .boolean({ invalid_type_error: "El valor debe ser booleano" })
       .optional(),
   })
-  .refine((data) => Object.values(data).some((v) => v !== undefined), {
-    message: "Debes enviar al menos un campo para actualizar",
-  });
+  // Sin `.refine` de "al menos un campo": el caso vacío (ni body ni imagen) ya lo
+  // corta `requireBodyOrImage` en la ruta, y ese refine rechazaba los updates que
+  // mandan SOLO una imagen (que viaja en req.files, no en req.body).
+  .strip();
 
 export const assignProductCategory = z.object({
   categoryId: z.coerce
