@@ -22,66 +22,115 @@ export const comboOption = z.object({
     .optional(),
 });
 
-export const createProduct = z.object({
-  name: z
-    .string({
-      required_error: "El nombre es requerido",
-      invalid_type_error: "El nombre debe ser texto",
-    })
-    .min(1, "El nombre no puede estar vacío")
-    .max(100, "El nombre es demasiado largo")
-    .trim(),
-  description: z
-    .string({ invalid_type_error: "La descripción debe ser texto" })
-    .max(400, "La descripción es demasiado larga")
-    .trim()
-    .nullable()
-    .optional(),
-  categoryId: z.coerce
-    .number({ invalid_type_error: "El ID de categoría debe ser un número" })
-    .int("El ID de categoría debe ser un número entero")
-    .positive("El ID de categoría es inválido")
-    .nullable()
-    .optional(),
-  price: z.coerce
-    .number({
-      required_error: "El precio es requerido",
-      invalid_type_error: "El precio debe ser un número",
-    })
-    .positive("El precio debe ser mayor a 0"),
-  img: z
-    .string({ invalid_type_error: "La imagen debe ser texto" })
-    .url("La URL de la imagen no es válida")
-    .nullable()
-    .optional(),
-  isActive: z
-    .boolean({ invalid_type_error: "El valor debe ser booleano" })
-    .optional(),
-  variants: z.array(createVariant).default([]),
-  // Solo se usa cuando `variants` viene vacío: crea una variante default
-  // (color/size null) para que el producto sea vendible sin variantes reales.
-  stock: z.coerce
-    .number({ invalid_type_error: "El stock debe ser un número" })
-    .int("El stock debe ser un número entero")
-    .min(0, "El stock no puede ser negativo")
-    .optional(),
-  // Combos: producto compuesto de otros productos (ver docs/servicios/dominio/Combos.md).
-  isCombo: z
-    .boolean({ invalid_type_error: "El valor debe ser booleano" })
-    .optional()
-    .default(false),
-  comboMinItems: z.coerce
-    .number({ invalid_type_error: "comboMinItems debe ser un número" })
-    .int("comboMinItems debe ser un número entero")
-    .positive("comboMinItems debe ser mayor a 0")
-    .optional(),
-  comboMaxItems: z.coerce
-    .number({ invalid_type_error: "comboMaxItems debe ser un número" })
-    .int("comboMaxItems debe ser un número entero")
-    .positive("comboMaxItems debe ser mayor a 0")
-    .optional(),
-  comboOptions: z.array(comboOption).optional().default([]),
-});
+// UNIDAD: producto simple, stock/precio en columnas propias de Product. VARIANTE:
+// precio/stock por variante (color/talle). COMBO: producto compuesto de otros
+// productos. Ver docs/servicios/dominio/Productos.md y Combos.md.
+export const PRODUCT_TYPES = ["UNIDAD", "VARIANTE", "COMBO"];
+
+export const createProduct = z
+  .object({
+    name: z
+      .string({
+        required_error: "El nombre es requerido",
+        invalid_type_error: "El nombre debe ser texto",
+      })
+      .min(1, "El nombre no puede estar vacío")
+      .max(100, "El nombre es demasiado largo")
+      .trim(),
+    description: z
+      .string({ invalid_type_error: "La descripción debe ser texto" })
+      .max(400, "La descripción es demasiado larga")
+      .trim()
+      .nullable()
+      .optional(),
+    categoryId: z.coerce
+      .number({ invalid_type_error: "El ID de categoría debe ser un número" })
+      .int("El ID de categoría debe ser un número entero")
+      .positive("El ID de categoría es inválido")
+      .nullable()
+      .optional(),
+    price: z.coerce
+      .number({
+        required_error: "El precio es requerido",
+        invalid_type_error: "El precio debe ser un número",
+      })
+      .positive("El precio debe ser mayor a 0"),
+    img: z
+      .string({ invalid_type_error: "La imagen debe ser texto" })
+      .url("La URL de la imagen no es válida")
+      .nullable()
+      .optional(),
+    isActive: z
+      .boolean({ invalid_type_error: "El valor debe ser booleano" })
+      .optional(),
+    type: z.enum(PRODUCT_TYPES, {
+      required_error: "El tipo de producto es requerido",
+      invalid_type_error: "Tipo de producto inválido",
+    }),
+    // Solo aplica si type=VARIANTE (al menos una) o queda vacío si type=UNIDAD/COMBO.
+    variants: z.array(createVariant).optional().default([]),
+    // Solo aplica si type=UNIDAD: stock a nivel producto (sin ProductVariant).
+    stock: z.coerce
+      .number({ invalid_type_error: "El stock debe ser un número" })
+      .int("El stock debe ser un número entero")
+      .min(0, "El stock no puede ser negativo")
+      .optional(),
+    // Combos: solo aplica si type=COMBO (ver docs/servicios/dominio/Combos.md).
+    comboMinItems: z.coerce
+      .number({ invalid_type_error: "comboMinItems debe ser un número" })
+      .int("comboMinItems debe ser un número entero")
+      .positive("comboMinItems debe ser mayor a 0")
+      .optional(),
+    comboMaxItems: z.coerce
+      .number({ invalid_type_error: "comboMaxItems debe ser un número" })
+      .int("comboMaxItems debe ser un número entero")
+      .positive("comboMaxItems debe ser mayor a 0")
+      .optional(),
+    comboOptions: z.array(comboOption).optional().default([]),
+  })
+  .superRefine((data, ctx) => {
+    if (data.type === "UNIDAD") {
+      if (data.variants.length > 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["variants"],
+          message: "Un producto UNIDAD no admite variantes",
+        });
+      }
+      if (data.stock === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["stock"],
+          message: "El stock es requerido para un producto UNIDAD",
+        });
+      }
+    }
+
+    if (data.type === "VARIANTE" && data.variants.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["variants"],
+        message: "Un producto VARIANTE necesita al menos una variante",
+      });
+    }
+
+    if (data.type === "COMBO") {
+      if (data.variants.length > 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["variants"],
+          message: "Un combo no admite variantes",
+        });
+      }
+      if (data.comboMinItems === undefined || data.comboMaxItems === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["comboMinItems"],
+          message: "comboMinItems y comboMaxItems son requeridos para un combo",
+        });
+      }
+    }
+  });
 
 export const updateProduct = z
   .object({
@@ -115,8 +164,14 @@ export const updateProduct = z
     isActive: z
       .boolean({ invalid_type_error: "El valor debe ser booleano" })
       .optional(),
-    // Solo aplica si el producto tiene la variante default sin variantes reales
-    // (color/size null) creada por `createProduct` sin `variants`; se ignora si no.
+    // Cambiar `type` dispara una transición (ver ProductModel.edit): las variantes
+    // reales o la whitelist de combo que dejan de aplicar se desactivan, nunca se
+    // borran. Enviar `type` sin cambiarlo respecto al actual es un no-op.
+    type: z.enum(PRODUCT_TYPES, { invalid_type_error: "Tipo de producto inválido" }).optional(),
+    // Variantes nuevas al pasar el producto a VARIANTE (alta inicial; el CRUD
+    // ongoing de variantes vive en /variants/:productId).
+    variants: z.array(createVariant).optional(),
+    // Solo aplica si el producto es (o pasa a ser) UNIDAD.
     stock: z.coerce
       .number({ invalid_type_error: "El stock debe ser un número" })
       .int("El stock debe ser un número entero")
@@ -124,9 +179,6 @@ export const updateProduct = z
       .optional(),
     // Combos: ver docs/servicios/dominio/Combos.md. `comboOptions` reemplaza la
     // whitelist completa si se envía (no hay merge incremental en v1).
-    isCombo: z
-      .boolean({ invalid_type_error: "El valor debe ser booleano" })
-      .optional(),
     comboMinItems: z.coerce
       .number({ invalid_type_error: "comboMinItems debe ser un número" })
       .int("comboMinItems debe ser un número entero")
@@ -156,6 +208,16 @@ export const assignProductCategory = z.object({
 
 export const productId = z.object({
   id: z.coerce
+    .number({ invalid_type_error: "El ID debe ser un número" })
+    .int("El ID debe ser un número entero")
+    .positive("ID de producto inválido"),
+});
+
+// Param `:productId` (rutas de carrito: POST/PATCH /cart/:productId,
+// POST /cart/combo/:productId) — mismo formato que `productId` de arriba, distinta
+// clave porque el param de la URL se llama distinto en esas rutas.
+export const productIdParam = z.object({
+  productId: z.coerce
     .number({ invalid_type_error: "El ID debe ser un número" })
     .int("El ID debe ser un número entero")
     .positive("ID de producto inválido"),

@@ -1,5 +1,5 @@
 import { CartModel } from "../services/cart.js";
-import { getProductPrice } from "../helpers/price.js";
+import { getProductPrice, resolveProductStock } from "../helpers/price.js";
 
 export class cartController {
   static async getCart(req, res, next) {
@@ -14,23 +14,25 @@ export class cartController {
           updated: cart.updatedAt,
         },
         products: cart.items.map((item) => ({
-          variant: {
-            id: item.variant.id,
-            color: item.variant.color,
-            size: item.variant.size,
-            price: getProductPrice(item.variant, item.variant.product),
-            variantPrice: item.variant.price,
-            stock: item.variant.stock,
-            sku: item.variant.sku,
-            img: item.variant.img ?? item.variant.product?.img ?? null,
-            product: item.variant.product
-              ? {
-                  id: item.variant.product.id,
-                  name: item.variant.product.name,
-                  img: item.variant.product.img,
-                }
-              : null,
-          },
+          product: item.product
+            ? {
+                id: item.product.id,
+                name: item.product.name,
+                type: item.product.type,
+                img: item.product.img,
+              }
+            : null,
+          variant: item.variant
+            ? {
+                id: item.variant.id,
+                color: item.variant.color,
+                size: item.variant.size,
+                sku: item.variant.sku,
+              }
+            : null,
+          price: getProductPrice(item.variant, item.product),
+          stock: resolveProductStock(item.product, item.variant),
+          img: item.variant?.img ?? item.product?.img ?? null,
           quantity: item.quantity,
           comboSelection: item.comboSelection ?? null,
         })),
@@ -43,21 +45,21 @@ export class cartController {
   static async addCombo(req, res, next) {
     try {
       const { id } = req.user;
-      const variantId = req.params.variantId;
+      const productId = req.params.productId;
       const { selection } = req.body;
 
       const cartItem = await CartModel.addCombo({
         tenantId: req.tenantId,
         id,
-        comboVariantId: variantId,
+        comboProductId: productId,
         selection,
       });
 
       return res.status(201).json({
         message: "Combo agregado al carrito",
         data: {
-          producto: cartItem.variant.product?.name,
-          variantId: cartItem.variantId,
+          producto: cartItem.product?.name,
+          productId: cartItem.productId,
           cantidad: cartItem.quantity,
           seleccion: cartItem.comboSelection,
         },
@@ -70,26 +72,32 @@ export class cartController {
   static async add(req, res, next) {
     try {
       const { id } = req.user;
-      const variantId = req.params.variantId;
+      const productId = req.params.productId;
+      const { variantId } = req.body ?? {};
 
       const cartItem = await CartModel.add({
         tenantId: req.tenantId,
         id,
+        productId,
         variantId,
       });
 
+      const stock = resolveProductStock(cartItem.product, cartItem.variant);
+
       return res.status(201).json({
-        message: "Variante agregada al carrito",
+        message: "Producto agregado al carrito",
         data: {
-          producto: cartItem.variant.product?.name,
-          variant: {
-            id: cartItem.variant.id,
-            color: cartItem.variant.color,
-            size: cartItem.variant.size,
-            sku: cartItem.variant.sku,
-          },
+          producto: cartItem.product?.name,
+          variant: cartItem.variant
+            ? {
+                id: cartItem.variant.id,
+                color: cartItem.variant.color,
+                size: cartItem.variant.size,
+                sku: cartItem.variant.sku,
+              }
+            : null,
           cantidad: cartItem.quantity,
-          stockRestante: cartItem.variant.stock - cartItem.quantity,
+          stockRestante: stock != null ? stock - cartItem.quantity : null,
         },
       });
     } catch (error) {
@@ -100,16 +108,18 @@ export class cartController {
   static async remove(req, res, next) {
     try {
       const { id } = req.user;
-      const variantId = req.params.variantId;
+      const productId = req.params.productId;
+      const { variantId } = req.body ?? {};
 
       const result = await CartModel.remove({
         tenantId: req.tenantId,
         id,
+        productId,
         variantId,
       });
 
       if (result.deleted) {
-        return res.json({ message: "Variante eliminada del carrito" });
+        return res.json({ message: "Producto eliminado del carrito" });
       }
 
       return res.json({

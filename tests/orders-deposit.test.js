@@ -11,6 +11,7 @@ const { seedTenants, seedTenantConfig, loginAs } = await import(
 let acme;
 let shopco;
 let acmeVariant;
+let acmeProductId;
 let acmeAdminId;
 
 beforeAll(async () => {
@@ -27,6 +28,7 @@ beforeAll(async () => {
   acmeVariant = await prisma.productVariant.findFirst({
     where: { tenantId: acme.id },
   });
+  acmeProductId = acmeVariant.productId;
   acmeAdminId = acme.users.find((u) => u.role === "ADMIN").id;
 });
 
@@ -38,7 +40,7 @@ describe("createDraft (orden del bot)", () => {
   it("nace BOT, sin user, con seña resuelta server-side", async () => {
     const order = await OrderModel.createDraft({
       tenantId: acme.id,
-      items: [{ variantId: acmeVariant.id, quantity: 2 }],
+      items: [{ productId: acmeProductId, variantId: acmeVariant.id, quantity: 2 }],
       contactPhone: "5491100000000",
       contactName: "Juan",
       creationContext: "Cliente: quiero 2\nAsistente: dale",
@@ -62,7 +64,7 @@ describe("createDraft (orden del bot)", () => {
     });
     const order = await OrderModel.createDraft({
       tenantId: shopco.id,
-      items: [{ variantId: variant.id, quantity: 1 }],
+      items: [{ productId: variant.productId, variantId: variant.id, quantity: 1 }],
     });
     expect(order.requiresDeposit).toBe(false);
     expect(order.depositAmount).toBeNull();
@@ -73,7 +75,7 @@ describe("guard PENDING → PROCESSING", () => {
   it("orden BOT sin revisar → ORDER_NOT_REVIEWED", async () => {
     const order = await OrderModel.createDraft({
       tenantId: acme.id,
-      items: [{ variantId: acmeVariant.id, quantity: 1 }],
+      items: [{ productId: acmeProductId, variantId: acmeVariant.id, quantity: 1 }],
     });
 
     await expect(
@@ -88,7 +90,7 @@ describe("guard PENDING → PROCESSING", () => {
   it("revisada pero sin seña confirmada → DEPOSIT_NOT_CONFIRMED", async () => {
     const order = await OrderModel.createDraft({
       tenantId: acme.id,
-      items: [{ variantId: acmeVariant.id, quantity: 1 }],
+      items: [{ productId: acmeProductId, variantId: acmeVariant.id, quantity: 1 }],
     });
 
     await OrderModel.reviewOrder({
@@ -109,7 +111,7 @@ describe("guard PENDING → PROCESSING", () => {
   it("revisada + seña confirmada → la transición procede", async () => {
     const order = await OrderModel.createDraft({
       tenantId: acme.id,
-      items: [{ variantId: acmeVariant.id, quantity: 1 }],
+      items: [{ productId: acmeProductId, variantId: acmeVariant.id, quantity: 1 }],
     });
 
     await OrderModel.reviewOrder({
@@ -136,7 +138,7 @@ describe("reviewOrder con corrección de cantidades", () => {
   it("re-resuelve total y recalcula depositAmount server-side", async () => {
     const order = await OrderModel.createDraft({
       tenantId: acme.id,
-      items: [{ variantId: acmeVariant.id, quantity: 4 }],
+      items: [{ productId: acmeProductId, variantId: acmeVariant.id, quantity: 4 }],
     });
     expect(order.total).toBe(acmeVariant.price * 4);
 
@@ -157,8 +159,13 @@ describe("reviewOrder con corrección de cantidades", () => {
     const order = await OrderModel.createDraft({
       tenantId: acme.id,
       items: [
-        { variantId: acmeVariant.id, quantity: 1, note: "sin nueces" },
-        { variantId: acmeVariant.id, quantity: 2, note: "sin nueces ni pasas" },
+        { productId: acmeProductId, variantId: acmeVariant.id, quantity: 1, note: "sin nueces" },
+        {
+          productId: acmeProductId,
+          variantId: acmeVariant.id,
+          quantity: 2,
+          note: "sin nueces ni pasas",
+        },
       ],
     });
     expect(order.orderItems).toHaveLength(2);
@@ -193,7 +200,14 @@ describe("reviewOrder con corrección de cantidades", () => {
   it("permite borrar la nota mandando note: null explícito", async () => {
     const order = await OrderModel.createDraft({
       tenantId: acme.id,
-      items: [{ variantId: acmeVariant.id, quantity: 1, note: "dedicatoria: Juan" }],
+      items: [
+        {
+          productId: acmeProductId,
+          variantId: acmeVariant.id,
+          quantity: 1,
+          note: "dedicatoria: Juan",
+        },
+      ],
     });
 
     const reviewed = await OrderModel.reviewOrder({
@@ -211,7 +225,7 @@ describe("GET /orders/:id como ADMIN sobre una orden BOT (userId null)", () => {
   it("devuelve el detalle en vez de 404", async () => {
     const order = await OrderModel.createDraft({
       tenantId: acme.id,
-      items: [{ variantId: acmeVariant.id, quantity: 1 }],
+      items: [{ productId: acmeProductId, variantId: acmeVariant.id, quantity: 1 }],
     });
     expect(order.userId).toBeNull();
 
@@ -233,7 +247,7 @@ describe("confirmDeposit", () => {
     });
     const order = await OrderModel.createDraft({
       tenantId: shopco.id,
-      items: [{ variantId: variant.id, quantity: 1 }],
+      items: [{ productId: variant.productId, variantId: variant.id, quantity: 1 }],
     });
 
     await expect(
@@ -248,7 +262,7 @@ describe("confirmDeposit", () => {
   it("no pisa un pago ya APPROVED (no es PENDING) → DEPOSIT_NOT_CONFIRMABLE", async () => {
     const order = await OrderModel.createDraft({
       tenantId: acme.id,
-      items: [{ variantId: acmeVariant.id, quantity: 1 }],
+      items: [{ productId: acmeProductId, variantId: acmeVariant.id, quantity: 1 }],
     });
     await prisma.order.update({
       where: { id: order.id },

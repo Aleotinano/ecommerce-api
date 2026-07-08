@@ -31,7 +31,9 @@ beforeAll(async () => {
       status: "COMPLETED",
       total: 9000,
       paymentStatus: "PENDING",
-      orderItems: { create: [{ variantId: variant.id, quantity: 2, price: 4500 }] },
+      orderItems: {
+        create: [{ productId: variant.productId, variantId: variant.id, quantity: 2, price: 4500 }],
+      },
     },
   });
 });

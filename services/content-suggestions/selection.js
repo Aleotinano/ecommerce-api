@@ -14,7 +14,7 @@ const buildSalesByProduct = (completedOrders) => {
 
   for (const order of completedOrders) {
     for (const item of order.orderItems) {
-      const productId = item.variant?.productId;
+      const productId = item.productId ?? item.variant?.productId;
       if (!productId) continue;
       sales.set(productId, (sales.get(productId) ?? 0) + item.quantity);
     }

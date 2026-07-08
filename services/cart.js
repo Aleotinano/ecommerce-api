@@ -1,5 +1,6 @@
 import prisma from "../lib/prisma.js";
 import { createError } from "../helpers/error.js";
+import { resolveProductStock } from "../helpers/price.js";
 import { validateComboSelection } from "./combos.js";
 
 export const CartModel = {
@@ -9,9 +10,8 @@ export const CartModel = {
       include: {
         items: {
           include: {
-            variant: {
-              include: { product: true },
-            },
+            product: true,
+            variant: true,
           },
         },
       },
@@ -24,24 +24,50 @@ export const CartModel = {
     return cart;
   },
 
-  async add({ tenantId, id, variantId }) {
+  /**
+   * Agrega 1 unidad de un producto UNIDAD/VARIANTE al carrito. `variantId` es
+   * obligatorio si el producto es VARIANTE, se ignora si es UNIDAD. Para COMBO usar
+   * `addCombo`. El `findFirst` antes del create/update (dentro de la misma
+   * transacción) da un 409 de negocio legible; el índice único parcial de
+   * `CartItem` (ver prisma/schema.prisma) sigue siendo el backstop real contra
+   * condiciones de carrera.
+   */
+  async add({ tenantId, id, productId, variantId }) {
     return prisma.$transaction(async (tx) => {
-      const variant = await tx.productVariant.findFirst({
-        where: { id: variantId, tenantId },
-        include: { product: true },
+      const product = await tx.product.findFirst({
+        where: { id: productId, tenantId },
+        include: { variants: variantId != null ? { where: { id: variantId } } : false },
       });
 
-      if (!variant) {
-        throw createError("Variante no encontrada", "VARIANT_NOT_FOUND", 404);
+      if (!product) {
+        throw createError("Producto no encontrado", "PRODUCT_NOT_FOUND", 404);
       }
-
-      if (!variant.isActive || !variant.product?.isActive) {
+      if (!product.isActive) {
+        throw createError("Producto no disponible", "PRODUCT_NOT_AVAILABLE", 400);
+      }
+      if (product.type === "COMBO") {
         throw createError(
-          "Variante no disponible",
-          "VARIANT_NOT_AVAILABLE",
+          "Usá el endpoint de combos para agregar este producto",
+          "PRODUCT_IS_COMBO",
           400
         );
       }
+
+      let variant = null;
+      if (product.type === "VARIANTE") {
+        if (variantId == null) {
+          throw createError("Falta indicar la variante", "VARIANT_REQUIRED", 400);
+        }
+        variant = product.variants?.[0] ?? null;
+        if (!variant) {
+          throw createError("Variante no encontrada", "VARIANT_NOT_FOUND", 404);
+        }
+        if (!variant.isActive) {
+          throw createError("Variante no disponible", "VARIANT_NOT_AVAILABLE", 400);
+        }
+      }
+
+      const resolvedVariantId = product.type === "VARIANTE" ? variant.id : null;
 
       const cart = await tx.cart.upsert({
         where: { userId: id },
@@ -49,60 +75,60 @@ export const CartModel = {
         create: { userId: id, tenantId },
       });
 
-      const existingItem = await tx.cartItem.findUnique({
-        where: { cartId_variantId: { cartId: cart.id, variantId } },
+      const existingItem = await tx.cartItem.findFirst({
+        where: { cartId: cart.id, productId, variantId: resolvedVariantId },
       });
 
       const currentQuantity = existingItem?.quantity ?? 0;
+      const stock = resolveProductStock(product, variant) ?? 0;
 
-      if (currentQuantity + 1 > variant.stock) {
+      if (currentQuantity + 1 > stock) {
         throw createError("Stock insuficiente", "INSUFFICIENT_STOCK", 409);
       }
 
-      return tx.cartItem.upsert({
-        where: { cartId_variantId: { cartId: cart.id, variantId } },
-        update: { quantity: { increment: 1 } },
-        create: { cartId: cart.id, variantId, quantity: 1 },
-        include: {
-          variant: { include: { product: true } },
-        },
+      if (existingItem) {
+        return tx.cartItem.update({
+          where: { id: existingItem.id },
+          data: { quantity: { increment: 1 } },
+          include: { product: true, variant: true },
+        });
+      }
+
+      return tx.cartItem.create({
+        data: { cartId: cart.id, productId, variantId: resolvedVariantId, quantity: 1 },
+        include: { product: true, variant: true },
       });
     });
   },
 
   /**
    * Agrega un combo al carrito con la selección de componentes elegida por el
-   * cliente. La fila del carrito es UNA sola `CartItem` (variantId = variante
-   * default del producto-combo); la selección se re-valida server-side contra
-   * la whitelist (ver services/combos.js) y se guarda serializada en
-   * `comboSelection` — nunca se confía en ella al leerla, se vuelve a validar
-   * al pasar a orden. Volver a llamar esto reemplaza la selección anterior.
+   * cliente. La fila del carrito es UNA sola `CartItem` (variantId siempre null —
+   * un combo no tiene variante); la selección se re-valida server-side contra la
+   * whitelist (ver services/combos.js) y se guarda serializada en `comboSelection`
+   * — nunca se confía en ella al leerla, se vuelve a validar al pasar a orden.
+   * Volver a llamar esto reemplaza la selección anterior.
    */
-  async addCombo({ tenantId, id, comboVariantId, selection }) {
+  async addCombo({ tenantId, id, comboProductId, selection }) {
     return prisma.$transaction(async (tx) => {
-      const comboVariant = await tx.productVariant.findFirst({
-        where: { id: comboVariantId, tenantId },
-        include: { product: true },
+      const comboProduct = await tx.product.findFirst({
+        where: { id: comboProductId, tenantId },
       });
 
-      if (!comboVariant) {
-        throw createError("Variante no encontrada", "VARIANT_NOT_FOUND", 404);
+      if (!comboProduct) {
+        throw createError("Producto no encontrado", "PRODUCT_NOT_FOUND", 404);
       }
-      if (!comboVariant.isActive || !comboVariant.product?.isActive) {
-        throw createError(
-          "Variante no disponible",
-          "VARIANT_NOT_AVAILABLE",
-          400
-        );
+      if (!comboProduct.isActive) {
+        throw createError("Producto no disponible", "PRODUCT_NOT_AVAILABLE", 400);
       }
-      if (!comboVariant.product.isCombo) {
+      if (comboProduct.type !== "COMBO") {
         throw createError("El producto no es un combo", "PRODUCT_NOT_COMBO", 400);
       }
 
       const children = await validateComboSelection({
         tx,
         tenantId,
-        comboProduct: comboVariant.product,
+        comboProduct,
         selection,
         checkStock: true,
       });
@@ -113,26 +139,33 @@ export const CartModel = {
         create: { userId: id, tenantId },
       });
 
-      const existingItem = await tx.cartItem.findUnique({
-        where: { cartId_variantId: { cartId: cart.id, variantId: comboVariantId } },
+      const existingItem = await tx.cartItem.findFirst({
+        where: { cartId: cart.id, productId: comboProductId, variantId: null },
       });
       const currentQuantity = existingItem?.quantity ?? 0;
 
-      return tx.cartItem.upsert({
-        where: { cartId_variantId: { cartId: cart.id, variantId: comboVariantId } },
-        update: { quantity: currentQuantity + 1, comboSelection: children },
-        create: {
+      if (existingItem) {
+        return tx.cartItem.update({
+          where: { id: existingItem.id },
+          data: { quantity: currentQuantity + 1, comboSelection: children },
+          include: { product: true },
+        });
+      }
+
+      return tx.cartItem.create({
+        data: {
           cartId: cart.id,
-          variantId: comboVariantId,
+          productId: comboProductId,
+          variantId: null,
           quantity: 1,
           comboSelection: children,
         },
-        include: { variant: { include: { product: true } } },
+        include: { product: true },
       });
     });
   },
 
-  async remove({ tenantId, id, variantId }) {
+  async remove({ tenantId, id, productId, variantId }) {
     const cart = await prisma.cart.findFirst({
       where: { userId: id, tenantId },
       select: { id: true },
@@ -142,28 +175,25 @@ export const CartModel = {
       throw createError("El carrito está vacío", "EMPTY_CART", 404);
     }
 
-    const cartItem = await prisma.cartItem.findUnique({
-      where: { cartId_variantId: { cartId: cart.id, variantId } },
+    const item = await prisma.cartItem.findFirst({
+      where: { cartId: cart.id, productId, variantId: variantId ?? null },
     });
 
-    if (!cartItem) {
+    if (!item) {
       throw createError(
-        "No se encontró la variante en el carrito",
-        "VARIANT_NOT_IN_CART",
+        "No se encontró el producto en el carrito",
+        "PRODUCT_NOT_IN_CART",
         404
       );
     }
 
-    if (cartItem.quantity === 1) {
-      await prisma.cartItem.delete({
-        where: { cartId_variantId: { cartId: cart.id, variantId } },
-      });
-
+    if (item.quantity === 1) {
+      await prisma.cartItem.delete({ where: { id: item.id } });
       return { deleted: true };
     }
 
     const updated = await prisma.cartItem.update({
-      where: { cartId_variantId: { cartId: cart.id, variantId } },
+      where: { id: item.id },
       data: { quantity: { decrement: 1 } },
     });
 

@@ -20,6 +20,7 @@ const product = (over = {}) => ({
   isActive: true,
   createdAt: NOW,
   units: 0,
+  type: "VARIANTE",
   variants: [{ stock: 10, isActive: true }],
   ...over,
 });

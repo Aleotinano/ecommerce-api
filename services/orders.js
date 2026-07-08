@@ -1,6 +1,6 @@
 import prisma from "../lib/prisma.js";
 import { createError } from "../helpers/error.js";
-import { getProductPrice } from "../helpers/price.js";
+import { getProductPrice, resolveProductStock } from "../helpers/price.js";
 import { sendMail, buildOrderStatusEmail } from "../lib/mailer.js";
 import { logger } from "../lib/logger.js";
 import { validateComboSelection } from "./combos.js";
@@ -15,18 +15,12 @@ const orderItemsInclude = {
     orderItems: {
       where: { parentItemId: null },
       include: {
-        variant: {
-          include: {
-            product: true,
-          },
-        },
+        product: true,
+        variant: true,
         childItems: {
           include: {
-            variant: {
-              include: {
-                product: true,
-              },
-            },
+            product: true,
+            variant: true,
           },
         },
       },
@@ -38,106 +32,120 @@ const orderItemsInclude = {
 const roundMoney = (n) => Math.round(n * 100) / 100;
 
 /**
- * Valida una lista de items `{ variantId, quantity, comboSelection? }` contra el
- * catálogo del tenant y resuelve el precio SERVER-SIDE. Devuelve los items con
- * precio y el total. Compartido por la creación desde carrito, la creación
- * borrador del bot y la revisión admin (no se duplica la validación ni el
- * pricing). Corre dentro de una transacción.
+ * Valida una lista de items `{ productId, variantId?, quantity, note?, comboSelection? }`
+ * contra el catálogo del tenant y resuelve el precio SERVER-SIDE. Devuelve los items con
+ * precio y el total. Compartido por la creación desde carrito, la creación borrador del
+ * bot y la revisión admin (no se duplica la validación ni el pricing). Corre dentro de
+ * una transacción.
  *
- * Si `variant.product.isCombo`, el item DEBE traer `comboSelection` (la
- * selección de UNA unidad de combo, `[{ variantId, quantity }]`) — se valida
+ * `variantId` es obligatorio solo si el producto es VARIANTE (se resuelve contra sus
+ * propias variantes). Si el producto es COMBO, el item DEBE traer `comboSelection` (la
+ * selección de UNA unidad de combo, `[{ productId, variantId?, quantity }]`) — se valida
  * contra la whitelist (`services/combos.js`) y se multiplica por `item.quantity`
- * (cantidad de combos comprados) para obtener `comboChildren`, que el caller
- * inserta como `OrderItem` hijos con `price: 0` (el cobro ya está en el padre,
- * que cobra el precio fijo del combo). Ver docs/servicios/dominio/Combos.md.
+ * (cantidad de combos comprados) para obtener `comboChildren`, que el caller inserta
+ * como `OrderItem` hijos con `price: 0` (el cobro ya está en el padre, que cobra el
+ * precio fijo del combo). Ver docs/servicios/dominio/Combos.md.
  *
  * @param {object}  tx                 cliente de transacción de Prisma
  * @param {number}  tenantId
- * @param {Array}   items              `[{ variantId, quantity, note?, comboSelection? }]`
+ * @param {Array}   items              `[{ productId, variantId?, quantity, note?, comboSelection? }]`
  * @param {object}  [opts]
  * @param {boolean} [opts.checkStock]  si valida stock (carrito sí; bot a-pedido no)
  * @returns {Promise<{ pricedItems: Array, total: number }>}
  */
 async function priceItems(tx, tenantId, items, { checkStock = true } = {}) {
-  const variantIds = items.map((i) => i.variantId);
-  const variants = await tx.productVariant.findMany({
-    where: { id: { in: variantIds }, tenantId },
-    include: { product: true },
+  const productIds = items.map((i) => i.productId);
+  const products = await tx.product.findMany({
+    where: { id: { in: productIds }, tenantId },
+    include: { variants: true },
   });
-  const variantMap = new Map(variants.map((v) => [v.id, v]));
+  const productMap = new Map(products.map((p) => [p.id, p]));
 
   const pricedItems = [];
   for (const item of items) {
-    const variant = variantMap.get(item.variantId);
+    const product = productMap.get(item.productId);
 
-    if (!variant) {
-      throw createError("Variante no encontrada", "VARIANT_NOT_FOUND", 404);
+    if (!product) {
+      throw createError("Producto no encontrado", "PRODUCT_NOT_FOUND", 404);
     }
 
-    if (!variant.isActive) {
-      const error = createError(
-        "Variante no disponible",
-        "VARIANT_NOT_AVAILABLE",
-        400
-      );
-      error.details = { variant: variant.id };
-      throw error;
-    }
-
-    if (!variant.product?.isActive) {
+    if (!product.isActive) {
       const error = createError(
         "Producto no disponible",
         "PRODUCT_NOT_AVAILABLE",
         400
       );
-      error.details = { product: variant.product?.name ?? null };
+      error.details = { product: product.name };
       throw error;
     }
 
-    // Los combos no tienen stock propio (la variante default no lo representa):
-    // el chequeo de stock corre sobre los componentes elegidos, más abajo.
-    if (checkStock && !variant.product.isCombo && item.quantity > variant.stock) {
-      const error = createError(
-        "Stock insuficiente",
-        "INSUFFICIENT_STOCK",
-        409
-      );
-      error.details = {
-        variant: variant.id,
-        solicitado: item.quantity,
-        disponible: variant.stock,
-      };
-      throw error;
+    let variant = null;
+    if (product.type === "VARIANTE") {
+      variant = product.variants.find((v) => v.id === item.variantId);
+      if (!variant) {
+        throw createError("Variante no encontrada", "VARIANT_NOT_FOUND", 404);
+      }
+      if (!variant.isActive) {
+        const error = createError(
+          "Variante no disponible",
+          "VARIANT_NOT_AVAILABLE",
+          400
+        );
+        error.details = { variant: variant.id };
+        throw error;
+      }
     }
 
-    const price = getProductPrice(variant, variant.product);
+    // Los combos no tienen stock propio: el chequeo de stock corre sobre los
+    // componentes elegidos, más abajo (validateComboSelection).
+    if (checkStock && product.type !== "COMBO") {
+      const stock = resolveProductStock(product, variant) ?? 0;
+      if (item.quantity > stock) {
+        const error = createError(
+          "Stock insuficiente",
+          "INSUFFICIENT_STOCK",
+          409
+        );
+        error.details = {
+          productId: product.id,
+          variant: variant?.id ?? null,
+          solicitado: item.quantity,
+          disponible: stock,
+        };
+        throw error;
+      }
+    }
+
+    const price = getProductPrice(variant, product);
     if (price == null) {
       const error = createError(
         "Producto o variante sin precio",
         "PRODUCT_NO_PRICE",
         400
       );
-      error.details = { variant: variant.id };
+      error.details = { productId: product.id };
       throw error;
     }
 
     let comboChildren;
-    if (variant.product.isCombo) {
+    if (product.type === "COMBO") {
       const perCombo = await validateComboSelection({
         tx,
         tenantId,
-        comboProduct: variant.product,
+        comboProduct: product,
         selection: item.comboSelection,
         checkStock,
       });
       comboChildren = perCombo.map((child) => ({
+        productId: child.productId,
         variantId: child.variantId,
         quantity: child.quantity * item.quantity,
       }));
     }
 
     pricedItems.push({
-      variantId: item.variantId,
+      productId: item.productId,
+      variantId: variant?.id ?? null,
       quantity: item.quantity,
       price: Number(price),
       note: item.note ?? null,
@@ -157,8 +165,9 @@ async function priceItems(tx, tenantId, items, { checkStock = true } = {}) {
  */
 async function insertOrderItems(tx, orderId, pricedItems) {
   await tx.orderItem.createMany({
-    data: pricedItems.map(({ variantId, quantity, price, note }) => ({
+    data: pricedItems.map(({ productId, variantId, quantity, price, note }) => ({
       orderId,
+      productId,
       variantId,
       quantity,
       price,
@@ -178,6 +187,7 @@ async function insertOrderItems(tx, orderId, pricedItems) {
     for (const child of pricedItems[index].comboChildren ?? []) {
       childrenData.push({
         orderId,
+        productId: child.productId,
         variantId: child.variantId,
         quantity: child.quantity,
         price: 0,
@@ -191,19 +201,28 @@ async function insertOrderItems(tx, orderId, pricedItems) {
   }
 }
 
+// Stock real a validar/descontar al completar: para UNIDAD, Product.stock; para
+// VARIANTE, ProductVariant.stock; COMBO no debería llegar acá (sus childItems ya
+// reemplazan la línea padre en `stockLines`, ver `updateOrderStatus`).
+async function decrementLineStock(tx, line) {
+  if (line.product?.type === "VARIANTE" && line.variantId != null) {
+    await tx.productVariant.update({
+      where: { id: line.variantId },
+      data: { stock: { decrement: line.quantity } },
+    });
+  } else if (line.product?.type === "UNIDAD") {
+    await tx.product.update({
+      where: { id: line.productId },
+      data: { stock: { decrement: line.quantity } },
+    });
+  }
+}
+
 export const OrderModel = {
   async create({ tenantId, userId }) {
     const cart = await prisma.cart.findFirst({
       where: { userId, tenantId },
-      include: {
-        items: {
-          include: {
-            variant: {
-              include: { product: true },
-            },
-          },
-        },
-      },
+      include: { items: true },
     });
 
     if (!cart || cart.items.length === 0) {
@@ -215,9 +234,9 @@ export const OrderModel = {
         tx,
         tenantId,
         cart.items.map((item) => ({
-          variantId: item.variantId,
+          productId: item.productId,
+          variantId: item.variantId ?? undefined,
           quantity: item.quantity,
-          note: item.note,
           comboSelection: item.comboSelection ?? undefined,
         }))
       );
@@ -310,9 +329,7 @@ export const OrderModel = {
         {
           orderItems: {
             some: {
-              variant: {
-                product: { name: { contains: search, mode: "insensitive" } },
-              },
+              product: { name: { contains: search, mode: "insensitive" } },
             },
           },
         },
@@ -420,8 +437,8 @@ export const OrderModel = {
       });
 
     // Líneas que representan stock REAL a validar/descontar: para un combo, sus
-    // hijos (los componentes elegidos); para una línea normal, ella misma. La
-    // variante default del combo-padre nunca tiene stock propio.
+    // hijos (los componentes elegidos); para una línea normal, ella misma. El
+    // combo-padre nunca tiene stock propio.
     const stockLines = order.orderItems.flatMap((item) =>
       item.childItems?.length ? item.childItems : [item]
     );
@@ -429,16 +446,18 @@ export const OrderModel = {
     const updated = await prisma.$transaction(async (tx) => {
       if (status === "COMPLETED") {
         for (const line of stockLines) {
-          if (line.quantity > line.variant.stock) {
+          const stock = resolveProductStock(line.product, line.variant) ?? 0;
+          if (line.quantity > stock) {
             const error = createError(
               "Stock insuficiente al completar la orden",
               "INSUFFICIENT_STOCK",
               409
             );
             error.details = {
-              variant: line.variant.id,
+              productId: line.productId,
+              variant: line.variantId,
               solicitado: line.quantity,
-              disponible: line.variant.stock,
+              disponible: stock,
             };
             throw error;
           }
@@ -453,10 +472,7 @@ export const OrderModel = {
 
       if (status === "COMPLETED") {
         for (const line of stockLines) {
-          await tx.productVariant.update({
-            where: { id: line.variantId },
-            data: { stock: { decrement: line.quantity } },
-          });
+          await decrementLineStock(tx, line);
         }
       }
 
@@ -540,21 +556,23 @@ export const OrderModel = {
 
         // Re-resolvemos TODOS los items (con las cantidades/notas nuevas donde
         // las haya) para recomputar precio y total server-side. Sin chequeo de
-        // stock: la orden ya existe y Desvare es a-pedido. Para una línea de
-        // combo, `comboSelection` se reconstruye a partir de sus hijos actuales
+        // stock: la orden ya existe y es a-pedido. Para una línea de combo,
+        // `comboSelection` se reconstruye a partir de sus hijos actuales
         // (per-unidad-de-combo) — v1 solo permite reescalar cantidades vía
         // review, no agregar/quitar componentes del combo (ver [[Combos]]).
         const desired = order.orderItems.map((it) => {
           const edit = items.find((e) => e.id === it.id);
           return {
-            variantId: it.variantId,
+            productId: it.productId,
+            variantId: it.variantId ?? undefined,
             quantity: edit ? edit.quantity : it.quantity,
             // "note" in edit distingue "no la mandó" (mantener la actual) de
             // "la mandó en null" (borrarla).
             note: edit && "note" in edit ? edit.note : it.note,
             comboSelection: it.childItems?.length
               ? it.childItems.map((c) => ({
-                  variantId: c.variantId,
+                  productId: c.productId,
+                  variantId: c.variantId ?? undefined,
                   quantity: c.quantity / it.quantity,
                 }))
               : undefined,
@@ -578,7 +596,7 @@ export const OrderModel = {
 
           for (const child of pi.comboChildren ?? []) {
             const existingChild = original.childItems.find(
-              (c) => c.variantId === child.variantId
+              (c) => c.productId === child.productId && c.variantId === child.variantId
             );
             if (existingChild) {
               await tx.orderItem.update({
@@ -654,13 +672,13 @@ export const OrderModel = {
 
   /**
    * Creación de orden BORRADOR por el bot de WhatsApp. Origen BOT, sin revisar.
-   * El bot solo propone `items` ya resueltos a `{ variantId, quantity, note? }`;
-   * acá el server valida catálogo/precio y resuelve TODO lo monetario y la
-   * seña. El bot nunca toca `paymentStatus`, `depositAmount` ni `tenantId`.
+   * El bot solo propone `items` ya resueltos a `{ productId, variantId?, quantity,
+   * note? }`; acá el server valida catálogo/precio y resuelve TODO lo monetario y
+   * la seña. El bot nunca toca `paymentStatus`, `depositAmount` ni `tenantId`.
    *
    * @param {object} p
    * @param {number} p.tenantId        resuelto del phone_number_id, nunca del LLM
-   * @param {Array}  p.items           `[{ variantId, quantity, note? }]`
+   * @param {Array}  p.items           `[{ productId, variantId?, quantity, note? }]`
    * @param {string|null} [p.contactPhone]   wa_id del cliente
    * @param {string|null} [p.contactName]
    * @param {string|null} [p.creationContext] snapshot de la conversación
@@ -676,18 +694,19 @@ export const OrderModel = {
       throw createError("La orden no tiene items", "EMPTY_ORDER", 400);
     }
 
-    // Merge de items repetidos por variante + nota: el bot podría proponer la
-    // misma variante en dos renglones. Solo se suma la cantidad si la nota
+    // Merge de items repetidos por producto+variante+nota: el bot podría proponer
+    // el mismo producto en dos renglones. Solo se suma la cantidad si la nota
     // coincide (normalizada) — dos líneas con observaciones distintas (ej.
     // "sin nueces" vs "dedicatoria: Juan") deben quedar como filas separadas.
     const normalizeNote = (note) => (note ?? "").trim();
     const mergedMap = new Map();
     for (const it of items) {
       const note = normalizeNote(it.note);
-      const key = `${it.variantId}::${note}`;
+      const key = `${it.productId}::${it.variantId ?? ""}::${note}`;
       const existing = mergedMap.get(key);
       mergedMap.set(key, {
-        variantId: it.variantId,
+        productId: it.productId,
+        variantId: it.variantId ?? undefined,
         note: note || null,
         quantity: (existing?.quantity ?? 0) + it.quantity,
       });

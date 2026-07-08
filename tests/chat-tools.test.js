@@ -17,6 +17,7 @@ beforeAll(async () => {
       tenantId: acme.id,
       name: "Remera agotada",
       price: 5000,
+      type: "VARIANTE",
       variants: {
         create: {
           tenantId: acme.id,

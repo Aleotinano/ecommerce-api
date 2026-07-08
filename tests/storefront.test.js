@@ -152,19 +152,22 @@ describe("storefront customer auth", () => {
 
 describe("storefront cart and orders (authenticated)", () => {
   let bearer;
+  let productId;
   let variantId;
 
   beforeAll(() => {
     const customer = acme.users.find((u) => u.role === "CUSTOMER");
     bearer = bearerFor(customer);
+    productId = acme.categories[0].products[0].id;
     variantId = acme.categories[0].products[0].variants[0].id;
   });
 
-  it("POST /store/cart/:variantId → 201", async () => {
+  it("POST /store/cart/:productId → 201", async () => {
     const res = await request(app)
-      .post(`/store/cart/${variantId}`)
+      .post(`/store/cart/${productId}`)
       .set("X-Tenant-Slug", "acme")
-      .set("Authorization", bearer);
+      .set("Authorization", bearer)
+      .send({ variantId });
 
     expect(res.status).toBe(201);
   });

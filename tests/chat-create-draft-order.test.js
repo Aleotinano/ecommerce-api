@@ -43,6 +43,7 @@ beforeAll(async () => {
       tenantId: acme.id,
       name: "Buzo",
       price: 12000,
+      type: "VARIANTE",
       variants: {
         create: [
           { tenantId: acme.id, color: "negro", size: "M", price: 12000, stock: 5, sku: "ACM-BUZ-NM" },

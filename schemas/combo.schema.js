@@ -1,15 +1,21 @@
 import { z } from "zod";
 
-// Selección del cliente al armar un combo (POST /cart/combo/:variantId). El
+// Selección del cliente al armar un combo (POST /cart/combo/:productId). El
 // backend re-valida contra la whitelist del combo — ver services/combos.js.
+// `variantId` solo aplica si el producto elegido es VARIANTE.
 export const comboSelectionBody = z.object({
   selection: z
     .array(
       z.object({
+        productId: z.coerce
+          .number({ invalid_type_error: "El ID de producto debe ser un número" })
+          .int("El ID de producto debe ser un número entero")
+          .positive("ID de producto inválido"),
         variantId: z.coerce
           .number({ invalid_type_error: "El ID de variante debe ser un número" })
           .int("El ID de variante debe ser un número entero")
-          .positive("ID de variante inválido"),
+          .positive("ID de variante inválido")
+          .optional(),
         quantity: z.coerce
           .number({ invalid_type_error: "La cantidad debe ser un número" })
           .int("La cantidad debe ser un número entero")

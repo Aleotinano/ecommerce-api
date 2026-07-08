@@ -14,20 +14,16 @@ export const Data = async ({ tenantId, currentStart, now, previousStart }) => {
       include: {
         orderItems: {
           include: {
-            variant: {
+            product: {
               include: {
-                product: {
-                  include: {
-                    category: {
-                      select: { id: true, name: true },
-                    },
-                    variants: {
-                      select: {
-                        id: true,
-                        stock: true,
-                        isActive: true,
-                      },
-                    },
+                category: {
+                  select: { id: true, name: true },
+                },
+                variants: {
+                  select: {
+                    id: true,
+                    stock: true,
+                    isActive: true,
                   },
                 },
               },

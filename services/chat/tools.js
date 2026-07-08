@@ -16,11 +16,14 @@
  *    (hoy WhatsApp, donde el cliente es el wa_id y hay historial).
  *  - Respeta `TenantConfig.showOutOfStock`: si es false, oculta productos y
  *    variantes sin stock.
+ *  - Combos (`product.type === "COMBO"`): el bot todavía no los vende — se
+ *    listan/describen, pero `createDraftOrder` los rechaza con un mensaje
+ *    amigable. Ver docs/servicios/dominio/Combos.md.
  */
 import { ProductModel } from "../productos.js";
 import { CategoryModel } from "../categories.js";
 import { OrderModel } from "../orders.js";
-import { getProductPrice } from "../../helpers/price.js";
+import { getProductPrice, resolveProductStock } from "../../helpers/price.js";
 import {
   TOOL_DEFINITIONS,
   AUTHENTICATED_TOOLS,
@@ -50,15 +53,32 @@ const buildCreationContext = (history = [], message = "") => {
   return lines.join("\n").slice(0, 4000) || null;
 };
 
-/** ¿El producto tiene al menos una variante con stock? */
-const hasStock = (product) =>
-  (product.variants ?? []).some((v) => v.stock > 0);
+/**
+ * ¿Hay algo para vender de este producto? VARIANTE mira si alguna variante activa
+ * tiene stock; UNIDAD mira `Product.stock`. COMBO no tiene stock propio — se
+ * reporta siempre disponible en v1 (el bot igual no lo vende, ver `createDraftOrder`).
+ */
+const hasStock = (product) => {
+  if (product.type === "VARIANTE") {
+    return (product.variants ?? []).some((v) => v.isActive && v.stock > 0);
+  }
+  if (product.type === "UNIDAD") {
+    return (resolveProductStock(product, null) ?? 0) > 0;
+  }
+  return true;
+};
 
-/** Precio efectivo a nivel producto: el del producto o el de su primera variante. */
+/**
+ * Precio para listados (sin variante puntual elegida todavía): UNIDAD/COMBO usan
+ * `Product.price` directo; VARIANTE muestra el precio de la primera variante con
+ * precio propio (referencial — el precio real se resuelve por variante elegida).
+ */
 const effectiveProductPrice = (product) => {
-  if (product.price != null) return product.price;
-  const priced = (product.variants ?? []).find((v) => v.price != null);
-  return priced?.price ?? null;
+  if (product.type === "VARIANTE") {
+    const priced = (product.variants ?? []).find((v) => v.price != null);
+    return priced?.price ?? null;
+  }
+  return product.price ?? null;
 };
 
 /** Carga un mapa id->nombre de categorias del tenant (para etiquetar productos). */
@@ -126,6 +146,24 @@ export const buildToolContext = ({ tenantId, user, config, channel }) => {
 
       const product = await ProductModel.getById({ tenantId, id: productId });
 
+      if (product.type !== "VARIANTE") {
+        const disponible = hasStock(product);
+        if (!disponible && !showOutOfStock) {
+          return {
+            name: product.name,
+            description: product.description ?? null,
+            precio: effectiveProductPrice(product),
+            disponible: false,
+          };
+        }
+        return {
+          name: product.name,
+          description: product.description ?? null,
+          precio: effectiveProductPrice(product),
+          disponible,
+        };
+      }
+
       let variantes = (product.variants ?? []).map((v) => ({
         color: v.color ?? null,
         size: v.size ?? null,
@@ -151,8 +189,17 @@ export const buildToolContext = ({ tenantId, user, config, channel }) => {
       }
 
       const product = await ProductModel.getById({ tenantId, id: productId });
-      const variants = product.variants ?? [];
 
+      if (product.type !== "VARIANTE") {
+        const stock = resolveProductStock(product, null);
+        const disponible = product.type === "COMBO" ? true : (stock ?? 0) > 0;
+        if (disponible || showOutOfStock) {
+          return stock != null ? { disponible, stock } : { disponible };
+        }
+        return { disponible };
+      }
+
+      const variants = product.variants ?? [];
       const eq = (a, b) =>
         b == null || String(a ?? "").toLowerCase() === String(b).toLowerCase();
 
@@ -203,7 +250,7 @@ export const buildToolContext = ({ tenantId, user, config, channel }) => {
           total: order.total,
           creada: order.createdAt,
           items: (order.orderItems ?? []).map((it) => ({
-            producto: it.variant?.product?.name ?? null,
+            producto: it.product?.name ?? null,
             cantidad: it.quantity,
           })),
         };
@@ -225,8 +272,10 @@ export const buildToolContext = ({ tenantId, user, config, channel }) => {
         return { error: "Decime al menos un producto y su cantidad." };
       }
 
-      // Resolvemos productId(+color/size) -> variantId server-side, scopeado al
-      // tenant. El bot solo propone; el server valida catalogo y desambigua.
+      // Resolvemos productId(+color/size) -> { productId, variantId? } server-side,
+      // scopeado al tenant. El bot solo propone; el server valida catalogo y
+      // desambigua. VARIANTE exige matchear una única variante; UNIDAD no necesita
+      // variante en absoluto.
       const resolved = [];
       for (const raw of items) {
         const { productId, quantity, color, size, note } = raw ?? {};
@@ -249,10 +298,17 @@ export const buildToolContext = ({ tenantId, user, config, channel }) => {
 
         // Combos: el bot todavía no arma combos (requiere elegir componentes
         // dentro de un min/max) — se coordina por otro canal. Ver [[Combos]].
-        if (product.isCombo) {
+        if (product.type === "COMBO") {
           return {
             error: `"${product.name}" es un combo armable — por ahora esos se arman en el local, contactanos para coordinarlo.`,
           };
+        }
+
+        const noteValue = typeof note === "string" ? note.slice(0, 150) : null;
+
+        if (product.type === "UNIDAD") {
+          resolved.push({ productId, quantity, note: noteValue });
+          continue;
         }
 
         const variants = product.variants ?? [];
@@ -271,9 +327,10 @@ export const buildToolContext = ({ tenantId, user, config, channel }) => {
         }
 
         resolved.push({
+          productId,
           variantId: candidates[0].id,
           quantity,
-          note: typeof note === "string" ? note.slice(0, 150) : null,
+          note: noteValue,
         });
       }
 

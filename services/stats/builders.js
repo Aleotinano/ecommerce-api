@@ -1,6 +1,7 @@
 ﻿import { ORDER_STATUS_KEYS } from "./constants.js";
 import { getOrderUnits, isCompletedOrder } from "./order-helpers.js";
 import { round } from "./utils.js";
+import { resolveProductStock } from "../../helpers/price.js";
 
 const STATUS_META = {
   COMPLETED: { label: "Completadas", color: "green" },
@@ -100,7 +101,7 @@ export const buildRevenueByCategory = (orders) => {
     }
 
     for (const item of order.orderItems) {
-      const category = item.variant.product?.category;
+      const category = item.product?.category;
       const key = category?.id ?? "without-category";
       const existing = categories.get(key) ?? {
         categoryId: category?.id ?? null,
@@ -134,35 +135,56 @@ export const buildRevenueByCategory = (orders) => {
   };
 };
 
+// Bajo/sin stock por tipo: VARIANTE mira cada variante activa (mismo criterio de
+// siempre, umbral por variante); UNIDAD mira `Product.stock`; COMBO no tiene stock
+// propio (depende de sus componentes) — no aplican etiquetas de stock, ver
+// docs/servicios/dominio/Combos.md.
 const resolveProductLabel = ({ product, metrics, isTopSeller, lowStockThreshold }) => {
-  const variantsCount = product.variants.length;
-  const activeVariants = product.variants.filter((variant) => variant.isActive);
-  const hasLowStock = activeVariants.some(
-    (variant) => variant.stock > 0 && variant.stock <= lowStockThreshold
-  );
-  const isOutOfStock =
-    activeVariants.length > 0 && activeVariants.every((variant) => variant.stock <= 0);
-
   if (isTopSeller && metrics.unitsSold > 0) {
     return { key: "best_seller", label: "mas vendido", tone: "danger" };
   }
 
-  if (variantsCount === 0) {
-    return { key: "no_variants", label: "sin variantes", tone: "warning" };
+  if (product.type === "COMBO") {
+    if (metrics.unitsSold === 0 && product.isActive) {
+      return { key: "forgotten", label: "olvidado", tone: "info" };
+    }
+    return { key: "stable", label: "estable", tone: "neutral" };
   }
 
-  if (isOutOfStock) {
+  if (product.type === "VARIANTE") {
+    const activeVariants = product.variants.filter((variant) => variant.isActive);
+    const hasLowStock = activeVariants.some(
+      (variant) => variant.stock > 0 && variant.stock <= lowStockThreshold
+    );
+    const isOutOfStock =
+      activeVariants.length > 0 && activeVariants.every((variant) => variant.stock <= 0);
+
+    if (activeVariants.length === 0) {
+      return { key: "no_variants", label: "sin variantes", tone: "warning" };
+    }
+    if (isOutOfStock) {
+      return { key: "out_of_stock", label: "sin stock", tone: "danger" };
+    }
+    if (metrics.unitsSold === 0 && product.isActive) {
+      return { key: "forgotten", label: "olvidado", tone: "info" };
+    }
+    if (hasLowStock) {
+      return { key: "low_stock", label: "stock bajo", tone: "warning" };
+    }
+    return { key: "stable", label: "estable", tone: "neutral" };
+  }
+
+  // UNIDAD
+  const stock = resolveProductStock(product, null) ?? 0;
+  if (stock <= 0) {
     return { key: "out_of_stock", label: "sin stock", tone: "danger" };
   }
-
   if (metrics.unitsSold === 0 && product.isActive) {
     return { key: "forgotten", label: "olvidado", tone: "info" };
   }
-
-  if (hasLowStock) {
+  if (stock <= lowStockThreshold) {
     return { key: "low_stock", label: "stock bajo", tone: "warning" };
   }
-
   return { key: "stable", label: "estable", tone: "neutral" };
 };
 
@@ -179,7 +201,7 @@ export const buildProductRanking = ({ orders, allProducts, lowStockThreshold }) 
     }
 
     for (const item of order.orderItems) {
-      const product = item.variant.product;
+      const product = item.product;
 
       if (!product) {
         continue;

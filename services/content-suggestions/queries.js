@@ -19,6 +19,7 @@ export const loadSelectionData = async ({ tenantId, windowStart, now }) => {
         orderItems: {
           select: {
             quantity: true,
+            productId: true,
             variant: { select: { productId: true } },
           },
         },
@@ -31,6 +32,8 @@ export const loadSelectionData = async ({ tenantId, windowStart, now }) => {
         name: true,
         isActive: true,
         createdAt: true,
+        type: true,
+        stock: true,
         variants: {
           select: { stock: true, isActive: true },
         },

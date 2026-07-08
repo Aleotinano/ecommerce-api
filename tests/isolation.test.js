@@ -62,16 +62,17 @@ describe("isolation cross-tenant", () => {
     expect(res.body.error.code).toBe("PRODUCT_NOT_FOUND");
   });
 
-  it("acme no puede agregar variante de shopco al carrito", async () => {
-    const shopcoVariantId =
-      shopco.categories[0].products[0].variants[0].id;
+  it("acme no puede agregar producto de shopco al carrito", async () => {
+    const shopcoProductId = shopco.categories[0].products[0].id;
+    const shopcoVariantId = shopco.categories[0].products[0].variants[0].id;
 
     const res = await request(app)
-      .post(`/cart/${shopcoVariantId}`)
-      .set("Cookie", acmeCookie);
+      .post(`/cart/${shopcoProductId}`)
+      .set("Cookie", acmeCookie)
+      .send({ variantId: shopcoVariantId });
 
     expect(res.status).toBe(404);
-    expect(res.body.error.code).toBe("VARIANT_NOT_FOUND");
+    expect(res.body.error.code).toBe("PRODUCT_NOT_FOUND");
   });
 
   it("GET sin cookie → 401 (catálogo ya no es público)", async () => {

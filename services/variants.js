@@ -23,6 +23,26 @@ const generateUniqueVariantSku = async ({
   return sku;
 };
 
+const ensureProductIsVariante = async (tenantId, productId) => {
+  const product = await prisma.product.findFirst({
+    where: { id: productId, tenantId },
+    select: { id: true, name: true, type: true },
+  });
+
+  if (!product) {
+    throw createError("Producto no encontrado", "PRODUCT_NOT_FOUND", 404);
+  }
+  if (product.type !== "VARIANTE") {
+    throw createError(
+      "Solo un producto de tipo VARIANTE admite variantes",
+      "PRODUCT_NOT_VARIANTE_TYPE",
+      400
+    );
+  }
+
+  return product;
+};
+
 export const VariantModel = {
   async getVariants({ tenantId, productId }) {
     const product = await prisma.product.findFirst({
@@ -62,14 +82,7 @@ export const VariantModel = {
     imgPublicId,
     isActive,
   }) {
-    const product = await prisma.product.findFirst({
-      where: { id: productId, tenantId },
-      select: { name: true },
-    });
-
-    if (!product) {
-      throw createError("Producto no encontrado", "PRODUCT_NOT_FOUND", 404);
-    }
+    const product = await ensureProductIsVariante(tenantId, productId);
 
     const sku = await generateUniqueVariantSku({
       tenantId,
@@ -96,7 +109,14 @@ export const VariantModel = {
     { tenantId, productId, variantId },
     { color, size, price, stock, img, imgPublicId, isActive }
   ) {
-    await this.getByIdForManagement({ tenantId, productId, variantId });
+    await ensureProductIsVariante(tenantId, productId);
+    const existing = await this.getByIdForManagement({ tenantId, productId, variantId });
+
+    // Desactivar la última variante activa de un producto VARIANTE lo dejaría
+    // invendible — misma guarda que en `deleteVariant`.
+    if (isActive === false && existing.isActive) {
+      await ensureNotLastActiveVariant({ tenantId, productId, variantId });
+    }
 
     const updateData = Object.fromEntries(
       Object.entries({
@@ -117,7 +137,35 @@ export const VariantModel = {
   },
 
   async deleteVariant({ tenantId, productId, variantId }) {
+    await ensureProductIsVariante(tenantId, productId);
     await this.getByIdForManagement({ tenantId, productId, variantId });
+    await ensureNotLastActiveVariant({ tenantId, productId, variantId });
+
     return prisma.productVariant.delete({ where: { id: variantId } });
   },
 };
+
+// Bloquea borrar/desactivar la última variante ACTIVA de un producto VARIANTE: lo
+// dejaría sin forma de venderse (a diferencia de UNIDAD/COMBO, un VARIANTE no tiene
+// stock/precio propio como respaldo). Gap detectado durante el rediseño de tipos.
+async function ensureNotLastActiveVariant({ tenantId, productId, variantId }) {
+  const activeCount = await prisma.productVariant.count({
+    where: { tenantId, productId, isActive: true },
+  });
+
+  const targetIsTheOnlyActiveOne = activeCount === 1;
+  if (!targetIsTheOnlyActiveOne) return;
+
+  const target = await prisma.productVariant.findUnique({
+    where: { id: variantId },
+    select: { isActive: true },
+  });
+
+  if (target?.isActive) {
+    throw createError(
+      "No se puede borrar/desactivar la última variante activa de un producto VARIANTE",
+      "CANNOT_DELETE_LAST_VARIANT",
+      409
+    );
+  }
+}

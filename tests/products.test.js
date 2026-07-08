@@ -65,6 +65,7 @@ describe("Productos con precios en BD", () => {
         name: "Remera premium",
         description: "Remera con precio global",
         price: 3500,
+        type: "UNIDAD",
       },
     });
 
@@ -79,6 +80,7 @@ describe("Productos con precios en BD", () => {
           tenantId: tenant.id,
           name: "Producto sin precio",
           description: "Sin precio inicial",
+          type: "UNIDAD",
         },
       })
     ).rejects.toThrow();
@@ -90,6 +92,7 @@ describe("Productos con precios en BD", () => {
         tenantId: tenant.id,
         name: "Producto actualizable",
         price: 1000,
+        type: "UNIDAD",
       },
     });
 
@@ -107,6 +110,7 @@ describe("Productos con precios en BD", () => {
         tenantId: tenant.id,
         name: "Producto consulta",
         price: 4200,
+        type: "UNIDAD",
       },
     });
 
@@ -123,6 +127,7 @@ describe("Productos con precios en BD", () => {
         tenantId: tenant.id,
         name: "Producto multi-precio",
         price: 2000,
+        type: "VARIANTE",
       },
     });
 
@@ -144,32 +149,54 @@ describe("Productos con precios en BD", () => {
   });
 });
 
-describe("Producto sin variantes reales (preset Mesa Dulce)", () => {
-  it("crear con variants: [] y stock → crea 1 ProductVariant default (color/size null)", async () => {
+describe("Producto UNIDAD (preset Mesa Dulce, sin variantes)", () => {
+  it("crear con type=UNIDAD y stock → stock/precio viven en Product, sin ProductVariant", async () => {
     const product = await ProductModel.create({
       tenantId: tenant.id,
       name: "Torta de chocolate",
       description: "Torta entera, sin variantes",
       price: 8000,
-      variants: [],
+      type: "UNIDAD",
       stock: 5,
     });
 
-    expect(product.variants).toHaveLength(1);
-    expect(product.variants[0].color).toBeNull();
-    expect(product.variants[0].size).toBeNull();
-    expect(product.variants[0].stock).toBe(5);
-    expect(product.variants[0].sku).toBeDefined();
+    expect(product.type).toBe("UNIDAD");
+    expect(product.stock).toBe(5);
+    expect(product.variants).toHaveLength(0);
   });
 
-  it("crear con variants: [] y sin stock → falla con STOCK_REQUIRED", async () => {
+  it("crear type=UNIDAD y sin stock → falla con STOCK_REQUIRED", async () => {
     await expect(
       ProductModel.create({
         tenantId: tenant.id,
         name: "Torta sin stock",
         price: 8000,
-        variants: [],
+        type: "UNIDAD",
       })
     ).rejects.toMatchObject({ code: "STOCK_REQUIRED" });
+  });
+
+  it("crear type=UNIDAD con variants → falla con VARIANTS_NOT_ALLOWED", async () => {
+    await expect(
+      ProductModel.create({
+        tenantId: tenant.id,
+        name: "Torta con variantes de más",
+        price: 8000,
+        type: "UNIDAD",
+        stock: 5,
+        variants: [{ color: "#fff", stock: 1, sku: "X" }],
+      })
+    ).rejects.toMatchObject({ code: "VARIANTS_NOT_ALLOWED" });
+  });
+
+  it("crear type=VARIANTE sin variantes → falla con VARIANTS_REQUIRED", async () => {
+    await expect(
+      ProductModel.create({
+        tenantId: tenant.id,
+        name: "Remera sin variantes",
+        price: 5000,
+        type: "VARIANTE",
+      })
+    ).rejects.toMatchObject({ code: "VARIANTS_REQUIRED" });
   });
 });

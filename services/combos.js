@@ -1,17 +1,24 @@
 import { createError } from "../helpers/error.js";
+import { resolveProductStock } from "../helpers/price.js";
+
+const selectionKey = (s) => `${s.productId}::${s.variantId ?? ""}`;
 
 /**
- * Valida la selección de un cliente para UN combo (`comboProduct.isCombo === true`)
+ * Valida la selección de un cliente para UN combo (`comboProduct.type === "COMBO"`)
  * contra su whitelist (`ComboAllowedProduct`) y devuelve la selección normalizada
- * `[{ variantId, quantity }]` (agrupada por variante, cantidades para UNA unidad de
+ * `[{ productId, variantId, quantity }]` (agrupada, cantidades para UNA unidad de
  * combo). Compartido por `services/cart.js` (agregar al carrito) y
  * `services/orders.js` (`priceItems`, al pasar a orden) para no duplicar la regla.
+ *
+ * Cada componente elegido es un producto UNIDAD o VARIANTE de la whitelist (nunca
+ * COMBO — sin anidamiento). Para VARIANTE, `variantId` es obligatorio en la selección;
+ * para UNIDAD no aplica (se ignora si viene).
  *
  * @param {object} p
  * @param {object} p.tx            cliente de transacción de Prisma
  * @param {number} p.tenantId
  * @param {object} p.comboProduct  producto combo (con id, comboMinItems, comboMaxItems)
- * @param {Array}  p.selection     `[{ variantId, quantity }]`
+ * @param {Array}  p.selection     `[{ productId, variantId?, quantity }]`
  * @param {boolean} p.checkStock   si valida stock de cada componente elegido
  */
 export async function validateComboSelection({
@@ -29,7 +36,11 @@ export async function validateComboSelection({
     );
   }
 
-  if (selection.some((s) => !Number.isInteger(s.quantity) || s.quantity <= 0)) {
+  if (
+    selection.some(
+      (s) => !Number.isInteger(s.quantity) || s.quantity <= 0 || !Number.isInteger(s.productId)
+    )
+  ) {
     throw createError(
       "Cantidad inválida en la selección del combo",
       "COMBO_SELECTION_OUT_OF_RANGE",
@@ -37,13 +48,20 @@ export async function validateComboSelection({
     );
   }
 
-  // Agrupa por variante, por si la selección repite la misma variante en dos filas.
-  const byVariant = new Map();
+  // Agrupa por producto+variante, por si la selección repite la misma línea.
+  const grouped = new Map();
   for (const s of selection) {
-    byVariant.set(s.variantId, (byVariant.get(s.variantId) ?? 0) + s.quantity);
+    const key = selectionKey(s);
+    const existing = grouped.get(key);
+    grouped.set(key, {
+      productId: s.productId,
+      variantId: s.variantId ?? null,
+      quantity: (existing?.quantity ?? 0) + s.quantity,
+    });
   }
+  const lines = [...grouped.values()];
 
-  const totalQty = [...byVariant.values()].reduce((sum, q) => sum + q, 0);
+  const totalQty = lines.reduce((sum, l) => sum + l.quantity, 0);
   const { comboMinItems, comboMaxItems } = comboProduct;
   if (
     (comboMinItems != null && totalQty < comboMinItems) ||
@@ -58,29 +76,25 @@ export async function validateComboSelection({
     throw error;
   }
 
-  const variantIds = [...byVariant.keys()];
-  const variants = await tx.productVariant.findMany({
-    where: { id: { in: variantIds }, tenantId },
-    include: { product: true },
+  const productIds = [...new Set(lines.map((l) => l.productId))];
+  const products = await tx.product.findMany({
+    where: { id: { in: productIds }, tenantId },
+    include: { variants: true },
   });
-  const variantMap = new Map(variants.map((v) => [v.id, v]));
+  const productMap = new Map(products.map((p) => [p.id, p]));
 
   const allowed = await tx.comboAllowedProduct.findMany({
     where: { comboProductId: comboProduct.id, tenantId, isActive: true },
   });
   const allowedByProduct = new Map(allowed.map((a) => [a.allowedProductId, a]));
 
-  // Cantidad total por PRODUCTO (para min/maxQty de la whitelist, no por variante).
+  // Cantidad total por PRODUCTO (para min/maxQty de la whitelist, sin importar variante).
   const qtyByProduct = new Map();
-  for (const [variantId, qty] of byVariant) {
-    const variant = variantMap.get(variantId);
-    if (!variant) {
-      throw createError("Variante no encontrada", "VARIANT_NOT_FOUND", 404);
+  for (const line of lines) {
+    if (!productMap.has(line.productId)) {
+      throw createError("Producto no encontrado", "PRODUCT_NOT_FOUND", 404);
     }
-    qtyByProduct.set(
-      variant.productId,
-      (qtyByProduct.get(variant.productId) ?? 0) + qty
-    );
+    qtyByProduct.set(line.productId, (qtyByProduct.get(line.productId) ?? 0) + line.quantity);
   }
 
   for (const [productId, qty] of qtyByProduct) {
@@ -106,23 +120,56 @@ export async function validateComboSelection({
   }
 
   const children = [];
-  for (const [variantId, qty] of byVariant) {
-    const variant = variantMap.get(variantId);
-    if (!variant.isActive || !variant.product?.isActive) {
+  for (const line of lines) {
+    const product = productMap.get(line.productId);
+
+    if (product.type === "COMBO") {
+      throw createError("No se permiten combos anidados", "COMBO_NESTED_NOT_ALLOWED", 400);
+    }
+    if (!product.isActive) {
       const error = createError(
         "Producto del combo no disponible",
         "COMBO_PRODUCT_NOT_ALLOWED",
         400
       );
-      error.details = { variant: variantId };
+      error.details = { productId: line.productId };
       throw error;
     }
-    if (checkStock && qty > variant.stock) {
+
+    let variant = null;
+    if (product.type === "VARIANTE") {
+      variant = product.variants.find((v) => v.id === line.variantId);
+      if (!variant) {
+        throw createError("Variante no encontrada", "VARIANT_NOT_FOUND", 404);
+      }
+      if (!variant.isActive) {
+        const error = createError(
+          "Producto del combo no disponible",
+          "COMBO_PRODUCT_NOT_ALLOWED",
+          400
+        );
+        error.details = { variant: variant.id };
+        throw error;
+      }
+    }
+
+    const stock = resolveProductStock(product, variant);
+    if (checkStock && line.quantity > (stock ?? 0)) {
       const error = createError("Stock insuficiente", "INSUFFICIENT_STOCK", 409);
-      error.details = { variant: variant.id, solicitado: qty, disponible: variant.stock };
+      error.details = {
+        productId: line.productId,
+        variant: variant?.id ?? null,
+        solicitado: line.quantity,
+        disponible: stock ?? 0,
+      };
       throw error;
     }
-    children.push({ variantId, quantity: qty });
+
+    children.push({
+      productId: line.productId,
+      variantId: variant?.id ?? null,
+      quantity: line.quantity,
+    });
   }
 
   return children;

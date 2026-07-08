@@ -133,6 +133,17 @@ model Categories {
   @@index([tenantId])
 }
 
+// UNIDAD: stock/precio viven en columnas propias de Product (`stock`, `price`), sin
+// ProductVariant. VARIANTE: precio/stock viven en ProductVariant, como siempre.
+// COMBO: `price` es el precio fijo del combo; no tiene stock propio (se valida/descuenta
+// sobre los componentes elegidos). Ver docs/servicios/dominio/Productos.md y Combos.md.
+//
+enum ProductType {
+  UNIDAD
+  VARIANTE
+  COMBO
+}
+
 model Product {
   id                 Int                 @id @default(autoincrement())
   tenantId           Int
@@ -148,10 +159,19 @@ model Product {
   category           Categories?         @relation(fields: [categoryId], references: [id])
   tenant             Tenant              @relation(fields: [tenantId], references: [id])
   contentSuggestions ContentSuggestion[]
+  cartItems          CartItem[]
+  orderItems         OrderItem[]
+
+  type  ProductType
+  // Solo se usa cuando `type = UNIDAD`. Para VARIANTE el stock vive en ProductVariant;
+  // para COMBO no hay stock propio.
+  stock Int?
 
   // Combos: producto compuesto de otros productos, el cliente elige la selección
   // dentro del whitelist de `comboOptions` respetando comboMinItems/comboMaxItems
   // (unidades totales, no líneas distintas). Ver docs/servicios/dominio/Combos.md.
+  // `isCombo` queda deprecado (reemplazado por `type = COMBO`) — no se lee en código,
+  // se conserva la columna un tiempo por si hace falta re-derivar `type` a mano.
   isCombo         Boolean                @default(false)
   comboMinItems   Int?
   comboMaxItems   Int?
@@ -218,22 +238,30 @@ model Cart {
   @@index([tenantId])
 }
 
+// `variantId` es NULL para líneas de producto UNIDAD/COMBO (no tienen variante).
+// El `@@unique` de abajo cubre el caso VARIANTE (variantId no-null); el caso NULL
+// (UNIDAD/COMBO) lo cubre un índice único PARCIAL agregado a mano en la migración
+// `prisma/migrations/20260708190000_product_types_add/migration.sql` (Postgres no
+// colisiona NULL contra NULL en un unique normal) — no lo declares acá ni lo borres
+// pensando que es drift, ver ese archivo de migración.
 model CartItem {
-  id        Int            @id @default(autoincrement())
+  id        Int             @id @default(autoincrement())
   cartId    Int
-  variantId Int
-  quantity  Int            @default(1)
-  createdAt DateTime       @default(now())
-  cart      Cart           @relation(fields: [cartId], references: [id])
-  variant   ProductVariant @relation(fields: [variantId], references: [id])
+  productId Int
+  variantId Int?
+  quantity  Int             @default(1)
+  createdAt DateTime        @default(now())
+  cart      Cart            @relation(fields: [cartId], references: [id])
+  product   Product         @relation(fields: [productId], references: [id])
+  variant   ProductVariant? @relation(fields: [variantId], references: [id])
 
-  // Combos: selección elegida por el cliente para ESTE combo, `[{ variantId,
-  // quantity }]` por una unidad de combo. Se resuelve/valida server-side al
-  // agregar (services/combos.js) y se vuelve a validar al pasar a orden — nunca
+  // Combos: selección elegida por el cliente para ESTE combo, `[{ productId,
+  // variantId?, quantity }]` por una unidad de combo. Se resuelve/valida server-side
+  // al agregar (services/combos.js) y se vuelve a validar al pasar a orden — nunca
   // se confía en este JSON al leerlo. null para líneas que no son combo.
   comboSelection Json?
 
-  @@unique([cartId, variantId])
+  @@unique([cartId, productId, variantId])
 }
 
 model Order {
@@ -288,25 +316,30 @@ model OrderStatusHistory {
   @@index([orderId])
 }
 
+// `variantId` es NULL para líneas de producto UNIDAD/COMBO (no tienen variante);
+// `productId` siempre está presente e identifica el producto de la línea.
 model OrderItem {
-  id        Int            @id @default(autoincrement())
+  id        Int             @id @default(autoincrement())
   orderId   Int
-  variantId Int
+  productId Int
+  variantId Int?
   quantity  Int
   price     Float
   note      String?
-  order     Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  variant   ProductVariant @relation(fields: [variantId], references: [id])
+  order     Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product         @relation(fields: [productId], references: [id])
+  variant   ProductVariant? @relation(fields: [variantId], references: [id])
 
-  // Combos: la fila "padre" (variant = variante default del producto-combo,
-  // price = precio fijo del combo) tiene childItems, una fila por componente
-  // elegido (variantId = variante real, price = 0, el cobro ya está en el
-  // padre). parentItemId null = línea normal o línea padre de combo.
+  // Combos: la fila "padre" (productId = el combo, price = precio fijo del combo,
+  // sin variantId) tiene childItems, una fila por componente elegido (productId +
+  // variantId? del componente real, price = 0, el cobro ya está en el padre).
+  // parentItemId null = línea normal o línea padre de combo.
   parentItemId Int?
   parentItem   OrderItem?  @relation("ComboItems", fields: [parentItemId], references: [id], onDelete: Cascade)
   childItems   OrderItem[] @relation("ComboItems")
 
   @@index([orderId, variantId])
+  @@index([orderId, productId])
   @@index([parentItemId])
 }
 

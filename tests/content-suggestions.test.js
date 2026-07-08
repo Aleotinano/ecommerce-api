@@ -55,6 +55,7 @@ beforeAll(async () => {
       price: 1000,
       categoryId: acme.categories[0].id,
       createdAt: new Date("2026-04-01T00:00:00.000Z"),
+      type: "VARIANTE",
       variants: {
         create: [
           {

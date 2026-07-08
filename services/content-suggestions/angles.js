@@ -30,16 +30,31 @@ export const ANGLE_ORDER = [
 const activeVariants = (product) =>
   product.variants.filter((variant) => variant.isActive);
 
-/** Stock total del producto sumando todas sus variantes activas. */
-const totalStock = (product) =>
-  activeVariants(product).reduce((sum, variant) => sum + variant.stock, 0);
+/**
+ * Stock total del producto, segun su tipo: VARIANTE suma todas sus variantes
+ * activas, UNIDAD usa `Product.stock`. COMBO no tiene stock propio (depende de sus
+ * componentes) -> `null`, lo que excluye a los combos de LOW_STOCK/NO_RECENT_SALES
+ * mas abajo. Ver docs/servicios/dominio/Combos.md.
+ */
+const totalStock = (product) => {
+  if (product.type === "VARIANTE") {
+    return activeVariants(product).reduce((sum, variant) => sum + variant.stock, 0);
+  }
+  if (product.type === "UNIDAD") {
+    return product.stock ?? 0;
+  }
+  return null;
+};
 
-const hasAvailableStock = (product) => totalStock(product) > 0;
+const hasAvailableStock = (product) => {
+  const stock = totalStock(product);
+  return stock != null && stock > 0;
+};
 
 /** Stock agregado bajo: hay unidades pero el total esta por agotarse. */
 const hasLowStock = (product) => {
   const stock = totalStock(product);
-  return stock > 0 && stock <= LOW_STOCK_THRESHOLD;
+  return stock != null && stock > 0 && stock <= LOW_STOCK_THRESHOLD;
 };
 
 /** Creado dentro de la ventana de novedades respecto a `now`. */

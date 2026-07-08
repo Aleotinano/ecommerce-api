@@ -26,6 +26,7 @@ beforeAll(async () => {
     tenantId: acme.id,
     name: "Galleta A",
     price: 800,
+    type: "UNIDAD",
     variants: [],
     stock: 20,
   });
@@ -33,6 +34,7 @@ beforeAll(async () => {
     tenantId: acme.id,
     name: "Galleta B",
     price: 800,
+    type: "UNIDAD",
     variants: [],
     stock: 20,
   });
@@ -40,6 +42,7 @@ beforeAll(async () => {
     tenantId: acme.id,
     name: "Galleta C (no permitida)",
     price: 800,
+    type: "UNIDAD",
     variants: [],
     stock: 20,
   });
@@ -47,6 +50,7 @@ beforeAll(async () => {
     tenantId: acme.id,
     name: "Galleta D (poco stock)",
     price: 800,
+    type: "UNIDAD",
     variants: [],
     stock: 1,
   });
@@ -55,9 +59,7 @@ beforeAll(async () => {
     tenantId: acme.id,
     name: "Combo de galletas",
     price: 3000,
-    variants: [],
-    stock: 999,
-    isCombo: true,
+    type: "COMBO",
     comboMinItems: 2,
     comboMaxItems: 4,
     comboOptions: [
@@ -73,8 +75,8 @@ afterAll(async () => {
 });
 
 describe("ProductModel: crear/editar combos", () => {
-  it("create con isCombo + comboOptions persiste la whitelist", async () => {
-    expect(combo.isCombo).toBe(true);
+  it("create con type=COMBO + comboOptions persiste la whitelist", async () => {
+    expect(combo.type).toBe("COMBO");
     expect(combo.comboMinItems).toBe(2);
     expect(combo.comboMaxItems).toBe(4);
 
@@ -101,9 +103,9 @@ describe("ProductModel: crear/editar combos", () => {
         tenantId: acme.id,
         name: "Combo inválido",
         price: 1000,
-        variants: [],
-        stock: 1,
-        isCombo: true,
+        type: "COMBO",
+        comboMinItems: 1,
+        comboMaxItems: 1,
         comboOptions: [{ allowedProductId: combo.id }],
       })
     ).rejects.toMatchObject({ code: "COMBO_NESTED_NOT_ALLOWED" });
@@ -114,7 +116,7 @@ describe("ProductModel: crear/editar combos", () => {
       { tenantId: acme.id, id: combo.id },
       { comboOptions: [{ allowedProductId: galletaC.id, minQty: 0, maxQty: 4 }] }
     );
-    expect(edited.isCombo).toBe(true);
+    expect(edited.type).toBe("COMBO");
 
     const options = await ProductModel.getComboOptions({
       tenantId: acme.id,
@@ -157,17 +159,15 @@ describe("GET /products/:id/combo-options", () => {
   });
 });
 
-describe("POST /cart/combo/:variantId", () => {
-  const comboVariantId = () => combo.variants[0].id;
-
+describe("POST /cart/combo/:productId", () => {
   it("selección válida dentro del whitelist y del min/max → 201", async () => {
     const res = await request(app)
-      .post(`/cart/combo/${comboVariantId()}`)
+      .post(`/cart/combo/${combo.id}`)
       .set("Cookie", cookieFor(acmeCustomer))
       .send({
         selection: [
-          { variantId: galletaA.variants[0].id, quantity: 2 },
-          { variantId: galletaB.variants[0].id, quantity: 1 },
+          { productId: galletaA.id, quantity: 2 },
+          { productId: galletaB.id, quantity: 1 },
         ],
       });
 
@@ -178,9 +178,9 @@ describe("POST /cart/combo/:variantId", () => {
 
   it("selección por debajo del mínimo → 400 COMBO_SELECTION_OUT_OF_RANGE", async () => {
     const res = await request(app)
-      .post(`/cart/combo/${comboVariantId()}`)
+      .post(`/cart/combo/${combo.id}`)
       .set("Cookie", cookieFor(acmeCustomer))
-      .send({ selection: [{ variantId: galletaA.variants[0].id, quantity: 1 }] });
+      .send({ selection: [{ productId: galletaA.id, quantity: 1 }] });
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe("COMBO_SELECTION_OUT_OF_RANGE");
@@ -188,12 +188,12 @@ describe("POST /cart/combo/:variantId", () => {
 
   it("producto fuera de la whitelist → 400 COMBO_PRODUCT_NOT_ALLOWED", async () => {
     const res = await request(app)
-      .post(`/cart/combo/${comboVariantId()}`)
+      .post(`/cart/combo/${combo.id}`)
       .set("Cookie", cookieFor(acmeCustomer))
       .send({
         selection: [
-          { variantId: galletaA.variants[0].id, quantity: 1 },
-          { variantId: galletaC.variants[0].id, quantity: 1 },
+          { productId: galletaA.id, quantity: 1 },
+          { productId: galletaC.id, quantity: 1 },
         ],
       });
 
@@ -203,9 +203,9 @@ describe("POST /cart/combo/:variantId", () => {
 
   it("excede maxQty permitido para ese producto → 400 COMBO_ITEM_QTY_OUT_OF_RANGE", async () => {
     const res = await request(app)
-      .post(`/cart/combo/${comboVariantId()}`)
+      .post(`/cart/combo/${combo.id}`)
       .set("Cookie", cookieFor(acmeCustomer))
-      .send({ selection: [{ variantId: galletaA.variants[0].id, quantity: 4 }] });
+      .send({ selection: [{ productId: galletaA.id, quantity: 4 }] });
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe("COMBO_ITEM_QTY_OUT_OF_RANGE");
@@ -215,9 +215,9 @@ describe("POST /cart/combo/:variantId", () => {
     // galletaD tiene stock=1 y sin maxQty propio; pedir 2 respeta comboMinItems/
     // comboMaxItems (2-4) pero excede el stock real del componente.
     const res = await request(app)
-      .post(`/cart/combo/${comboVariantId()}`)
+      .post(`/cart/combo/${combo.id}`)
       .set("Cookie", cookieFor(acmeCustomer))
-      .send({ selection: [{ variantId: galletaD.variants[0].id, quantity: 2 }] });
+      .send({ selection: [{ productId: galletaD.id, quantity: 2 }] });
 
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe("INSUFFICIENT_STOCK");
@@ -234,10 +234,10 @@ describe("Orden con combo: precio fijo, stock sobre componentes", () => {
     await CartModel.addCombo({
       tenantId: acme.id,
       id: acmeCustomer.id,
-      comboVariantId: combo.variants[0].id,
+      comboProductId: combo.id,
       selection: [
-        { variantId: galletaA.variants[0].id, quantity: 2 },
-        { variantId: galletaB.variants[0].id, quantity: 1 },
+        { productId: galletaA.id, quantity: 2 },
+        { productId: galletaB.id, quantity: 1 },
       ],
     });
 
@@ -247,13 +247,14 @@ describe("Orden con combo: precio fijo, stock sobre componentes", () => {
     expect(order.orderItems).toHaveLength(1);
 
     const parent = order.orderItems[0];
-    expect(parent.variantId).toBe(combo.variants[0].id);
+    expect(parent.productId).toBe(combo.id);
+    expect(parent.variantId).toBeNull();
     expect(parent.price).toBe(3000);
     expect(parent.childItems).toHaveLength(2);
     expect(parent.childItems.every((c) => c.price === 0)).toBe(true);
 
-    const childA = parent.childItems.find((c) => c.variantId === galletaA.variants[0].id);
-    const childB = parent.childItems.find((c) => c.variantId === galletaB.variants[0].id);
+    const childA = parent.childItems.find((c) => c.productId === galletaA.id);
+    const childB = parent.childItems.find((c) => c.productId === galletaB.id);
     expect(childA.quantity).toBe(2);
     expect(childB.quantity).toBe(1);
   });
@@ -262,16 +263,13 @@ describe("Orden con combo: precio fijo, stock sobre componentes", () => {
     await CartModel.addCombo({
       tenantId: acme.id,
       id: acmeCustomer.id,
-      comboVariantId: combo.variants[0].id,
-      selection: [{ variantId: galletaA.variants[0].id, quantity: 2 }],
+      comboProductId: combo.id,
+      selection: [{ productId: galletaA.id, quantity: 2 }],
     });
     const order = await OrderModel.create({ tenantId: acme.id, userId: acmeCustomer.id });
 
     const stockBeforeA = (
-      await prisma.productVariant.findUnique({ where: { id: galletaA.variants[0].id } })
-    ).stock;
-    const stockBeforeCombo = (
-      await prisma.productVariant.findUnique({ where: { id: combo.variants[0].id } })
+      await prisma.product.findUnique({ where: { id: galletaA.id } })
     ).stock;
 
     await OrderModel.updateOrderStatus({
@@ -281,14 +279,12 @@ describe("Orden con combo: precio fijo, stock sobre componentes", () => {
     });
 
     const stockAfterA = (
-      await prisma.productVariant.findUnique({ where: { id: galletaA.variants[0].id } })
+      await prisma.product.findUnique({ where: { id: galletaA.id } })
     ).stock;
-    const stockAfterCombo = (
-      await prisma.productVariant.findUnique({ where: { id: combo.variants[0].id } })
-    ).stock;
+    const comboAfter = await prisma.product.findUnique({ where: { id: combo.id } });
 
     expect(stockAfterA).toBe(stockBeforeA - 2);
-    expect(stockAfterCombo).toBe(stockBeforeCombo);
+    expect(comboAfter.stock).toBeNull();
   });
 });
 
