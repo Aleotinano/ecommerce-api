@@ -185,6 +185,11 @@ export const updateTenantConfig = z
       .max(100, "depositPercentage no puede superar 100")
       .nullable()
       .optional(),
+
+    productVariantsEnabled: z
+      .boolean({ invalid_type_error: "productVariantsEnabled debe ser booleano" })
+      .nullable()
+      .optional(),
   })
   .refine((data) => Object.values(data).some((value) => value !== undefined), {
     message: "No hay cambios para actualizar",

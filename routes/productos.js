@@ -38,6 +38,12 @@ productosRouter.get(
   productsController.getAll
 );
 productosRouter.get("/options", verifyToken, productsController.getVariantOptions);
+productosRouter.get(
+  "/stats",
+  verifyToken,
+  requireRole(roleRequired),
+  productsController.getStats
+);
 productosRouter.get("/:id", verifyToken, validation.id, productsController.getById);
 
 productosRouter.post(

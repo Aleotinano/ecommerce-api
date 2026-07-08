@@ -38,6 +38,13 @@ export const createProduct = z.object({
     .boolean({ invalid_type_error: "El valor debe ser booleano" })
     .optional(),
   variants: z.array(createVariant).default([]),
+  // Solo se usa cuando `variants` viene vacío: crea una variante default
+  // (color/size null) para que el producto sea vendible sin variantes reales.
+  stock: z.coerce
+    .number({ invalid_type_error: "El stock debe ser un número" })
+    .int("El stock debe ser un número entero")
+    .min(0, "El stock no puede ser negativo")
+    .optional(),
 });
 
 export const updateProduct = z
@@ -72,6 +79,13 @@ export const updateProduct = z
     isActive: z
       .boolean({ invalid_type_error: "El valor debe ser booleano" })
       .optional(),
+    // Solo aplica si el producto tiene la variante default sin variantes reales
+    // (color/size null) creada por `createProduct` sin `variants`; se ignora si no.
+    stock: z.coerce
+      .number({ invalid_type_error: "El stock debe ser un número" })
+      .int("El stock debe ser un número entero")
+      .min(0, "El stock no puede ser negativo")
+      .optional(),
   })
   // Sin `.refine` de "al menos un campo": el caso vacío (ni body ni imagen) ya lo
   // corta `requireBodyOrImage` en la ruta, y ese refine rechazaba los updates que
@@ -96,10 +110,16 @@ export const productId = z.object({
 export const productQuery = z
   .object({
     name: z.string().optional(),
-    categoryId: z.coerce
-      .number({ invalid_type_error: "El ID de categoría debe ser un número" })
-      .int()
-      .positive()
+    // Acepta "1,2,3" (chips de categoría múltiples) o un solo id.
+    categoryId: z
+      .union([z.string(), z.array(z.string())])
+      .transform((value) =>
+        (Array.isArray(value) ? value : value.split(","))
+          .map((id) => id.trim())
+          .filter(Boolean)
+          .map(Number)
+      )
+      .pipe(z.array(z.number().int().positive()))
       .optional(),
     variantColor: z.string().optional(),
     variantSize: z.string().optional(),

@@ -50,6 +50,7 @@ export class TenantConfigController {
         allowCartGuest,
         depositEnabled,
         depositPercentage,
+        productVariantsEnabled,
       } = req.body;
 
       const data = {};
@@ -80,6 +81,8 @@ export class TenantConfigController {
       if (allowCartGuest !== undefined) data.allowCartGuest = allowCartGuest;
       if (depositEnabled !== undefined) data.depositEnabled = depositEnabled;
       if (depositPercentage !== undefined) data.depositPercentage = depositPercentage;
+      if (productVariantsEnabled !== undefined)
+        data.productVariantsEnabled = productVariantsEnabled;
 
       const config = await TenantConfigModel.update({
         tenantId: parseInt(tenantId),

@@ -125,4 +125,55 @@ describe("createDraftOrder tool", () => {
     expect(res.error).toBeDefined();
     expect(res.created).toBeUndefined();
   });
+
+  it("propaga la nota de línea (observación libre)", async () => {
+    const wa = ctxFor(whatsappChannel());
+    const res = await wa.executeTool("createDraftOrder", {
+      items: [{ productId: singleProductId, quantity: 1, note: "sin nueces" }],
+    });
+
+    expect(res.created).toBe(true);
+    const order = await prisma.order.findUnique({
+      where: { id: res.pedido },
+      include: { orderItems: true },
+    });
+    expect(order.orderItems[0].note).toBe("sin nueces");
+  });
+
+  it("misma variante + misma nota → mergea cantidades en una sola línea", async () => {
+    const wa = ctxFor(whatsappChannel());
+    const res = await wa.executeTool("createDraftOrder", {
+      items: [
+        { productId: singleProductId, quantity: 1, note: "sin nueces" },
+        { productId: singleProductId, quantity: 2, note: "sin nueces" },
+      ],
+    });
+
+    expect(res.created).toBe(true);
+    const order = await prisma.order.findUnique({
+      where: { id: res.pedido },
+      include: { orderItems: true },
+    });
+    expect(order.orderItems).toHaveLength(1);
+    expect(order.orderItems[0].quantity).toBe(3);
+  });
+
+  it("misma variante + notas distintas → NO mergea, quedan como filas separadas", async () => {
+    const wa = ctxFor(whatsappChannel());
+    const res = await wa.executeTool("createDraftOrder", {
+      items: [
+        { productId: singleProductId, quantity: 1, note: "sin nueces" },
+        { productId: singleProductId, quantity: 1, note: "dedicatoria: Juan" },
+      ],
+    });
+
+    expect(res.created).toBe(true);
+    const order = await prisma.order.findUnique({
+      where: { id: res.pedido },
+      include: { orderItems: true },
+    });
+    expect(order.orderItems).toHaveLength(2);
+    const notes = order.orderItems.map((it) => it.note).sort();
+    expect(notes).toEqual(["dedicatoria: Juan", "sin nueces"]);
+  });
 });

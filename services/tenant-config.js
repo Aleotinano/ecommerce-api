@@ -52,6 +52,7 @@ export const TenantConfigModel = {
           allowCartGuest: true,
           depositEnabled: true,
           depositPercentage: true,
+          productVariantsEnabled: true,
         },
       });
 
@@ -120,6 +121,9 @@ export const TenantConfigModel = {
         locale: true,
         showOutOfStock: true,
         allowCartGuest: true,
+        depositEnabled: true,
+        depositPercentage: true,
+        productVariantsEnabled: true,
       },
     });
 

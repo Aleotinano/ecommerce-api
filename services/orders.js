@@ -31,7 +31,7 @@ const roundMoney = (n) => Math.round(n * 100) / 100;
  *
  * @param {object}  tx                 cliente de transacción de Prisma
  * @param {number}  tenantId
- * @param {Array}   items              `[{ variantId, quantity }]`
+ * @param {Array}   items              `[{ variantId, quantity, note? }]`
  * @param {object}  [opts]
  * @param {boolean} [opts.checkStock]  si valida stock (carrito sí; bot a-pedido no)
  * @returns {Promise<{ pricedItems: Array, total: number }>}
@@ -96,7 +96,12 @@ async function priceItems(tx, tenantId, items, { checkStock = true } = {}) {
       throw error;
     }
 
-    return { variantId: item.variantId, quantity: item.quantity, price: Number(price) };
+    return {
+      variantId: item.variantId,
+      quantity: item.quantity,
+      price: Number(price),
+      note: item.note ?? null,
+    };
   });
 
   const total = pricedItems.reduce((sum, it) => sum + it.price * it.quantity, 0);
@@ -129,6 +134,7 @@ export const OrderModel = {
         cart.items.map((item) => ({
           variantId: item.variantId,
           quantity: item.quantity,
+          note: item.note,
         }))
       );
 
@@ -139,10 +145,11 @@ export const OrderModel = {
           total,
           status: "PENDING",
           orderItems: {
-            create: pricedItems.map(({ variantId, quantity, price }) => ({
+            create: pricedItems.map(({ variantId, quantity, price, note }) => ({
               variantId,
               quantity,
               price,
+              note,
             })),
           },
         },
@@ -184,6 +191,27 @@ export const OrderModel = {
   async getUserOrderById({ tenantId, userId, orderId }) {
     const order = await prisma.order.findFirst({
       where: { id: orderId, userId, tenantId },
+      include: {
+        ...orderItemsInclude.include,
+        statusHistory: { orderBy: { createdAt: "asc" } },
+      },
+    });
+
+    if (!order) {
+      throw createError("Orden no encontrada", "ORDER_NOT_FOUND", 404);
+    }
+
+    return order;
+  },
+
+  /**
+   * Detalle de orden para ADMIN/STAFF: no filtra por userId, solo por tenant.
+   * Necesario porque las órdenes BOT nacen con userId null (getUserOrderById
+   * nunca las encontraría para un admin).
+   */
+  async getOrderById({ tenantId, orderId }) {
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, tenantId },
       include: {
         ...orderItemsInclude.include,
         statusHistory: { orderBy: { createdAt: "asc" } },
@@ -389,7 +417,10 @@ export const OrderModel = {
    * @param {number} p.tenantId
    * @param {number} p.orderId
    * @param {number} p.reviewedById   admin que valida
-   * @param {Array|null} [p.items]    `[{ variantId, quantity }]` correcciones
+   * @param {Array|null} [p.items]    `[{ id, quantity, note? }]` correcciones,
+   *                                  `id` es el OrderItem.id (no variantId: una
+   *                                  orden puede tener 2 filas de la misma
+   *                                  variante con notas distintas)
    */
   async reviewOrder({ tenantId, orderId, reviewedById, items = null }) {
     const order = await prisma.order.findFirst({
@@ -415,29 +446,30 @@ export const OrderModel = {
       const data = { reviewedById, reviewedAt: new Date() };
 
       if (hasEdits) {
-        const orderVariantIds = new Set(
-          order.orderItems.map((it) => it.variantId)
-        );
+        const orderItemIds = new Set(order.orderItems.map((it) => it.id));
         for (const edit of items) {
-          if (!orderVariantIds.has(edit.variantId)) {
+          if (!orderItemIds.has(edit.id)) {
             const error = createError(
-              "La variante no pertenece a la orden",
+              "El item no pertenece a la orden",
               "ORDER_ITEM_NOT_FOUND",
               404
             );
-            error.details = { variant: edit.variantId };
+            error.details = { orderItemId: edit.id };
             throw error;
           }
         }
 
-        // Re-resolvemos TODOS los items (con las cantidades nuevas donde las haya)
-        // para recomputar precio y total server-side. Sin chequeo de stock: la
-        // orden ya existe y Desvare es a-pedido.
+        // Re-resolvemos TODOS los items (con las cantidades/notas nuevas donde
+        // las haya) para recomputar precio y total server-side. Sin chequeo de
+        // stock: la orden ya existe y Desvare es a-pedido.
         const desired = order.orderItems.map((it) => {
-          const edit = items.find((e) => e.variantId === it.variantId);
+          const edit = items.find((e) => e.id === it.id);
           return {
             variantId: it.variantId,
             quantity: edit ? edit.quantity : it.quantity,
+            // "note" in edit distingue "no la mandó" (mantener la actual) de
+            // "la mandó en null" (borrarla).
+            note: edit && "note" in edit ? edit.note : it.note,
           };
         });
 
@@ -445,12 +477,14 @@ export const OrderModel = {
           checkStock: false,
         });
 
-        for (const pi of pricedItems) {
+        // Ya no hay unique([orderId, variantId]) (una orden puede tener dos
+        // líneas del mismo producto con notas distintas), así que se actualiza
+        // por id de fila. `pricedItems` preserva el orden de `desired`, que a
+        // su vez viene de mapear `order.orderItems` en el mismo orden.
+        for (const [index, pi] of pricedItems.entries()) {
           await tx.orderItem.update({
-            where: {
-              orderId_variantId: { orderId, variantId: pi.variantId },
-            },
-            data: { quantity: pi.quantity, price: pi.price },
+            where: { id: order.orderItems[index].id },
+            data: { quantity: pi.quantity, price: pi.price, note: pi.note },
           });
         }
 
@@ -519,13 +553,13 @@ export const OrderModel = {
 
   /**
    * Creación de orden BORRADOR por el bot de WhatsApp. Origen BOT, sin revisar.
-   * El bot solo propone `items` ya resueltos a `{ variantId, quantity }`; acá el
-   * server valida catálogo/precio y resuelve TODO lo monetario y la seña. El bot
-   * nunca toca `paymentStatus`, `depositAmount` ni `tenantId`.
+   * El bot solo propone `items` ya resueltos a `{ variantId, quantity, note? }`;
+   * acá el server valida catálogo/precio y resuelve TODO lo monetario y la
+   * seña. El bot nunca toca `paymentStatus`, `depositAmount` ni `tenantId`.
    *
    * @param {object} p
    * @param {number} p.tenantId        resuelto del phone_number_id, nunca del LLM
-   * @param {Array}  p.items           `[{ variantId, quantity }]`
+   * @param {Array}  p.items           `[{ variantId, quantity, note? }]`
    * @param {string|null} [p.contactPhone]   wa_id del cliente
    * @param {string|null} [p.contactName]
    * @param {string|null} [p.creationContext] snapshot de la conversación
@@ -541,19 +575,23 @@ export const OrderModel = {
       throw createError("La orden no tiene items", "EMPTY_ORDER", 400);
     }
 
-    // Merge de items repetidos por variante: la unique [orderId, variantId] lo
-    // exige y el bot podría proponer la misma variante en dos renglones.
+    // Merge de items repetidos por variante + nota: el bot podría proponer la
+    // misma variante en dos renglones. Solo se suma la cantidad si la nota
+    // coincide (normalizada) — dos líneas con observaciones distintas (ej.
+    // "sin nueces" vs "dedicatoria: Juan") deben quedar como filas separadas.
+    const normalizeNote = (note) => (note ?? "").trim();
     const mergedMap = new Map();
     for (const it of items) {
-      mergedMap.set(
-        it.variantId,
-        (mergedMap.get(it.variantId) ?? 0) + it.quantity
-      );
+      const note = normalizeNote(it.note);
+      const key = `${it.variantId}::${note}`;
+      const existing = mergedMap.get(key);
+      mergedMap.set(key, {
+        variantId: it.variantId,
+        note: note || null,
+        quantity: (existing?.quantity ?? 0) + it.quantity,
+      });
     }
-    const mergedItems = [...mergedMap].map(([variantId, quantity]) => ({
-      variantId,
-      quantity,
-    }));
+    const mergedItems = [...mergedMap.values()];
 
     const config = await prisma.tenantConfig.findUnique({
       where: { tenantId },
@@ -588,10 +626,11 @@ export const OrderModel = {
           depositAmount,
           creationContext,
           orderItems: {
-            create: pricedItems.map(({ variantId, quantity, price }) => ({
+            create: pricedItems.map(({ variantId, quantity, price, note }) => ({
               variantId,
               quantity,
               price,
+              note,
             })),
           },
         },

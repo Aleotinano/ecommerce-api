@@ -56,6 +56,15 @@ export class productsController {
     }
   }
 
+  static async getStats(req, res, next) {
+    try {
+      const stats = await ProductModel.getStats({ tenantId: req.tenantId });
+      return res.json(stats);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async getById(req, res, next) {
     try {
       const { id } = req.params;
@@ -80,6 +89,7 @@ export class productsController {
         img,
         isActive,
         variants = [],
+        stock,
       } = req.body;
 
       if (uploadedFile) {
@@ -98,6 +108,7 @@ export class productsController {
         imgPublicId: uploadedImage?.imgPublicId ?? null,
         isActive,
         variants,
+        stock,
       });
 
       return res.status(201).json({
@@ -124,7 +135,8 @@ export class productsController {
         tenantId: req.tenantId,
         id,
       });
-      const { name, description, categoryId, price, img, isActive } = req.body;
+      const { name, description, categoryId, price, img, isActive, stock } =
+        req.body;
 
       const imageData = {};
       let shouldDeletePreviousImage = false;
@@ -150,6 +162,7 @@ export class productsController {
           categoryId,
           price,
           isActive,
+          stock,
           ...imageData,
         }
       );

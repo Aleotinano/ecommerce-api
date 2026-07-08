@@ -154,7 +154,9 @@ export const ProductModel = {
         base.name = { contains: name, mode: "insensitive" };
       }
 
-      if (categoryId !== undefined) {
+      if (Array.isArray(categoryId)) {
+        if (categoryId.length) base.categoryId = { in: categoryId };
+      } else if (categoryId !== undefined) {
         base.categoryId = categoryId;
       }
 
@@ -276,6 +278,51 @@ export const ProductModel = {
     });
   },
 
+  /**
+   * Agregados del catálogo para las stat cards del header de Productos.
+   * El stock vive en las variantes (los productos "sin variantes" tienen una
+   * variante única), así que bajo/agotado se computa sumando stock de
+   * variantes activas por producto activo.
+   */
+  async getStats({ tenantId, lowStockThreshold = 5 }) {
+    const key = `${tenantNs(tenantId)}:prod:stats:${lowStockThreshold}`;
+
+    return wrap(key, PRODUCTS_LIST_TTL, async () => {
+      const [total, activeProducts, stockByProduct] = await Promise.all([
+        prisma.product.count({ where: { tenantId } }),
+        prisma.product.findMany({
+          where: { tenantId, isActive: true },
+          select: { id: true },
+        }),
+        prisma.productVariant.groupBy({
+          by: ["productId"],
+          where: { tenantId, isActive: true, product: { isActive: true } },
+          _sum: { stock: true },
+        }),
+      ]);
+
+      const stockOf = new Map(
+        stockByProduct.map((row) => [row.productId, row._sum.stock ?? 0])
+      );
+
+      let lowStock = 0;
+      let outOfStock = 0;
+      for (const { id } of activeProducts) {
+        const stock = stockOf.get(id) ?? 0;
+        if (stock === 0) outOfStock += 1;
+        else if (stock <= lowStockThreshold) lowStock += 1;
+      }
+
+      return {
+        total,
+        active: activeProducts.length,
+        lowStock,
+        outOfStock,
+        lowStockThreshold,
+      };
+    });
+  },
+
   async getById({ tenantId, id }) {
     const key = productDetailKey(tenantId, id);
 
@@ -325,11 +372,12 @@ export const ProductModel = {
     imgPublicId,
     isActive,
     variants = [],
+    stock,
   }) {
     await ensureCategoryExists(tenantId, categoryId);
 
     const reservedSkus = new Set();
-    const variantsWithSku = await Promise.all(
+    let variantsWithSku = await Promise.all(
       variants.map(async (variant) => ({
         ...variant,
         sku: await generateUniqueVariantSku({
@@ -339,6 +387,36 @@ export const ProductModel = {
         }),
       }))
     );
+
+    // Producto sin variantes reales (ej. Mesa Dulce): stock/sku viven solo en
+    // ProductVariant, así que se crea una variante default (color/size null)
+    // para que el producto sea vendible por el flujo de carrito/órdenes.
+    if (variantsWithSku.length === 0) {
+      if (stock === undefined) {
+        throw createError(
+          "El stock es requerido para un producto sin variantes",
+          "STOCK_REQUIRED",
+          400
+        );
+      }
+
+      variantsWithSku = [
+        {
+          color: null,
+          size: null,
+          price: null,
+          stock,
+          sku: await generateUniqueVariantSku({
+            tenantId,
+            productName: name,
+            reservedSkus,
+          }),
+          img: null,
+          imgPublicId: null,
+          isActive: true,
+        },
+      ];
+    }
 
     const data = {
       tenantId,
@@ -384,9 +462,9 @@ export const ProductModel = {
 
   async edit(
     { tenantId, id },
-    { name, description, categoryId, price, img, imgPublicId, isActive }
+    { name, description, categoryId, price, img, imgPublicId, isActive, stock }
   ) {
-    await this.getByIdForManagement({ tenantId, id });
+    const existing = await this.getByIdForManagement({ tenantId, id });
     await ensureCategoryExists(tenantId, categoryId);
 
     const data = {
@@ -402,6 +480,24 @@ export const ProductModel = {
     const updateData = Object.fromEntries(
       Object.entries(data).filter(([, value]) => value !== undefined)
     );
+
+    // `stock` solo aplica a productos sin variantes reales (la variante default
+    // color/size null creada en `create`); en cualquier otro caso se ignora.
+    if (stock !== undefined) {
+      const defaultVariant =
+        existing.variants.length === 1 &&
+        existing.variants[0].color === null &&
+        existing.variants[0].size === null
+          ? existing.variants[0]
+          : null;
+
+      if (defaultVariant) {
+        await prisma.productVariant.update({
+          where: { id: defaultVariant.id },
+          data: { stock },
+        });
+      }
+    }
 
     const result = await prisma.product.update({
       where: { id },

@@ -20,12 +20,15 @@ export class OrderController {
           total: order.total,
           createdAt: order.createdAt,
           productos: order.orderItems.map((item) => ({
+            id: item.id,
+            variantId: item.variantId,
             nombre: item.variant.product?.name ?? item.variant.sku,
             cantidad: item.quantity,
             precio: item.price,
             subtotal: item.price * item.quantity,
             color: item.variant.color,
             size: item.variant.size,
+            note: item.note,
           })),
         },
       });
@@ -54,11 +57,14 @@ export class OrderController {
         total: order.total,
         createdAt: order.createdAt,
         productos: order.orderItems.map((item) => ({
+          id: item.id,
+          variantId: item.variantId,
           nombre: item.variant.product?.name ?? item.variant.sku,
           cantidad: item.quantity,
           precio: item.price,
           color: item.variant.color,
           size: item.variant.size,
+          note: item.note,
         })),
       }));
 
@@ -98,11 +104,14 @@ export class OrderController {
         total: order.total,
         createdAt: order.createdAt,
         productos: order.orderItems.map((item) => ({
+          id: item.id,
+          variantId: item.variantId,
           nombre: item.variant.product?.name ?? item.variant.sku,
           cantidad: item.quantity,
           precio: item.price,
           color: item.variant.color,
           size: item.variant.size,
+          note: item.note,
         })),
       }));
 
@@ -114,14 +123,19 @@ export class OrderController {
 
   static async getById(req, res, next) {
     try {
-      const { id: userId } = req.user;
+      const { id: userId, role } = req.user;
       const { id: orderId } = req.params;
 
-      const order = await OrderModel.getUserOrderById({
-        tenantId: req.tenantId,
-        userId,
-        orderId,
-      });
+      // ADMIN/STAFF pueden ver cualquier orden del tenant (incluidas las BOT,
+      // que nacen con userId null); el resto solo su propia orden.
+      const order =
+        role === "ADMIN" || role === "STAFF"
+          ? await OrderModel.getOrderById({ tenantId: req.tenantId, orderId })
+          : await OrderModel.getUserOrderById({
+              tenantId: req.tenantId,
+              userId,
+              orderId,
+            });
 
       return res.json({
         order: {
@@ -132,6 +146,8 @@ export class OrderController {
           createdAt: order.createdAt,
           updatedAt: order.updatedAt,
           productos: order.orderItems.map((item) => ({
+            id: item.id,
+            variantId: item.variantId,
             nombre: item.variant.product?.name ?? item.variant.sku,
             description: item.variant.product?.description,
             cantidad: item.quantity,
@@ -140,6 +156,7 @@ export class OrderController {
             color: item.variant.color,
             size: item.variant.size,
             image: item.variant.img ?? item.variant.product?.img ?? null,
+            note: item.note,
           })),
           timeline: (order.statusHistory ?? []).map((entry) => ({
             estado: entry.toStatus,
@@ -212,12 +229,15 @@ export class OrderController {
           reviewedAt: order.reviewedAt,
           updatedAt: order.updatedAt,
           productos: order.orderItems.map((item) => ({
+            id: item.id,
+            variantId: item.variantId,
             nombre: item.variant.product?.name ?? item.variant.sku,
             cantidad: item.quantity,
             precio: item.price,
             subtotal: item.price * item.quantity,
             color: item.variant.color,
             size: item.variant.size,
+            note: item.note,
           })),
         },
       });

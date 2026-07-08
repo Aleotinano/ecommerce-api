@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import prisma from "../lib/prisma.js";
 import { getProductPrice } from "../helpers/price.js";
+import { ProductModel } from "../services/productos.js";
 import { seedTenants } from "./helpers.js";
 
 let tenant;
@@ -140,5 +141,35 @@ describe("Productos con precios en BD", () => {
     // Variante tiene precio, debe tener prioridad sobre producto
     const resolvedPrice = getProductPrice(variant, product);
     expect(resolvedPrice).toBe(3500);
+  });
+});
+
+describe("Producto sin variantes reales (preset Mesa Dulce)", () => {
+  it("crear con variants: [] y stock → crea 1 ProductVariant default (color/size null)", async () => {
+    const product = await ProductModel.create({
+      tenantId: tenant.id,
+      name: "Torta de chocolate",
+      description: "Torta entera, sin variantes",
+      price: 8000,
+      variants: [],
+      stock: 5,
+    });
+
+    expect(product.variants).toHaveLength(1);
+    expect(product.variants[0].color).toBeNull();
+    expect(product.variants[0].size).toBeNull();
+    expect(product.variants[0].stock).toBe(5);
+    expect(product.variants[0].sku).toBeDefined();
+  });
+
+  it("crear con variants: [] y sin stock → falla con STOCK_REQUIRED", async () => {
+    await expect(
+      ProductModel.create({
+        tenantId: tenant.id,
+        name: "Torta sin stock",
+        price: 8000,
+        variants: [],
+      })
+    ).rejects.toMatchObject({ code: "STOCK_REQUIRED" });
   });
 });

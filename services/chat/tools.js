@@ -229,7 +229,7 @@ export const buildToolContext = ({ tenantId, user, config, channel }) => {
       // tenant. El bot solo propone; el server valida catalogo y desambigua.
       const resolved = [];
       for (const raw of items) {
-        const { productId, quantity, color, size } = raw ?? {};
+        const { productId, quantity, color, size, note } = raw ?? {};
 
         if (!Number.isInteger(productId)) {
           return { error: "Falta el identificador de algun producto." };
@@ -262,7 +262,11 @@ export const buildToolContext = ({ tenantId, user, config, channel }) => {
           };
         }
 
-        resolved.push({ variantId: candidates[0].id, quantity });
+        resolved.push({
+          variantId: candidates[0].id,
+          quantity,
+          note: typeof note === "string" ? note.slice(0, 150) : null,
+        });
       }
 
       try {

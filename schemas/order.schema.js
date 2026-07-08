@@ -17,14 +17,24 @@ export const orderReview = z.object({
   items: z
     .array(
       z.object({
-        variantId: z.coerce
-          .number({ invalid_type_error: "variantId debe ser un número" })
-          .int("variantId debe ser entero")
-          .positive("variantId inválido"),
+        // Identifica la FILA a editar (OrderItem.id), no la variante: una
+        // orden puede tener 2 líneas de la misma variante con notas
+        // distintas, así que variantId ya no es una clave única por fila.
+        id: z.coerce
+          .number({ invalid_type_error: "id debe ser un número" })
+          .int("id debe ser entero")
+          .positive("id inválido"),
         quantity: z.coerce
           .number({ invalid_type_error: "quantity debe ser un número" })
           .int("quantity debe ser entero")
           .positive("quantity debe ser mayor a 0"),
+        // Observación libre de la línea (ej. "sin nueces"), distinta de la nota
+        // de la orden (`orderStatus.note`, hasta 500 caracteres).
+        note: z
+          .string()
+          .max(150, "La nota de la línea no puede superar 150 caracteres")
+          .nullable()
+          .optional(),
       })
     )
     .optional(),
