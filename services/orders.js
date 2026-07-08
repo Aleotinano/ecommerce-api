@@ -3,16 +3,30 @@ import { createError } from "../helpers/error.js";
 import { getProductPrice } from "../helpers/price.js";
 import { sendMail, buildOrderStatusEmail } from "../lib/mailer.js";
 import { logger } from "../lib/logger.js";
+import { validateComboSelection } from "./combos.js";
 
 const log = logger.child({ module: "orders" });
 
+// Solo trae las filas "padre" (líneas normales + línea de cada combo comprado)
+// con sus hijos anidados (componentes elegidos dentro de un combo, price=0 —
+// el cobro ya está en el padre). Ver docs/servicios/dominio/Combos.md.
 const orderItemsInclude = {
   include: {
     orderItems: {
+      where: { parentItemId: null },
       include: {
         variant: {
           include: {
             product: true,
+          },
+        },
+        childItems: {
+          include: {
+            variant: {
+              include: {
+                product: true,
+              },
+            },
           },
         },
       },
@@ -24,14 +38,22 @@ const orderItemsInclude = {
 const roundMoney = (n) => Math.round(n * 100) / 100;
 
 /**
- * Valida una lista de items `{ variantId, quantity }` contra el catálogo del
- * tenant y resuelve el precio SERVER-SIDE. Devuelve los items con precio y el
- * total. Compartido por la creación desde carrito y la creación borrador del bot
- * (no se duplica la validación ni el pricing). Corre dentro de una transacción.
+ * Valida una lista de items `{ variantId, quantity, comboSelection? }` contra el
+ * catálogo del tenant y resuelve el precio SERVER-SIDE. Devuelve los items con
+ * precio y el total. Compartido por la creación desde carrito, la creación
+ * borrador del bot y la revisión admin (no se duplica la validación ni el
+ * pricing). Corre dentro de una transacción.
+ *
+ * Si `variant.product.isCombo`, el item DEBE traer `comboSelection` (la
+ * selección de UNA unidad de combo, `[{ variantId, quantity }]`) — se valida
+ * contra la whitelist (`services/combos.js`) y se multiplica por `item.quantity`
+ * (cantidad de combos comprados) para obtener `comboChildren`, que el caller
+ * inserta como `OrderItem` hijos con `price: 0` (el cobro ya está en el padre,
+ * que cobra el precio fijo del combo). Ver docs/servicios/dominio/Combos.md.
  *
  * @param {object}  tx                 cliente de transacción de Prisma
  * @param {number}  tenantId
- * @param {Array}   items              `[{ variantId, quantity, note? }]`
+ * @param {Array}   items              `[{ variantId, quantity, note?, comboSelection? }]`
  * @param {object}  [opts]
  * @param {boolean} [opts.checkStock]  si valida stock (carrito sí; bot a-pedido no)
  * @returns {Promise<{ pricedItems: Array, total: number }>}
@@ -44,7 +66,8 @@ async function priceItems(tx, tenantId, items, { checkStock = true } = {}) {
   });
   const variantMap = new Map(variants.map((v) => [v.id, v]));
 
-  const pricedItems = items.map((item) => {
+  const pricedItems = [];
+  for (const item of items) {
     const variant = variantMap.get(item.variantId);
 
     if (!variant) {
@@ -71,7 +94,9 @@ async function priceItems(tx, tenantId, items, { checkStock = true } = {}) {
       throw error;
     }
 
-    if (checkStock && item.quantity > variant.stock) {
+    // Los combos no tienen stock propio (la variante default no lo representa):
+    // el chequeo de stock corre sobre los componentes elegidos, más abajo.
+    if (checkStock && !variant.product.isCombo && item.quantity > variant.stock) {
       const error = createError(
         "Stock insuficiente",
         "INSUFFICIENT_STOCK",
@@ -96,16 +121,74 @@ async function priceItems(tx, tenantId, items, { checkStock = true } = {}) {
       throw error;
     }
 
-    return {
+    let comboChildren;
+    if (variant.product.isCombo) {
+      const perCombo = await validateComboSelection({
+        tx,
+        tenantId,
+        comboProduct: variant.product,
+        selection: item.comboSelection,
+        checkStock,
+      });
+      comboChildren = perCombo.map((child) => ({
+        variantId: child.variantId,
+        quantity: child.quantity * item.quantity,
+      }));
+    }
+
+    pricedItems.push({
       variantId: item.variantId,
       quantity: item.quantity,
       price: Number(price),
       note: item.note ?? null,
-    };
-  });
+      comboChildren,
+    });
+  }
 
   const total = pricedItems.reduce((sum, it) => sum + it.price * it.quantity, 0);
   return { pricedItems, total };
+}
+
+/**
+ * Inserta las filas de `OrderItem` para una orden ya creada: primero las
+ * "padre" (líneas normales + una por combo comprado), y si alguna trae
+ * `comboChildren` (ver `priceItems`), sus hijos con `parentItemId`. Se hace en
+ * dos pasos porque los hijos necesitan el `id` autogenerado del padre.
+ */
+async function insertOrderItems(tx, orderId, pricedItems) {
+  await tx.orderItem.createMany({
+    data: pricedItems.map(({ variantId, quantity, price, note }) => ({
+      orderId,
+      variantId,
+      quantity,
+      price,
+      note,
+    })),
+  });
+
+  // Autoincrement + misma transacción: el orden de inserción coincide con el
+  // orden ascendente de `id` para las filas recién creadas de esta orden.
+  const createdItems = await tx.orderItem.findMany({
+    where: { orderId },
+    orderBy: { id: "asc" },
+  });
+
+  const childrenData = [];
+  createdItems.forEach((created, index) => {
+    for (const child of pricedItems[index].comboChildren ?? []) {
+      childrenData.push({
+        orderId,
+        variantId: child.variantId,
+        quantity: child.quantity,
+        price: 0,
+        parentItemId: created.id,
+      });
+    }
+  });
+
+  if (childrenData.length) {
+    await tx.orderItem.createMany({ data: childrenData });
+  }
 }
 
 export const OrderModel = {
@@ -135,30 +218,19 @@ export const OrderModel = {
           variantId: item.variantId,
           quantity: item.quantity,
           note: item.note,
+          comboSelection: item.comboSelection ?? undefined,
         }))
       );
 
-      const newOrder = await tx.order.create({
-        data: {
-          tenantId,
-          userId,
-          total,
-          status: "PENDING",
-          orderItems: {
-            create: pricedItems.map(({ variantId, quantity, price, note }) => ({
-              variantId,
-              quantity,
-              price,
-              note,
-            })),
-          },
-        },
-        ...orderItemsInclude,
+      const order = await tx.order.create({
+        data: { tenantId, userId, total, status: "PENDING" },
       });
+
+      await insertOrderItems(tx, order.id, pricedItems);
 
       await tx.orderStatusHistory.create({
         data: {
-          orderId: newOrder.id,
+          orderId: order.id,
           fromStatus: null,
           toStatus: "PENDING",
           note: "Pedido creado",
@@ -168,7 +240,7 @@ export const OrderModel = {
 
       await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
 
-      return newOrder;
+      return tx.order.findFirst({ where: { id: order.id }, ...orderItemsInclude });
     });
   },
 
@@ -347,19 +419,26 @@ export const OrderModel = {
         },
       });
 
+    // Líneas que representan stock REAL a validar/descontar: para un combo, sus
+    // hijos (los componentes elegidos); para una línea normal, ella misma. La
+    // variante default del combo-padre nunca tiene stock propio.
+    const stockLines = order.orderItems.flatMap((item) =>
+      item.childItems?.length ? item.childItems : [item]
+    );
+
     const updated = await prisma.$transaction(async (tx) => {
       if (status === "COMPLETED") {
-        for (const item of order.orderItems) {
-          if (item.quantity > item.variant.stock) {
+        for (const line of stockLines) {
+          if (line.quantity > line.variant.stock) {
             const error = createError(
               "Stock insuficiente al completar la orden",
               "INSUFFICIENT_STOCK",
               409
             );
             error.details = {
-              variant: item.variant.id,
-              solicitado: item.quantity,
-              disponible: item.variant.stock,
+              variant: line.variant.id,
+              solicitado: line.quantity,
+              disponible: line.variant.stock,
             };
             throw error;
           }
@@ -373,10 +452,10 @@ export const OrderModel = {
       });
 
       if (status === "COMPLETED") {
-        for (const item of order.orderItems) {
+        for (const line of stockLines) {
           await tx.productVariant.update({
-            where: { id: item.variantId },
-            data: { stock: { decrement: item.quantity } },
+            where: { id: line.variantId },
+            data: { stock: { decrement: line.quantity } },
           });
         }
       }
@@ -461,7 +540,10 @@ export const OrderModel = {
 
         // Re-resolvemos TODOS los items (con las cantidades/notas nuevas donde
         // las haya) para recomputar precio y total server-side. Sin chequeo de
-        // stock: la orden ya existe y Desvare es a-pedido.
+        // stock: la orden ya existe y Desvare es a-pedido. Para una línea de
+        // combo, `comboSelection` se reconstruye a partir de sus hijos actuales
+        // (per-unidad-de-combo) — v1 solo permite reescalar cantidades vía
+        // review, no agregar/quitar componentes del combo (ver [[Combos]]).
         const desired = order.orderItems.map((it) => {
           const edit = items.find((e) => e.id === it.id);
           return {
@@ -470,6 +552,12 @@ export const OrderModel = {
             // "note" in edit distingue "no la mandó" (mantener la actual) de
             // "la mandó en null" (borrarla).
             note: edit && "note" in edit ? edit.note : it.note,
+            comboSelection: it.childItems?.length
+              ? it.childItems.map((c) => ({
+                  variantId: c.variantId,
+                  quantity: c.quantity / it.quantity,
+                }))
+              : undefined,
           };
         });
 
@@ -482,10 +570,23 @@ export const OrderModel = {
         // por id de fila. `pricedItems` preserva el orden de `desired`, que a
         // su vez viene de mapear `order.orderItems` en el mismo orden.
         for (const [index, pi] of pricedItems.entries()) {
+          const original = order.orderItems[index];
           await tx.orderItem.update({
-            where: { id: order.orderItems[index].id },
+            where: { id: original.id },
             data: { quantity: pi.quantity, price: pi.price, note: pi.note },
           });
+
+          for (const child of pi.comboChildren ?? []) {
+            const existingChild = original.childItems.find(
+              (c) => c.variantId === child.variantId
+            );
+            if (existingChild) {
+              await tx.orderItem.update({
+                where: { id: existingChild.id },
+                data: { quantity: child.quantity },
+              });
+            }
+          }
         }
 
         data.total = total;
@@ -612,7 +713,7 @@ export const OrderModel = {
         ? roundMoney((total * depositPercentage) / 100)
         : null;
 
-      const newOrder = await tx.order.create({
+      const order = await tx.order.create({
         data: {
           tenantId,
           userId: null,
@@ -625,21 +726,14 @@ export const OrderModel = {
           requiresDeposit,
           depositAmount,
           creationContext,
-          orderItems: {
-            create: pricedItems.map(({ variantId, quantity, price, note }) => ({
-              variantId,
-              quantity,
-              price,
-              note,
-            })),
-          },
         },
-        ...orderItemsInclude,
       });
+
+      await insertOrderItems(tx, order.id, pricedItems);
 
       await tx.orderStatusHistory.create({
         data: {
-          orderId: newOrder.id,
+          orderId: order.id,
           fromStatus: null,
           toStatus: "PENDING",
           note: "Pedido creado por el bot",
@@ -647,7 +741,7 @@ export const OrderModel = {
         },
       });
 
-      return newOrder;
+      return tx.order.findFirst({ where: { id: order.id }, ...orderItemsInclude });
     });
   },
 };

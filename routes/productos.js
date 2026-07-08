@@ -45,6 +45,12 @@ productosRouter.get(
   productsController.getStats
 );
 productosRouter.get("/:id", verifyToken, validation.id, productsController.getById);
+productosRouter.get(
+  "/:id/combo-options",
+  verifyToken,
+  validation.id,
+  productsController.getComboOptions
+);
 
 productosRouter.post(
   "/",

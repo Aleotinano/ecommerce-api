@@ -65,6 +65,19 @@ export class productsController {
     }
   }
 
+  static async getComboOptions(req, res, next) {
+    try {
+      const { id } = req.params;
+      const options = await ProductModel.getComboOptions({
+        tenantId: req.tenantId,
+        id,
+      });
+      return res.json(options);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async getById(req, res, next) {
     try {
       const { id } = req.params;
@@ -90,6 +103,10 @@ export class productsController {
         isActive,
         variants = [],
         stock,
+        isCombo,
+        comboMinItems,
+        comboMaxItems,
+        comboOptions,
       } = req.body;
 
       if (uploadedFile) {
@@ -109,6 +126,10 @@ export class productsController {
         isActive,
         variants,
         stock,
+        isCombo,
+        comboMinItems,
+        comboMaxItems,
+        comboOptions,
       });
 
       return res.status(201).json({
@@ -135,8 +156,19 @@ export class productsController {
         tenantId: req.tenantId,
         id,
       });
-      const { name, description, categoryId, price, img, isActive, stock } =
-        req.body;
+      const {
+        name,
+        description,
+        categoryId,
+        price,
+        img,
+        isActive,
+        stock,
+        isCombo,
+        comboMinItems,
+        comboMaxItems,
+        comboOptions,
+      } = req.body;
 
       const imageData = {};
       let shouldDeletePreviousImage = false;
@@ -163,6 +195,10 @@ export class productsController {
           price,
           isActive,
           stock,
+          isCombo,
+          comboMinItems,
+          comboMaxItems,
+          comboOptions,
           ...imageData,
         }
       );

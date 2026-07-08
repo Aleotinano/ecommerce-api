@@ -1,5 +1,19 @@
 import { OrderModel } from "../services/orders.js";
 
+// Composición de un combo (childItems, ver services/orders.js) para exponer en
+// las respuestas de orden — null si la línea no es un combo.
+function comboOf(item) {
+  return item.childItems?.length
+    ? item.childItems.map((child) => ({
+        variantId: child.variantId,
+        nombre: child.variant?.product?.name ?? child.variant?.sku,
+        cantidad: child.quantity,
+        color: child.variant?.color,
+        size: child.variant?.size,
+      }))
+    : null;
+}
+
 export class OrderController {
   static async create(req, res, next) {
     try {
@@ -29,6 +43,7 @@ export class OrderController {
             color: item.variant.color,
             size: item.variant.size,
             note: item.note,
+            combo: comboOf(item),
           })),
         },
       });
@@ -65,6 +80,7 @@ export class OrderController {
           color: item.variant.color,
           size: item.variant.size,
           note: item.note,
+          combo: comboOf(item),
         })),
       }));
 
@@ -112,6 +128,7 @@ export class OrderController {
           color: item.variant.color,
           size: item.variant.size,
           note: item.note,
+          combo: comboOf(item),
         })),
       }));
 
@@ -157,6 +174,7 @@ export class OrderController {
             size: item.variant.size,
             image: item.variant.img ?? item.variant.product?.img ?? null,
             note: item.note,
+            combo: comboOf(item),
           })),
           timeline: (order.statusHistory ?? []).map((entry) => ({
             estado: entry.toStatus,
@@ -238,6 +256,7 @@ export class OrderController {
             color: item.variant.color,
             size: item.variant.size,
             note: item.note,
+            combo: comboOf(item),
           })),
         },
       });

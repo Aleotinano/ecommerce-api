@@ -15,16 +15,17 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users              User[]
-  categories         Categories[]
-  products           Product[]
-  variants           ProductVariant[]
-  carts              Cart[]
-  orders             Order[]
-  config             TenantConfig?
-  contentSuggestions ContentSuggestion[]
-  pageSpec           TenantPageSpec?
-  suggestionImages   SuggestionImage[]
+  users                User[]
+  categories           Categories[]
+  products             Product[]
+  variants             ProductVariant[]
+  carts                Cart[]
+  orders               Order[]
+  config               TenantConfig?
+  contentSuggestions   ContentSuggestion[]
+  pageSpec             TenantPageSpec?
+  suggestionImages     SuggestionImage[]
+  comboAllowedProducts ComboAllowedProduct[]
 }
 
 model TenantConfig {
@@ -148,7 +149,39 @@ model Product {
   tenant             Tenant              @relation(fields: [tenantId], references: [id])
   contentSuggestions ContentSuggestion[]
 
+  // Combos: producto compuesto de otros productos, el cliente elige la selección
+  // dentro del whitelist de `comboOptions` respetando comboMinItems/comboMaxItems
+  // (unidades totales, no líneas distintas). Ver docs/servicios/dominio/Combos.md.
+  isCombo         Boolean                @default(false)
+  comboMinItems   Int?
+  comboMaxItems   Int?
+  comboOptions    ComboAllowedProduct[]  @relation("ComboOptions")
+  allowedInCombos ComboAllowedProduct[]  @relation("AllowedInCombos")
+
   @@index([tenantId])
+}
+
+// Whitelist de productos permitidos dentro de un combo. `comboProduct` es el
+// producto con isCombo=true; `allowedProduct` es cada opción elegible (nunca
+// otro combo — sin anidamiento). minQty/maxQty acotan cuánto de ESE producto
+// puede elegirse dentro del combo (además del rango total en Product).
+model ComboAllowedProduct {
+  id               Int      @id @default(autoincrement())
+  tenantId         Int
+  comboProductId   Int
+  allowedProductId Int
+  minQty           Int      @default(0)
+  maxQty           Int?
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+
+  comboProduct   Product @relation("ComboOptions", fields: [comboProductId], references: [id], onDelete: Cascade)
+  allowedProduct Product @relation("AllowedInCombos", fields: [allowedProductId], references: [id], onDelete: Cascade)
+  tenant         Tenant  @relation(fields: [tenantId], references: [id])
+
+  @@unique([comboProductId, allowedProductId])
+  @@index([tenantId])
+  @@index([comboProductId])
 }
 
 model ProductVariant {
@@ -193,6 +226,12 @@ model CartItem {
   createdAt DateTime       @default(now())
   cart      Cart           @relation(fields: [cartId], references: [id])
   variant   ProductVariant @relation(fields: [variantId], references: [id])
+
+  // Combos: selección elegida por el cliente para ESTE combo, `[{ variantId,
+  // quantity }]` por una unidad de combo. Se resuelve/valida server-side al
+  // agregar (services/combos.js) y se vuelve a validar al pasar a orden — nunca
+  // se confía en este JSON al leerlo. null para líneas que no son combo.
+  comboSelection Json?
 
   @@unique([cartId, variantId])
 }
@@ -259,7 +298,16 @@ model OrderItem {
   order     Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
   variant   ProductVariant @relation(fields: [variantId], references: [id])
 
+  // Combos: la fila "padre" (variant = variante default del producto-combo,
+  // price = precio fijo del combo) tiene childItems, una fila por componente
+  // elegido (variantId = variante real, price = 0, el cobro ya está en el
+  // padre). parentItemId null = línea normal o línea padre de combo.
+  parentItemId Int?
+  parentItem   OrderItem?  @relation("ComboItems", fields: [parentItemId], references: [id], onDelete: Cascade)
+  childItems   OrderItem[] @relation("ComboItems")
+
   @@index([orderId, variantId])
+  @@index([parentItemId])
 }
 
 model ContentSuggestion {

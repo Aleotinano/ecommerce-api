@@ -1,5 +1,6 @@
 import prisma from "../lib/prisma.js";
 import { createError } from "../helpers/error.js";
+import { validateComboSelection } from "./combos.js";
 
 export const CartModel = {
   async getCart({ tenantId, id }) {
@@ -65,6 +66,68 @@ export const CartModel = {
         include: {
           variant: { include: { product: true } },
         },
+      });
+    });
+  },
+
+  /**
+   * Agrega un combo al carrito con la selección de componentes elegida por el
+   * cliente. La fila del carrito es UNA sola `CartItem` (variantId = variante
+   * default del producto-combo); la selección se re-valida server-side contra
+   * la whitelist (ver services/combos.js) y se guarda serializada en
+   * `comboSelection` — nunca se confía en ella al leerla, se vuelve a validar
+   * al pasar a orden. Volver a llamar esto reemplaza la selección anterior.
+   */
+  async addCombo({ tenantId, id, comboVariantId, selection }) {
+    return prisma.$transaction(async (tx) => {
+      const comboVariant = await tx.productVariant.findFirst({
+        where: { id: comboVariantId, tenantId },
+        include: { product: true },
+      });
+
+      if (!comboVariant) {
+        throw createError("Variante no encontrada", "VARIANT_NOT_FOUND", 404);
+      }
+      if (!comboVariant.isActive || !comboVariant.product?.isActive) {
+        throw createError(
+          "Variante no disponible",
+          "VARIANT_NOT_AVAILABLE",
+          400
+        );
+      }
+      if (!comboVariant.product.isCombo) {
+        throw createError("El producto no es un combo", "PRODUCT_NOT_COMBO", 400);
+      }
+
+      const children = await validateComboSelection({
+        tx,
+        tenantId,
+        comboProduct: comboVariant.product,
+        selection,
+        checkStock: true,
+      });
+
+      const cart = await tx.cart.upsert({
+        where: { userId: id },
+        update: {},
+        create: { userId: id, tenantId },
+      });
+
+      const existingItem = await tx.cartItem.findUnique({
+        where: { cartId_variantId: { cartId: cart.id, variantId: comboVariantId } },
+      });
+      const currentQuantity = existingItem?.quantity ?? 0;
+
+      return tx.cartItem.upsert({
+        where: { cartId_variantId: { cartId: cart.id, variantId: comboVariantId } },
+        update: { quantity: currentQuantity + 1, comboSelection: children },
+        create: {
+          cartId: cart.id,
+          variantId: comboVariantId,
+          quantity: 1,
+          comboSelection: children,
+        },
+        include: { variant: { include: { product: true } } },
       });
     });
   },

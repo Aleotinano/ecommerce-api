@@ -31,3 +31,10 @@ storeProductsRouter.get(
   validation.id,
   StoreProductsController.getById
 );
+
+storeProductsRouter.get(
+  "/:id/combo-options",
+  optionalStoreAuth,
+  validation.id,
+  StoreProductsController.getComboOptions
+);

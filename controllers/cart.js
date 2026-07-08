@@ -32,7 +32,35 @@ export class cartController {
               : null,
           },
           quantity: item.quantity,
+          comboSelection: item.comboSelection ?? null,
         })),
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async addCombo(req, res, next) {
+    try {
+      const { id } = req.user;
+      const variantId = req.params.variantId;
+      const { selection } = req.body;
+
+      const cartItem = await CartModel.addCombo({
+        tenantId: req.tenantId,
+        id,
+        comboVariantId: variantId,
+        selection,
+      });
+
+      return res.status(201).json({
+        message: "Combo agregado al carrito",
+        data: {
+          producto: cartItem.variant.product?.name,
+          variantId: cartItem.variantId,
+          cantidad: cartItem.quantity,
+          seleccion: cartItem.comboSelection,
+        },
       });
     } catch (error) {
       next(error);

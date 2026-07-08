@@ -68,4 +68,17 @@ export class StoreProductsController {
       next(error);
     }
   }
+
+  static async getComboOptions(req, res, next) {
+    try {
+      const { id } = req.params;
+      const options = await ProductModel.getComboOptions({
+        tenantId: req.tenantId,
+        id,
+      });
+      return res.json(options);
+    } catch (error) {
+      next(error);
+    }
+  }
 }

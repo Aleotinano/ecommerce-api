@@ -2,6 +2,26 @@ import { z } from "zod";
 import { createVariant } from "./variant.schema.js";
 import { SUGGESTION_ANGLES } from "./content-suggestion.schema.js";
 
+// Combos: una fila de la whitelist de productos permitidos dentro de un combo.
+export const comboOption = z.object({
+  allowedProductId: z.coerce
+    .number({ invalid_type_error: "El ID de producto debe ser un número" })
+    .int("El ID de producto debe ser un número entero")
+    .positive("ID de producto inválido"),
+  minQty: z.coerce
+    .number({ invalid_type_error: "minQty debe ser un número" })
+    .int("minQty debe ser un número entero")
+    .min(0, "minQty no puede ser negativo")
+    .optional()
+    .default(0),
+  maxQty: z.coerce
+    .number({ invalid_type_error: "maxQty debe ser un número" })
+    .int("maxQty debe ser un número entero")
+    .positive("maxQty debe ser mayor a 0")
+    .nullable()
+    .optional(),
+});
+
 export const createProduct = z.object({
   name: z
     .string({
@@ -45,6 +65,22 @@ export const createProduct = z.object({
     .int("El stock debe ser un número entero")
     .min(0, "El stock no puede ser negativo")
     .optional(),
+  // Combos: producto compuesto de otros productos (ver docs/servicios/dominio/Combos.md).
+  isCombo: z
+    .boolean({ invalid_type_error: "El valor debe ser booleano" })
+    .optional()
+    .default(false),
+  comboMinItems: z.coerce
+    .number({ invalid_type_error: "comboMinItems debe ser un número" })
+    .int("comboMinItems debe ser un número entero")
+    .positive("comboMinItems debe ser mayor a 0")
+    .optional(),
+  comboMaxItems: z.coerce
+    .number({ invalid_type_error: "comboMaxItems debe ser un número" })
+    .int("comboMaxItems debe ser un número entero")
+    .positive("comboMaxItems debe ser mayor a 0")
+    .optional(),
+  comboOptions: z.array(comboOption).optional().default([]),
 });
 
 export const updateProduct = z
@@ -86,6 +122,24 @@ export const updateProduct = z
       .int("El stock debe ser un número entero")
       .min(0, "El stock no puede ser negativo")
       .optional(),
+    // Combos: ver docs/servicios/dominio/Combos.md. `comboOptions` reemplaza la
+    // whitelist completa si se envía (no hay merge incremental en v1).
+    isCombo: z
+      .boolean({ invalid_type_error: "El valor debe ser booleano" })
+      .optional(),
+    comboMinItems: z.coerce
+      .number({ invalid_type_error: "comboMinItems debe ser un número" })
+      .int("comboMinItems debe ser un número entero")
+      .positive("comboMinItems debe ser mayor a 0")
+      .nullable()
+      .optional(),
+    comboMaxItems: z.coerce
+      .number({ invalid_type_error: "comboMaxItems debe ser un número" })
+      .int("comboMaxItems debe ser un número entero")
+      .positive("comboMaxItems debe ser mayor a 0")
+      .nullable()
+      .optional(),
+    comboOptions: z.array(comboOption).optional(),
   })
   // Sin `.refine` de "al menos un campo": el caso vacío (ni body ni imagen) ya lo
   // corta `requireBodyOrImage` en la ruta, y ese refine rechazaba los updates que

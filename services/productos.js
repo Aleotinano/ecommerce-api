@@ -102,6 +102,45 @@ const ensureCategoryExists = async (tenantId, categoryId) => {
   }
 };
 
+// Combos: valida la whitelist antes de persistirla. `comboProductId` es null en
+// `create` (el combo todavía no tiene id) — el self-check no aplica ahí.
+const ensureComboOptionsValid = async (tenantId, comboOptions, comboProductId = null) => {
+  if (!comboOptions.length) return;
+
+  const ids = comboOptions.map((o) => o.allowedProductId);
+  if (comboProductId != null && ids.includes(comboProductId)) {
+    throw createError(
+      "Un combo no puede permitirse a sí mismo",
+      "COMBO_PRODUCT_NOT_ALLOWED",
+      400
+    );
+  }
+
+  const products = await prisma.product.findMany({
+    where: { id: { in: ids }, tenantId },
+    select: { id: true, isCombo: true },
+  });
+  const productMap = new Map(products.map((p) => [p.id, p]));
+
+  for (const id of ids) {
+    const product = productMap.get(id);
+    if (!product) {
+      throw createError(
+        "Uno de los productos permitidos no existe",
+        "PRODUCT_NOT_FOUND",
+        404
+      );
+    }
+    if (product.isCombo) {
+      throw createError(
+        "No se permiten combos anidados",
+        "COMBO_NESTED_NOT_ALLOWED",
+        400
+      );
+    }
+  }
+};
+
 const generateUniqueVariantSku = async ({ tenantId, productName, reservedSkus = new Set() }) => {
   let sku;
 
@@ -373,8 +412,15 @@ export const ProductModel = {
     isActive,
     variants = [],
     stock,
+    isCombo = false,
+    comboMinItems,
+    comboMaxItems,
+    comboOptions = [],
   }) {
     await ensureCategoryExists(tenantId, categoryId);
+    if (isCombo) {
+      await ensureComboOptionsValid(tenantId, comboOptions);
+    }
 
     const reservedSkus = new Set();
     let variantsWithSku = await Promise.all(
@@ -427,6 +473,9 @@ export const ProductModel = {
       img: img ?? null,
       imgPublicId: imgPublicId ?? null,
       isActive: isActive ?? true,
+      isCombo,
+      comboMinItems: isCombo ? comboMinItems ?? null : null,
+      comboMaxItems: isCombo ? comboMaxItems ?? null : null,
     };
 
     const result = await prisma.product.create({
@@ -448,11 +497,23 @@ export const ProductModel = {
                 })),
               }
             : undefined,
+        comboOptions:
+          isCombo && comboOptions.length
+            ? {
+                create: comboOptions.map((option) => ({
+                  tenantId,
+                  allowedProductId: option.allowedProductId,
+                  minQty: option.minQty ?? 0,
+                  maxQty: option.maxQty ?? null,
+                })),
+              }
+            : undefined,
       },
       include: {
         variants: {
           orderBy: { id: "asc" },
         },
+        comboOptions: true,
       },
     });
 
@@ -462,10 +523,27 @@ export const ProductModel = {
 
   async edit(
     { tenantId, id },
-    { name, description, categoryId, price, img, imgPublicId, isActive, stock }
+    {
+      name,
+      description,
+      categoryId,
+      price,
+      img,
+      imgPublicId,
+      isActive,
+      stock,
+      isCombo,
+      comboMinItems,
+      comboMaxItems,
+      comboOptions,
+    }
   ) {
     const existing = await this.getByIdForManagement({ tenantId, id });
     await ensureCategoryExists(tenantId, categoryId);
+
+    if (comboOptions !== undefined) {
+      await ensureComboOptionsValid(tenantId, comboOptions, id);
+    }
 
     const data = {
       name,
@@ -475,6 +553,9 @@ export const ProductModel = {
       img,
       imgPublicId,
       isActive,
+      isCombo,
+      comboMinItems,
+      comboMaxItems,
     };
 
     const updateData = Object.fromEntries(
@@ -499,6 +580,27 @@ export const ProductModel = {
       }
     }
 
+    // `comboOptions` reemplaza la whitelist completa (no hay merge incremental
+    // en v1): borra las reglas actuales y crea las nuevas en una transacción.
+    if (comboOptions !== undefined) {
+      await prisma.$transaction([
+        prisma.comboAllowedProduct.deleteMany({ where: { comboProductId: id } }),
+        ...(comboOptions.length
+          ? [
+              prisma.comboAllowedProduct.createMany({
+                data: comboOptions.map((option) => ({
+                  tenantId,
+                  comboProductId: id,
+                  allowedProductId: option.allowedProductId,
+                  minQty: option.minQty ?? 0,
+                  maxQty: option.maxQty ?? null,
+                })),
+              }),
+            ]
+          : []),
+      ]);
+    }
+
     const result = await prisma.product.update({
       where: { id },
       data: updateData,
@@ -507,11 +609,62 @@ export const ProductModel = {
           where: { isActive: true },
           orderBy: { id: "asc" },
         },
+        comboOptions: true,
       },
     });
 
     await invalidateProductsCache(tenantId);
     return result;
+  },
+
+  async getComboOptions({ tenantId, id }) {
+    const key = `${tenantNs(tenantId)}:prod:combo:${id}`;
+
+    return wrap(key, PRODUCT_DETAIL_TTL, async () => {
+      const product = await prisma.product.findFirst({
+        where: { id, tenantId },
+        select: { id: true, isCombo: true, comboMinItems: true, comboMaxItems: true },
+      });
+
+      if (!product) {
+        throw createError("Producto no encontrado", "PRODUCT_NOT_FOUND", 404);
+      }
+      if (!product.isCombo) {
+        throw createError("El producto no es un combo", "PRODUCT_NOT_COMBO", 400);
+      }
+
+      const options = await prisma.comboAllowedProduct.findMany({
+        where: { comboProductId: id, tenantId, isActive: true },
+        include: {
+          allowedProduct: {
+            include: {
+              variants: { where: { isActive: true }, orderBy: { id: "asc" } },
+            },
+          },
+        },
+      });
+
+      return {
+        comboMinItems: product.comboMinItems,
+        comboMaxItems: product.comboMaxItems,
+        allowedProducts: options
+          .filter((option) => option.allowedProduct.isActive)
+          .map((option) => ({
+            productId: option.allowedProduct.id,
+            name: option.allowedProduct.name,
+            img: option.allowedProduct.img,
+            price: option.allowedProduct.price,
+            minQty: option.minQty,
+            maxQty: option.maxQty,
+            variants: option.allowedProduct.variants.map((variant) => ({
+              id: variant.id,
+              color: variant.color,
+              size: variant.size,
+              stock: variant.stock,
+            })),
+          })),
+      };
+    });
   },
 
   async assignCategory({ tenantId, id, categoryId }) {

@@ -247,6 +247,14 @@ export const buildToolContext = ({ tenantId, user, config, channel }) => {
           return { error: `No encontre el producto ${productId}.` };
         }
 
+        // Combos: el bot todavía no arma combos (requiere elegir componentes
+        // dentro de un min/max) — se coordina por otro canal. Ver [[Combos]].
+        if (product.isCombo) {
+          return {
+            error: `"${product.name}" es un combo armable — por ahora esos se arman en el local, contactanos para coordinarlo.`,
+          };
+        }
+
         const variants = product.variants ?? [];
         const candidates = variants.filter(
           (v) =>
