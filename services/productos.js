@@ -130,10 +130,15 @@ const ensureComboOptionsValid = async (tenantId, comboOptions, comboProductId = 
   }
 };
 
-// Combos: valida la whitelist de CATEGORÍAS enteras antes de persistirla. A diferencia
-// de `ensureComboOptionsValid`, no hay auto-referencia ni anidamiento que chequear (una
-// categoría no puede ser un combo) — solo que cada categoría exista y sea del tenant.
-const ensureComboCategoryOptionsValid = async (tenantId, comboCategoryOptions) => {
+// Combos: valida la whitelist de CATEGORÍAS antes de persistirla — que cada categoría
+// exista y sea del tenant, y que cada miembro explícito (`productIds`) exista,
+// pertenezca a ESA categoría, no sea un combo (sin anidamiento) ni el propio combo
+// (`comboProductId` es null en `create`, el self-check no aplica ahí).
+const ensureComboCategoryOptionsValid = async (
+  tenantId,
+  comboCategoryOptions,
+  comboProductId = null
+) => {
   if (!comboCategoryOptions.length) return;
 
   const ids = comboCategoryOptions.map((o) => o.categoryId);
@@ -152,6 +157,80 @@ const ensureComboCategoryOptionsValid = async (tenantId, comboCategoryOptions) =
       );
     }
   }
+
+  const memberIds = [...new Set(comboCategoryOptions.flatMap((o) => o.productIds ?? []))];
+  if (!memberIds.length) return;
+
+  if (comboProductId != null && memberIds.includes(comboProductId)) {
+    throw createError(
+      "Un combo no puede permitirse a sí mismo",
+      "COMBO_PRODUCT_NOT_ALLOWED",
+      400
+    );
+  }
+
+  const members = await prisma.product.findMany({
+    where: { id: { in: memberIds }, tenantId },
+    select: { id: true, type: true, categoryId: true },
+  });
+  const memberMap = new Map(members.map((p) => [p.id, p]));
+
+  for (const option of comboCategoryOptions) {
+    for (const productId of option.productIds ?? []) {
+      const product = memberMap.get(productId);
+      if (!product) {
+        throw createError(
+          "Uno de los productos permitidos no existe",
+          "PRODUCT_NOT_FOUND",
+          404
+        );
+      }
+      if (product.type === "COMBO") {
+        throw createError(
+          "No se permiten combos anidados",
+          "COMBO_NESTED_NOT_ALLOWED",
+          400
+        );
+      }
+      if (product.categoryId !== option.categoryId) {
+        throw createError(
+          "Uno de los productos permitidos no pertenece a la categoría de su regla",
+          "COMBO_MEMBER_CATEGORY_MISMATCH",
+          400
+        );
+      }
+    }
+  }
+};
+
+// Combos: filas de ComboAllowedProduct para los miembros explícitos de cada regla
+// de categoría recién persistida. `createdRules` son las ComboAllowedCategory ya
+// creadas (con id); min/maxQty de la fila miembro quedan en 0/null porque no se
+// usan — la cantidad la gobierna la regla de la categoría.
+const buildComboMemberRows = ({ tenantId, comboProductId, comboCategoryOptions, createdRules }) => {
+  const ruleIdByCategory = new Map(createdRules.map((rule) => [rule.categoryId, rule.id]));
+  return comboCategoryOptions.flatMap((option) =>
+    (option.productIds ?? []).map((productId) => ({
+      tenantId,
+      comboProductId,
+      allowedProductId: productId,
+      comboAllowedCategoryId: ruleIdByCategory.get(option.categoryId),
+      minQty: 0,
+      maxQty: null,
+    }))
+  );
+};
+
+// Combos: el rango total del combo se DERIVA de la suma de las cantidades por
+// categoría ("4 brownies + 2 cookies" => 6 ítems). Si alguna regla no tiene tope
+// (`maxQty` null), el combo tampoco lo tiene.
+const deriveComboRange = (comboCategoryOptions) => {
+  const comboMinItems = comboCategoryOptions.reduce((sum, o) => sum + (o.minQty ?? 0), 0);
+  const unbounded = comboCategoryOptions.some((o) => o.maxQty == null);
+  const comboMaxItems = unbounded
+    ? null
+    : comboCategoryOptions.reduce((sum, o) => sum + o.maxQty, 0);
+  return { comboMinItems, comboMaxItems };
 };
 
 const buildVariantsWithSku = async ({ tenantId, productName, variants }) => {
@@ -476,7 +555,12 @@ export const ProductModel = {
           400
         );
       }
-      if (comboMinItems == null || comboMaxItems == null) {
+      if (comboCategoryOptions.length > 0) {
+        // El rango total se deriva de la suma por categoría; si el cliente mandó
+        // min/max explícitos se ignoran (fuente única: las reglas de categoría).
+        ({ comboMinItems, comboMaxItems } = deriveComboRange(comboCategoryOptions));
+      } else if (comboMinItems == null || comboMaxItems == null) {
+        // Camino legacy: whitelist solo por producto suelto exige rango explícito.
         throw createError(
           "comboMinItems y comboMaxItems son requeridos para un combo",
           "COMBO_RANGE_REQUIRED",
@@ -503,47 +587,72 @@ export const ProductModel = {
       comboMaxItems: type === "COMBO" ? comboMaxItems ?? null : null,
     };
 
-    const result = await prisma.product.create({
-      data: {
-        ...data,
-        variants:
-          variantsWithSku.length > 0
-            ? {
-                create: variantsWithSku.map((variant, index) =>
-                  toVariantCreateData(tenantId, variant, index === 0)
-                ),
-              }
-            : undefined,
-        comboOptions:
-          type === "COMBO" && comboOptions.length
-            ? {
-                create: comboOptions.map((option) => ({
-                  tenantId,
-                  allowedProductId: option.allowedProductId,
-                  minQty: option.minQty ?? 0,
-                  maxQty: option.maxQty ?? null,
-                })),
-              }
-            : undefined,
-        comboCategoryOptions:
-          type === "COMBO" && comboCategoryOptions.length
-            ? {
-                create: comboCategoryOptions.map((option) => ({
-                  tenantId,
-                  categoryId: option.categoryId,
-                  minQty: option.minQty ?? 0,
-                  maxQty: option.maxQty ?? null,
-                })),
-              }
-            : undefined,
-      },
-      include: {
-        variants: {
-          orderBy: { id: "asc" },
+    // Transacción porque los miembros explícitos de cada regla de categoría
+    // necesitan el `id` de su ComboAllowedCategory recién creada (no se pueden
+    // anidar en el mismo `create`).
+    const result = await prisma.$transaction(async (tx) => {
+      const created = await tx.product.create({
+        data: {
+          ...data,
+          variants:
+            variantsWithSku.length > 0
+              ? {
+                  create: variantsWithSku.map((variant, index) =>
+                    toVariantCreateData(tenantId, variant, index === 0)
+                  ),
+                }
+              : undefined,
+          comboOptions:
+            type === "COMBO" && comboOptions.length
+              ? {
+                  create: comboOptions.map((option) => ({
+                    tenantId,
+                    allowedProductId: option.allowedProductId,
+                    minQty: option.minQty ?? 0,
+                    maxQty: option.maxQty ?? null,
+                  })),
+                }
+              : undefined,
+          comboCategoryOptions:
+            type === "COMBO" && comboCategoryOptions.length
+              ? {
+                  create: comboCategoryOptions.map((option) => ({
+                    tenantId,
+                    categoryId: option.categoryId,
+                    minQty: option.minQty ?? 0,
+                    maxQty: option.maxQty ?? null,
+                  })),
+                }
+              : undefined,
         },
-        comboOptions: true,
-        comboCategoryOptions: true,
-      },
+        include: {
+          variants: {
+            orderBy: { id: "asc" },
+          },
+          comboOptions: true,
+          comboCategoryOptions: true,
+        },
+      });
+
+      const memberRows = buildComboMemberRows({
+        tenantId,
+        comboProductId: created.id,
+        comboCategoryOptions,
+        createdRules: created.comboCategoryOptions,
+      });
+      if (memberRows.length) {
+        await tx.comboAllowedProduct.createMany({ data: memberRows });
+        return tx.product.findFirst({
+          where: { id: created.id, tenantId },
+          include: {
+            variants: { orderBy: { id: "asc" } },
+            comboOptions: true,
+            comboCategoryOptions: true,
+          },
+        });
+      }
+
+      return created;
     });
 
     await invalidateProductsCache(tenantId);
@@ -579,7 +688,11 @@ export const ProductModel = {
       await ensureComboOptionsValid(tenantId, comboOptions, id);
     }
     if (targetType === "COMBO" && comboCategoryOptions !== undefined) {
-      await ensureComboCategoryOptionsValid(tenantId, comboCategoryOptions);
+      await ensureComboCategoryOptionsValid(tenantId, comboCategoryOptions, id);
+      if (comboCategoryOptions.length > 0) {
+        // Fuente única del rango total: las reglas de categoría (ver create()).
+        ({ comboMinItems, comboMaxItems } = deriveComboRange(comboCategoryOptions));
+      }
     }
 
     // Transición PRODUCTO -> COMBO: desactiva (nunca borra) lo que deja de aplicar —
@@ -674,46 +787,64 @@ export const ProductModel = {
     // `comboOptions`/`comboCategoryOptions` reemplazan la whitelist completa (no hay
     // merge incremental en v1): borran las reglas actuales y crean las nuevas en una
     // transacción. Cada whitelist se toca solo si vino en el request (independientes
-    // entre sí), pero si vinieron las dos se aplican atómicamente juntas.
-    const comboWhitelistOps = [];
-    if (comboOptions !== undefined) {
-      comboWhitelistOps.push(
-        prisma.comboAllowedProduct.deleteMany({ where: { comboProductId: id } })
-      );
-      if (comboOptions.length) {
-        comboWhitelistOps.push(
-          prisma.comboAllowedProduct.createMany({
-            data: comboOptions.map((option) => ({
+    // entre sí): `comboOptions` maneja SOLO las filas standalone (comboAllowedCategoryId
+    // null) y `comboCategoryOptions` las reglas de categoría + sus miembros (que caen
+    // por cascade al borrar la regla). Si vinieron las dos se aplican atómicamente.
+    if (comboOptions !== undefined || comboCategoryOptions !== undefined) {
+      await prisma.$transaction(async (tx) => {
+        if (comboOptions !== undefined) {
+          await tx.comboAllowedProduct.deleteMany({
+            where: { comboProductId: id, comboAllowedCategoryId: null },
+          });
+          if (comboOptions.length) {
+            await tx.comboAllowedProduct.createMany({
+              data: comboOptions.map((option) => ({
+                tenantId,
+                comboProductId: id,
+                allowedProductId: option.allowedProductId,
+                minQty: option.minQty ?? 0,
+                maxQty: option.maxQty ?? null,
+              })),
+            });
+          }
+        }
+        if (comboCategoryOptions !== undefined) {
+          // El deleteMany cascadea los miembros (FK ON DELETE CASCADE).
+          await tx.comboAllowedCategory.deleteMany({ where: { comboProductId: id } });
+          if (comboCategoryOptions.length) {
+            const createdRules = await Promise.all(
+              comboCategoryOptions.map((option) =>
+                tx.comboAllowedCategory.create({
+                  data: {
+                    tenantId,
+                    comboProductId: id,
+                    categoryId: option.categoryId,
+                    minQty: option.minQty ?? 0,
+                    maxQty: option.maxQty ?? null,
+                  },
+                })
+              )
+            );
+            const memberRows = buildComboMemberRows({
               tenantId,
               comboProductId: id,
-              allowedProductId: option.allowedProductId,
-              minQty: option.minQty ?? 0,
-              maxQty: option.maxQty ?? null,
-            })),
-          })
-        );
-      }
-    }
-    if (comboCategoryOptions !== undefined) {
-      comboWhitelistOps.push(
-        prisma.comboAllowedCategory.deleteMany({ where: { comboProductId: id } })
-      );
-      if (comboCategoryOptions.length) {
-        comboWhitelistOps.push(
-          prisma.comboAllowedCategory.createMany({
-            data: comboCategoryOptions.map((option) => ({
-              tenantId,
-              comboProductId: id,
-              categoryId: option.categoryId,
-              minQty: option.minQty ?? 0,
-              maxQty: option.maxQty ?? null,
-            })),
-          })
-        );
-      }
-    }
-    if (comboWhitelistOps.length) {
-      await prisma.$transaction(comboWhitelistOps);
+              comboCategoryOptions,
+              createdRules,
+            });
+            if (memberRows.length) {
+              // Si algún miembro tenía una regla standalone legacy (FK null), la fila
+              // miembro la reemplaza — sin esto chocaría el @@unique(combo, producto).
+              await tx.comboAllowedProduct.deleteMany({
+                where: {
+                  comboProductId: id,
+                  allowedProductId: { in: memberRows.map((row) => row.allowedProductId) },
+                },
+              });
+              await tx.comboAllowedProduct.createMany({ data: memberRows });
+            }
+          }
+        }
+      });
     }
 
     const result = await prisma.product.update({
@@ -782,35 +913,57 @@ export const ProductModel = {
         })),
       });
 
-      const explicitProductIds = new Set(options.map((option) => option.allowedProductId));
+      // Las filas de comboAllowedProduct tienen dos sabores (ver schema.prisma):
+      // standalone (FK null, whitelist legacy per-producto) van a `allowedProducts`;
+      // las ligadas a una regla de categoría son sus MIEMBROS explícitos.
+      const standaloneOptions = options.filter((option) => option.comboAllowedCategoryId == null);
+      const membersByRuleId = new Map();
+      for (const option of options) {
+        if (option.comboAllowedCategoryId == null) continue;
+        const list = membersByRuleId.get(option.comboAllowedCategoryId) ?? [];
+        list.push(option);
+        membersByRuleId.set(option.comboAllowedCategoryId, list);
+      }
 
-      // Categorías enteras permitidas: expande cada regla a sus productos activos
-      // (siempre PRODUCTO, nunca COMBO ni el propio combo), salteando los que ya
-      // están whitelisteados individualmente (esos ya aparecen en `allowedProducts`
-      // con su propia regla, más específica — ver services/combos.js).
+      const standaloneProductIds = new Set(
+        standaloneOptions.map((option) => option.allowedProductId)
+      );
+
+      // Cada regla de categoría expande a sus miembros explícitos si los tiene; si
+      // no, a TODOS sus productos activos (siempre PRODUCTO, nunca COMBO ni el propio
+      // combo), salteando los standalone (esos ya aparecen en `allowedProducts` con
+      // su propia regla, más específica — ver services/combos.js). minQty/maxQty son
+      // el TOTAL DEL GRUPO: la suma elegida de la categoría debe caer en ese rango.
       const allowedCategories = await Promise.all(
         categoryOptions
           .filter((option) => option.category != null)
           .map(async (option) => {
-            const categoryProducts = await prisma.product.findMany({
-              where: {
-                tenantId,
-                categoryId: option.categoryId,
-                isActive: true,
-                type: "PRODUCTO",
-                id: { notIn: [id, ...explicitProductIds] },
-              },
-              include: { variants: { where: { isActive: true }, orderBy: { id: "asc" } } },
-            });
+            const members = membersByRuleId.get(option.id) ?? [];
+            const memberProducts = members
+              .filter((member) => member.allowedProduct.isActive)
+              .map((member) => member.allowedProduct);
+
+            const categoryProducts = members.length
+              ? memberProducts
+              : await prisma.product.findMany({
+                  where: {
+                    tenantId,
+                    categoryId: option.categoryId,
+                    isActive: true,
+                    type: "PRODUCTO",
+                    id: { notIn: [id, ...standaloneProductIds] },
+                  },
+                  include: { variants: { where: { isActive: true }, orderBy: { id: "asc" } } },
+                });
 
             return {
               categoryId: option.categoryId,
               categoryName: option.category.name,
               minQty: option.minQty,
               maxQty: option.maxQty,
-              // minQty/maxQty son de la regla de categoría, iguales para cada producto
-              // del grupo (no hay override por producto individual dentro de una
-              // categoría permitida — para eso está la whitelist explícita).
+              // Vacío = sin miembros explícitos (toda la categoría, incluye productos
+              // futuros). El admin lo usa para precargar el picker.
+              memberProductIds: members.map((member) => member.allowedProductId),
               products: categoryProducts.map((product) =>
                 toAllowedProduct(product, option.minQty, option.maxQty)
               ),
@@ -821,7 +974,7 @@ export const ProductModel = {
       return {
         comboMinItems: product.comboMinItems,
         comboMaxItems: product.comboMaxItems,
-        allowedProducts: options
+        allowedProducts: standaloneOptions
           .filter((option) => option.allowedProduct.isActive)
           .map((option) => toAllowedProduct(option.allowedProduct, option.minQty, option.maxQty)),
         allowedCategories,

@@ -314,16 +314,23 @@ describe("Combos: whitelist por categoría", () => {
       name: "Combo por categoría",
       price: 2500,
       type: "COMBO",
+      // Ignorados a propósito: con comboCategoryOptions presentes el rango total
+      // se DERIVA de la suma por categoría (acá: min 0 / max 2).
       comboMinItems: 1,
       comboMaxItems: 3,
-      // galletaA queda whitelisteada explícitamente (prioridad sobre la categoría);
-      // el resto de la categoría "Promos" (galletaE, galletaF) entra vía
-      // comboCategoryOptions.
+      // galletaA queda whitelisteada explícitamente (standalone legacy, prioridad
+      // sobre la categoría); el resto de la categoría "Promos" (galletaE, galletaF)
+      // entra vía comboCategoryOptions sin miembros explícitos (= todos).
       comboOptions: [{ allowedProductId: galletaA.id, minQty: 0, maxQty: 2 }],
       comboCategoryOptions: [
         { categoryId: categoriaPromos.id, minQty: 0, maxQty: 2 },
       ],
     });
+  });
+
+  it("create con comboCategoryOptions deriva comboMinItems/comboMaxItems de la suma por categoría", () => {
+    expect(comboCategoria.comboMinItems).toBe(0);
+    expect(comboCategoria.comboMaxItems).toBe(2);
   });
 
   it("comboCategoryOptions inexistente → CATEGORY_NOT_FOUND", async () => {
@@ -351,6 +358,8 @@ describe("Combos: whitelist por categoría", () => {
     expect(group.categoryId).toBe(categoriaPromos.id);
     expect(group.minQty).toBe(0);
     expect(group.maxQty).toBe(2);
+    // Sin miembros explícitos: la categoría expande a todos sus productos activos.
+    expect(group.memberProductIds).toEqual([]);
 
     const groupProductIds = group.products.map((p) => p.productId).sort((a, b) => a - b);
     expect(groupProductIds).toEqual([galletaE.id, galletaF.id].sort((a, b) => a - b));
@@ -369,14 +378,16 @@ describe("Combos: whitelist por categoría", () => {
     expect(res.status).toBe(201);
   });
 
-  it("respeta maxQty de la regla de categoría para un producto de esa categoría", async () => {
+  it("la cantidad de la categoría acota el total derivado del combo", async () => {
+    // maxQty 2 de la única categoría => comboMaxItems derivado 2; pedir 3 cae en el
+    // chequeo de total (que corre antes que el de suma por grupo).
     const res = await request(app)
       .post(`/cart/combo/${comboCategoria.id}`)
       .set("Cookie", cookieFor(acmeCustomer))
       .send({ selection: [{ productId: galletaF.id, quantity: 3 }] });
 
     expect(res.status).toBe(400);
-    expect(res.body.error.code).toBe("COMBO_ITEM_QTY_OUT_OF_RANGE");
+    expect(res.body.error.code).toBe("COMBO_SELECTION_OUT_OF_RANGE");
   });
 
   it("producto fuera de la whitelist explícita y de la categoría permitida → COMBO_PRODUCT_NOT_ALLOWED", async () => {
@@ -409,6 +420,211 @@ describe("Combos: whitelist por categoría", () => {
     // tocó porque no vino en este edit.
     expect(options.allowedCategories.map((c) => c.categoryId)).toEqual([otherCategory.id]);
     expect(options.allowedProducts.map((p) => p.productId)).toEqual([galletaA.id]);
+  });
+});
+
+describe("Combos: miembros explícitos y cantidad por grupo", () => {
+  let categoriaBrownies;
+  let categoriaCookies;
+  let brownieA;
+  let brownieB;
+  let brownieC;
+  let cookieA;
+  let cookieB;
+  let comboArmado;
+
+  beforeAll(async () => {
+    categoriaBrownies = await CategoryModel.create({
+      tenantId: acme.id,
+      name: "Categoría Brownies",
+    });
+    categoriaCookies = await CategoryModel.create({
+      tenantId: acme.id,
+      name: "Categoría Cookies",
+    });
+
+    const mk = (name, categoryId) =>
+      ProductModel.create({
+        tenantId: acme.id,
+        name,
+        type: "PRODUCTO",
+        variants: [{ price: 900, stock: 20 }],
+        categoryId,
+      });
+    brownieA = await mk("Brownie A", categoriaBrownies.id);
+    brownieB = await mk("Brownie B", categoriaBrownies.id);
+    brownieC = await mk("Brownie C (excluido)", categoriaBrownies.id);
+    cookieA = await mk("Cookie A", categoriaCookies.id);
+    cookieB = await mk("Cookie B", categoriaCookies.id);
+
+    // "El combo lleva 2 brownies (solo A y B, C excluido) y cookies sin tope":
+    // brownies con miembros explícitos y cantidad exacta (min=max=2); cookies sin
+    // miembros (todos) y sin tope (maxQty null => combo sin máximo total).
+    comboArmado = await ProductModel.create({
+      tenantId: acme.id,
+      name: "Combo armado",
+      price: 5000,
+      type: "COMBO",
+      comboCategoryOptions: [
+        {
+          categoryId: categoriaBrownies.id,
+          minQty: 2,
+          maxQty: 2,
+          productIds: [brownieA.id, brownieB.id],
+        },
+        { categoryId: categoriaCookies.id, minQty: 1, maxQty: null },
+      ],
+    });
+  });
+
+  it("deriva el rango total: suma de mínimos, sin tope si algún grupo no lo tiene", () => {
+    expect(comboArmado.comboMinItems).toBe(3);
+    expect(comboArmado.comboMaxItems).toBeNull();
+  });
+
+  it("getComboOptions expande solo los miembros explícitos y expone memberProductIds", async () => {
+    const options = await ProductModel.getComboOptions({
+      tenantId: acme.id,
+      id: comboArmado.id,
+    });
+
+    expect(options.allowedProducts).toEqual([]);
+    expect(options.allowedCategories).toHaveLength(2);
+
+    const brownies = options.allowedCategories.find(
+      (c) => c.categoryId === categoriaBrownies.id
+    );
+    expect(brownies.memberProductIds.sort((a, b) => a - b)).toEqual(
+      [brownieA.id, brownieB.id].sort((a, b) => a - b)
+    );
+    // brownieC existe en la categoría pero NO aparece: quedó fuera de los miembros.
+    expect(brownies.products.map((p) => p.productId).sort((a, b) => a - b)).toEqual(
+      [brownieA.id, brownieB.id].sort((a, b) => a - b)
+    );
+
+    const cookies = options.allowedCategories.find(
+      (c) => c.categoryId === categoriaCookies.id
+    );
+    expect(cookies.memberProductIds).toEqual([]);
+    expect(cookies.products.map((p) => p.productId).sort((a, b) => a - b)).toEqual(
+      [cookieA.id, cookieB.id].sort((a, b) => a - b)
+    );
+  });
+
+  it("selección válida mezclando miembros del grupo → 201", async () => {
+    const res = await request(app)
+      .post(`/cart/combo/${comboArmado.id}`)
+      .set("Cookie", cookieFor(acmeCustomer))
+      .send({
+        selection: [
+          { productId: brownieA.id, quantity: 1 },
+          { productId: brownieB.id, quantity: 1 },
+          { productId: cookieA.id, quantity: 2 },
+        ],
+      });
+
+    expect(res.status).toBe(201);
+  });
+
+  it("producto de la categoría que NO es miembro explícito → COMBO_PRODUCT_NOT_ALLOWED", async () => {
+    const res = await request(app)
+      .post(`/cart/combo/${comboArmado.id}`)
+      .set("Cookie", cookieFor(acmeCustomer))
+      .send({
+        selection: [
+          { productId: brownieA.id, quantity: 1 },
+          { productId: brownieC.id, quantity: 1 },
+          { productId: cookieA.id, quantity: 1 },
+        ],
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("COMBO_PRODUCT_NOT_ALLOWED");
+    expect(res.body.error.details.productId).toBe(brownieC.id);
+  });
+
+  it("suma del grupo por encima del máximo de su categoría → COMBO_ITEM_QTY_OUT_OF_RANGE", async () => {
+    // 3 brownies entre A y B (grupo max 2) con total válido (cookies sin tope).
+    const res = await request(app)
+      .post(`/cart/combo/${comboArmado.id}`)
+      .set("Cookie", cookieFor(acmeCustomer))
+      .send({
+        selection: [
+          { productId: brownieA.id, quantity: 2 },
+          { productId: brownieB.id, quantity: 1 },
+          { productId: cookieA.id, quantity: 1 },
+        ],
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("COMBO_ITEM_QTY_OUT_OF_RANGE");
+    expect(res.body.error.details).toMatchObject({
+      categoryId: categoriaBrownies.id,
+      minQty: 2,
+      maxQty: 2,
+      selected: 3,
+    });
+  });
+
+  it("el mínimo de una categoría se exige aunque no se elija nada de ella", async () => {
+    // Total 3 cumple el mínimo derivado, pero brownies (min 2) quedó en 0.
+    const res = await request(app)
+      .post(`/cart/combo/${comboArmado.id}`)
+      .set("Cookie", cookieFor(acmeCustomer))
+      .send({ selection: [{ productId: cookieA.id, quantity: 3 }] });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("COMBO_ITEM_QTY_OUT_OF_RANGE");
+    expect(res.body.error.details).toMatchObject({
+      categoryId: categoriaBrownies.id,
+      selected: 0,
+    });
+  });
+
+  it("productIds con un producto de otra categoría → COMBO_MEMBER_CATEGORY_MISMATCH", async () => {
+    await expect(
+      ProductModel.edit(
+        { tenantId: acme.id, id: comboArmado.id },
+        {
+          comboCategoryOptions: [
+            {
+              categoryId: categoriaBrownies.id,
+              minQty: 2,
+              maxQty: 2,
+              productIds: [cookieA.id],
+            },
+          ],
+        }
+      )
+    ).rejects.toMatchObject({ code: "COMBO_MEMBER_CATEGORY_MISMATCH" });
+  });
+
+  it("edit reemplaza los miembros y rederiva el rango total", async () => {
+    const edited = await ProductModel.edit(
+      { tenantId: acme.id, id: comboArmado.id },
+      {
+        comboCategoryOptions: [
+          {
+            categoryId: categoriaBrownies.id,
+            minQty: 3,
+            maxQty: 3,
+            productIds: [brownieB.id, brownieC.id],
+          },
+        ],
+      }
+    );
+    expect(edited.comboMinItems).toBe(3);
+    expect(edited.comboMaxItems).toBe(3);
+
+    const options = await ProductModel.getComboOptions({
+      tenantId: acme.id,
+      id: comboArmado.id,
+    });
+    expect(options.allowedCategories).toHaveLength(1);
+    const brownies = options.allowedCategories[0];
+    expect(brownies.memberProductIds.sort((a, b) => a - b)).toEqual(
+      [brownieB.id, brownieC.id].sort((a, b) => a - b)
+    );
   });
 });
 

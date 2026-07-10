@@ -5,10 +5,15 @@ const selectionKey = (s) => `${s.productId}::${s.variantId ?? ""}`;
 
 /**
  * Valida la selección de un cliente para UN combo (`comboProduct.type === "COMBO"`)
- * contra su whitelist (`ComboAllowedProduct`) y devuelve la selección normalizada
+ * contra su whitelist y devuelve la selección normalizada
  * `[{ productId, variantId, quantity }]` (agrupada, cantidades para UNA unidad de
- * combo). Compartido por `services/cart.js` (agregar al carrito) y
- * `services/orders.js` (`priceItems`, al pasar a orden) para no duplicar la regla.
+ * combo). La whitelist tiene dos capas: reglas standalone (`ComboAllowedProduct`
+ * con FK null, min/max per-producto, legacy) y reglas por categoría
+ * (`ComboAllowedCategory`, min/maxQty = TOTAL DEL GRUPO, con miembros explícitos
+ * opcionales — sin miembros, toda la categoría). El mínimo de cada grupo se exige
+ * SIEMPRE, aunque la selección no incluya nada de esa categoría. Compartido por
+ * `services/cart.js` (agregar al carrito) y `services/orders.js` (`priceItems`,
+ * al pasar a orden) para no duplicar la regla.
  *
  * Cada componente elegido es un producto PRODUCTO de la whitelist (nunca COMBO — sin
  * anidamiento). `variantId` es opcional en la selección: si no viene, se resuelve la
@@ -91,10 +96,28 @@ export async function validateComboSelection({
       where: { comboProductId: comboProduct.id, tenantId, isActive: true },
     }),
   ]);
-  const allowedByProduct = new Map(allowed.map((a) => [a.allowedProductId, a]));
-  const allowedByCategory = new Map(allowedCategories.map((a) => [a.categoryId, a]));
+  // Las filas de comboAllowedProduct tienen dos sabores (ver schema.prisma):
+  // standalone (FK null, regla legacy per-producto con su propio min/max) y MIEMBRO
+  // explícito de una regla de categoría (marca pertenencia; la cantidad la gobierna
+  // el total del grupo de la regla).
+  const standaloneByProduct = new Map(
+    allowed
+      .filter((a) => a.comboAllowedCategoryId == null)
+      .map((a) => [a.allowedProductId, a])
+  );
+  const rulesByCategory = new Map(allowedCategories.map((a) => [a.categoryId, a]));
+  const ruleById = new Map(allowedCategories.map((a) => [a.id, a]));
+  const memberRuleIdByProduct = new Map();
+  const memberIdsByRule = new Map();
+  for (const a of allowed) {
+    if (a.comboAllowedCategoryId == null) continue;
+    memberRuleIdByProduct.set(a.allowedProductId, a.comboAllowedCategoryId);
+    const set = memberIdsByRule.get(a.comboAllowedCategoryId) ?? new Set();
+    set.add(a.allowedProductId);
+    memberIdsByRule.set(a.comboAllowedCategoryId, set);
+  }
 
-  // Cantidad total por PRODUCTO (para min/maxQty de la whitelist, sin importar variante).
+  // Cantidad total por PRODUCTO (sin importar variante).
   const qtyByProduct = new Map();
   for (const line of lines) {
     if (!productMap.has(line.productId)) {
@@ -103,15 +126,42 @@ export async function validateComboSelection({
     qtyByProduct.set(line.productId, (qtyByProduct.get(line.productId) ?? 0) + line.quantity);
   }
 
+  // Membership + acumulación por grupo. Regla standalone tiene prioridad y valida
+  // per-producto (legacy); su cantidad NO suma al grupo de su categoría (consistente
+  // con la expansión de getComboOptions). Ver docs/servicios/dominio/Combos.md.
+  const qtyByCategoryRule = new Map();
   for (const [productId, qty] of qtyByProduct) {
-    // Regla explícita por producto tiene prioridad; si no hay, cae a la regla de la
-    // categoría del producto (si esa categoría está permitida). Ver
-    // docs/servicios/dominio/Combos.md.
     const product = productMap.get(productId);
-    const rule =
-      allowedByProduct.get(productId) ??
-      (product.categoryId != null ? allowedByCategory.get(product.categoryId) : undefined);
-    if (!rule) {
+    const standaloneRule = standaloneByProduct.get(productId);
+
+    if (standaloneRule) {
+      if (
+        (standaloneRule.minQty && qty < standaloneRule.minQty) ||
+        (standaloneRule.maxQty != null && qty > standaloneRule.maxQty)
+      ) {
+        const error = createError(
+          "La cantidad de ese producto no respeta el mínimo/máximo permitido",
+          "COMBO_ITEM_QTY_OUT_OF_RANGE",
+          400
+        );
+        error.details = { productId, minQty: standaloneRule.minQty, maxQty: standaloneRule.maxQty };
+        throw error;
+      }
+      continue;
+    }
+
+    // Miembro explícito: siempre permitido y suma al grupo de SU regla (aunque el
+    // producto haya cambiado de categoría después — consistente con getComboOptions,
+    // que expande por filas miembro). Sin fila miembro: cae a la regla de su
+    // categoría actual, solo si esa regla no tiene miembros explícitos.
+    const memberRule = ruleById.get(memberRuleIdByProduct.get(productId));
+    const categoryRule =
+      memberRule ??
+      (product.categoryId != null ? rulesByCategory.get(product.categoryId) : undefined);
+    const members = categoryRule ? memberIdsByRule.get(categoryRule.id) : undefined;
+    const isAllowed =
+      categoryRule != null && (memberRule != null || members == null || members.size === 0);
+    if (!isAllowed) {
       const error = createError(
         "Ese producto no está permitido en este combo",
         "COMBO_PRODUCT_NOT_ALLOWED",
@@ -120,13 +170,26 @@ export async function validateComboSelection({
       error.details = { productId };
       throw error;
     }
-    if ((rule.minQty && qty < rule.minQty) || (rule.maxQty != null && qty > rule.maxQty)) {
+    qtyByCategoryRule.set(categoryRule.id, (qtyByCategoryRule.get(categoryRule.id) ?? 0) + qty);
+  }
+
+  // La cantidad por categoría es el TOTAL DEL GRUPO y se exige para TODAS las reglas,
+  // aunque el cliente no haya elegido nada de una ("el combo LLEVA 4 brownies", no es
+  // opcional — reglas legacy con minQty 0 no se ven afectadas).
+  for (const rule of allowedCategories) {
+    const sum = qtyByCategoryRule.get(rule.id) ?? 0;
+    if (sum < rule.minQty || (rule.maxQty != null && sum > rule.maxQty)) {
       const error = createError(
-        "La cantidad de ese producto no respeta el mínimo/máximo permitido",
+        "La cantidad elegida de esa categoría no respeta el mínimo/máximo del grupo",
         "COMBO_ITEM_QTY_OUT_OF_RANGE",
         400
       );
-      error.details = { productId, minQty: rule.minQty, maxQty: rule.maxQty };
+      error.details = {
+        categoryId: rule.categoryId,
+        minQty: rule.minQty,
+        maxQty: rule.maxQty,
+        selected: sum,
+      };
       throw error;
     }
   }

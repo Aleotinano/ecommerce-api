@@ -22,8 +22,10 @@ export const comboOption = z.object({
     .optional(),
 });
 
-// Combos: una fila de la whitelist de CATEGORÍAS enteras permitidas dentro de un combo
-// (alternativa a listar productos uno por uno con `comboOption`).
+// Combos: una fila de la whitelist de CATEGORÍAS permitidas dentro de un combo.
+// minQty/maxQty son el TOTAL DEL GRUPO (el admin manda minQty = maxQty = cantidad
+// exacta, ej. "4 brownies"); `productIds` son los miembros explícitos permitidos
+// dentro de la categoría — vacío = todos sus productos activos.
 export const comboCategoryOption = z.object({
   categoryId: z.coerce
     .number({ invalid_type_error: "El ID de categoría debe ser un número" })
@@ -41,6 +43,15 @@ export const comboCategoryOption = z.object({
     .positive("maxQty debe ser mayor a 0")
     .nullable()
     .optional(),
+  productIds: z
+    .array(
+      z.coerce
+        .number({ invalid_type_error: "El ID de producto debe ser un número" })
+        .int("El ID de producto debe ser un número entero")
+        .positive("ID de producto inválido")
+    )
+    .optional()
+    .default([]),
 });
 
 // PRODUCTO: siempre tiene >=1 ProductVariant (la principal marcada `isDefault`) —
@@ -93,6 +104,9 @@ export const createProduct = z
     // principal se agrega después vía /variants/:productId). COMBO: prohibido.
     variants: z.array(createVariant).optional().default([]),
     // Combos: solo aplica si type=COMBO (ver docs/servicios/dominio/Combos.md).
+    // Si viene `comboCategoryOptions` no vacío, min/max se DERIVAN de la suma de
+    // las cantidades por categoría y estos campos se ignoran; solo son requeridos
+    // en el camino legacy de whitelist standalone (`comboOptions` sin categorías).
     comboMinItems: z.coerce
       .number({ invalid_type_error: "comboMinItems debe ser un número" })
       .int("comboMinItems debe ser un número entero")
@@ -122,11 +136,15 @@ export const createProduct = z
           message: "El precio es requerido para un combo",
         });
       }
-      if (data.comboMinItems === undefined || data.comboMaxItems === undefined) {
+      if (
+        data.comboCategoryOptions.length === 0 &&
+        (data.comboMinItems === undefined || data.comboMaxItems === undefined)
+      ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["comboMinItems"],
-          message: "comboMinItems y comboMaxItems son requeridos para un combo",
+          message:
+            "Un combo necesita categorías con cantidad (comboCategoryOptions) o comboMinItems/comboMaxItems explícitos",
         });
       }
     } else if (data.price !== undefined) {

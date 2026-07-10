@@ -185,33 +185,44 @@ model Product {
 
 // Whitelist de productos permitidos dentro de un combo. `comboProduct` es el
 // producto con isCombo=true; `allowedProduct` es cada opción elegible (nunca
-// otro combo — sin anidamiento). minQty/maxQty acotan cuánto de ESE producto
-// puede elegirse dentro del combo (además del rango total en Product).
+// otro combo — sin anidamiento). Dos sabores según `comboAllowedCategoryId`:
+// - null: regla standalone (legacy, ex sub-tab "Unidad" del admin) — minQty/maxQty
+//   acotan cuánto de ESE producto puede elegirse dentro del combo.
+// - no-null: MIEMBRO explícito de una regla de `ComboAllowedCategory` — marca
+//   pertenencia ("de los brownies, solo A y B"); sus minQty/maxQty NO se usan,
+//   la cantidad la gobierna la regla de la categoría (total del grupo).
+// El @@unique(comboProductId, allowedProductId) garantiza que un producto no
+// puede ser standalone y miembro a la vez dentro del mismo combo.
 model ComboAllowedProduct {
-  id               Int      @id @default(autoincrement())
-  tenantId         Int
-  comboProductId   Int
-  allowedProductId Int
-  minQty           Int      @default(0)
-  maxQty           Int?
-  isActive         Boolean  @default(true)
-  createdAt        DateTime @default(now())
+  id                     Int      @id @default(autoincrement())
+  tenantId               Int
+  comboProductId         Int
+  allowedProductId       Int
+  comboAllowedCategoryId Int?
+  minQty                 Int      @default(0)
+  maxQty                 Int?
+  isActive               Boolean  @default(true)
+  createdAt              DateTime @default(now())
 
-  comboProduct   Product @relation("ComboOptions", fields: [comboProductId], references: [id], onDelete: Cascade)
-  allowedProduct Product @relation("AllowedInCombos", fields: [allowedProductId], references: [id], onDelete: Cascade)
-  tenant         Tenant  @relation(fields: [tenantId], references: [id])
+  comboProduct     Product               @relation("ComboOptions", fields: [comboProductId], references: [id], onDelete: Cascade)
+  allowedProduct   Product               @relation("AllowedInCombos", fields: [allowedProductId], references: [id], onDelete: Cascade)
+  memberOfCategory ComboAllowedCategory? @relation("CategoryMembers", fields: [comboAllowedCategoryId], references: [id], onDelete: Cascade)
+  tenant           Tenant                @relation(fields: [tenantId], references: [id])
 
   @@unique([comboProductId, allowedProductId])
   @@index([tenantId])
   @@index([comboProductId])
+  @@index([comboAllowedCategoryId])
 }
 
-// Whitelist de CATEGORÍAS enteras permitidas dentro de un combo — alternativa a listar
-// productos uno por uno en `ComboAllowedProduct` (ej. "elegí 2 de la categoría
-// Panadería"). Si un producto tiene regla explícita en `ComboAllowedProduct` Y su
-// categoría está acá, gana la regla explícita. minQty/maxQty son límites POR PRODUCTO
-// individual dentro de la categoría (no un tope agregado de la categoría) — el tope
-// agregado global sigue siendo `Product.comboMinItems`/`comboMaxItems`.
+// Whitelist de CATEGORÍAS permitidas dentro de un combo (ej. "el combo lleva 4 de
+// la categoría Brownies"). minQty/maxQty son el TOTAL DEL GRUPO: la suma de las
+// cantidades elegidas de esa categoría debe caer en [minQty, maxQty] (el admin
+// manda minQty = maxQty = cantidad exacta). `members` son los productos puntuales
+// permitidos dentro de la categoría (filas de `ComboAllowedProduct` con
+// `comboAllowedCategoryId`); sin miembros = todos los productos activos de la
+// categoría. `Product.comboMinItems`/`comboMaxItems` se derivan de la suma de
+// estas reglas al guardar. No baja a subcategorías.
 model ComboAllowedCategory {
   id             Int      @id @default(autoincrement())
   tenantId       Int
@@ -222,9 +233,10 @@ model ComboAllowedCategory {
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
 
-  comboProduct Product    @relation("ComboCategoryOptions", fields: [comboProductId], references: [id], onDelete: Cascade)
-  category     Categories @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  tenant       Tenant     @relation(fields: [tenantId], references: [id])
+  comboProduct Product               @relation("ComboCategoryOptions", fields: [comboProductId], references: [id], onDelete: Cascade)
+  category     Categories            @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  members      ComboAllowedProduct[] @relation("CategoryMembers")
+  tenant       Tenant                @relation(fields: [tenantId], references: [id])
 
   @@unique([comboProductId, categoryId])
   @@index([tenantId])

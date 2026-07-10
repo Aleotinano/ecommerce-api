@@ -180,8 +180,8 @@ Generador con `output = "../generated/prisma"`.
 | **Categories** | `id`, `name`, `description?`, `icon?`, `imageUrl?`, `imgPublicId?`, `isActive=true`, `parentId?` (self-relation árbol) | self `parent`/`children`, 1-N products, N-1 tenant | **Sí** |
 | **Product** | `id`, `name`, `description?`, `price: Float?` (exclusivo de `COMBO`; `null` para `PRODUCTO`, el precio real vive en la variante default), `img?`, `imgPublicId?`, `categoryId?`, `isActive=true`, `createdAt`, `type: ProductType`, `isCombo=false` (deprecado, no se lee en runtime), `comboMinItems?`, `comboMaxItems?` | 1-N variants, N-1 category, N-1 tenant, 1-N contentSuggestions, 1-N cartItems, 1-N orderItems, 1-N comboOptions/allowedInCombos (`ComboAllowedProduct`), 1-N comboCategoryOptions (`ComboAllowedCategory`) | **Sí** |
 | **ProductVariant** | `id`, `productId`, `color?`, `size?`, `price: Float` (NOT NULL), `stock: Int`, `sku`, `img?`, `imgPublicId?`, `isActive=true`, `isDefault=false` (marca la variante "principal" de un `PRODUCTO`; a lo sumo una `true` por producto) | N-1 product (`onDelete: Cascade`), N-1 tenant, 1-N cartItems, 1-N orderItems | **Sí** — todo `Product.type = "PRODUCTO"` tiene **siempre** al menos una fila (la default); `COMBO` no tiene ninguna |
-| **ComboAllowedProduct** | `id`, `comboProductId`, `allowedProductId`, `minQty=0`, `maxQty?`, `isActive=true`, `createdAt` — whitelist de componentes puntuales de un combo | N-1 `Product` como `comboProduct` (`onDelete: Cascade`) y como `allowedProduct` (`onDelete: Cascade`), N-1 tenant | **Sí** |
-| **ComboAllowedCategory** | `id`, `comboProductId`, `categoryId`, `minQty=0`, `maxQty?`, `isActive=true`, `createdAt` — whitelist de categorías enteras permitidas en un combo (alternativa a whitelistear producto por producto); no baja a subcategorías | N-1 `Product` (`onDelete: Cascade`), N-1 `Categories` (`onDelete: Cascade`), N-1 tenant | **Sí** |
+| **ComboAllowedProduct** | `id`, `comboProductId`, `allowedProductId`, `comboAllowedCategoryId?`, `minQty=0`, `maxQty?`, `isActive=true`, `createdAt` — con FK null: regla standalone legacy (min/max per-producto); con FK: MIEMBRO explícito de esa regla de categoría (min/max no se usan) | N-1 `Product` como `comboProduct` (`onDelete: Cascade`) y como `allowedProduct` (`onDelete: Cascade`), N-1 opcional `ComboAllowedCategory` (`onDelete: Cascade`), N-1 tenant | **Sí** |
+| **ComboAllowedCategory** | `id`, `comboProductId`, `categoryId`, `minQty=0`, `maxQty?`, `isActive=true`, `createdAt` — whitelist de categorías permitidas en un combo; `minQty`/`maxQty` son el TOTAL DEL GRUPO (suma elegida de la categoría; el admin manda min=max exacto); sin `members` = toda la categoría; no baja a subcategorías | N-1 `Product` (`onDelete: Cascade`), N-1 `Categories` (`onDelete: Cascade`), 1-N `members` (`ComboAllowedProduct`), N-1 tenant | **Sí** |
 | **Cart** | `id`, `userId @unique`, `createdAt`, `updatedAt` | 1-1 user, N-1 tenant, 1-N items | **Sí** |
 | **CartItem** | `id`, `cartId`, `productId`, `variantId?` (nullable solo para líneas COMBO — un `PRODUCTO` siempre resuelve variante), `comboSelection: Json?` (selección de componentes elegida por el cliente para un combo), `quantity=1`, `createdAt` | N-1 cart, N-1 product, N-1 variant | **No** (scope vía Cart) |
 | **Order** | `id`, `userId?` (nullable — órdenes BOT nacen sin usuario), `status: OrderStatus=PENDING`, `total: Float`, `paymentStatus: PaymentStatus=PENDING`, `paymentMethod?`, `paymentId?`, `mercadoPagoId? @unique`, `preferenceId?`, `origin: OrderOrigin=ADMIN`, `contactPhone?`, `contactName?`, `reviewedById?`, `reviewedAt?`, `requiresDeposit=false`, `depositAmount?` (snapshot), `depositConfirmedById?`, `depositConfirmedAt?`, `creationContext?`, `createdAt`, `updatedAt` | N-1 user, N-1 tenant, 1-N orderItems, 1-N statusHistory | **Sí** |
@@ -200,7 +200,7 @@ Generador con `output = "../generated/prisma"`.
 | User | `@@unique([tenantId, username])`, `@@unique([tenantId, email])`, `@@index([tenantId])` |
 | Categories | `@@unique([tenantId, name])`, `@@index([tenantId])` |
 | Product | `@@index([tenantId])` |
-| ComboAllowedProduct | `@@unique([comboProductId, allowedProductId])`, `@@index([tenantId])`, `@@index([comboProductId])` |
+| ComboAllowedProduct | `@@unique([comboProductId, allowedProductId])`, `@@index([tenantId])`, `@@index([comboProductId])`, `@@index([comboAllowedCategoryId])` |
 | ComboAllowedCategory | `@@unique([comboProductId, categoryId])`, `@@index([tenantId])`, `@@index([comboProductId])`, `@@index([categoryId])` |
 | ProductVariant | `@@unique([tenantId, sku])`, `@@index([tenantId])` **+ índice único parcial agregado a mano en SQL** para `isDefault = true` (`ProductVariant_product_default_key`, migración `20260710120000_product_types_collapse_expand` — no declarado en el `.prisma`, ver §11) |
 | Cart | `userId @unique`, `@@index([tenantId])` |
@@ -255,7 +255,9 @@ parcial), `20260710123000_product_types_collapse_contract` (fase *contract*: col
 a nullable, `Product.stock` se elimina, `ProductVariant.price` pasa a NOT NULL). El backfill de
 datos entre esas dos migraciones (asignar `isDefault` y crear/completar variantes) lo hace
 `prisma/migrate-collapse-product-types.js`, corrido a mano una vez por entorno — no es una
-migración SQL.
+migración SQL. `20260710150000_combo_category_members` (FK nullable
+`ComboAllowedProduct.comboAllowedCategoryId` → miembros explícitos de una regla de categoría;
+sin backfill, las filas existentes quedan null = standalone legacy).
 
 ---
 
@@ -574,9 +576,16 @@ más el `WHATSAPP_VERIFY_TOKEN` del handshake inicial.
   única función pura `validateComboSelection({ tx, tenantId, comboProduct, selection,
   checkStock })`, compartida por `services/cart.js` (`CartModel.addCombo`) y
   `services/orders.js` (`priceItems`, al pricear una línea `COMBO`). Agrupa la selección por
-  producto+variante, valida cantidad total contra `comboMinItems/comboMaxItems`, valida cada
-  línea contra su `ComboAllowedProduct` (`minQty`/`maxQty`), rechaza combos anidados y
-  componentes inactivos, chequea stock (`resolveProductStock`) y devuelve los `children`
+  producto+variante, valida cantidad total contra `comboMinItems/comboMaxItems` y luego la
+  whitelist en dos capas: reglas **standalone** de `ComboAllowedProduct` (FK
+  `comboAllowedCategoryId` null, legacy — `minQty`/`maxQty` per-producto, no suman al grupo de
+  su categoría) y reglas de `ComboAllowedCategory`, donde `minQty`/`maxQty` son el **total del
+  grupo** (la SUMA elegida de esa categoría) y el mínimo se exige para TODAS las reglas aunque
+  la selección no traiga nada de una. Un producto sin regla standalone es permitido si es
+  **miembro explícito** de una regla (fila de `ComboAllowedProduct` con la FK seteada — siempre
+  permitido, suma al grupo de SU regla aunque haya cambiado de categoría después) o si su
+  categoría tiene regla sin miembros explícitos (= toda la categoría). Rechaza combos anidados
+  y componentes inactivos, chequea stock (`resolveProductStock`) y devuelve los `children`
   normalizados.
 - Los **controllers pasan `tenantId` explícito** a cada método; los services lo usan en el
   `where` (scoping manual, §4).
@@ -584,16 +593,26 @@ más el `WHATSAPP_VERIFY_TOKEN` del handshake inicial.
   (PRODUCTO acepta un array `variants` opcional — puede venir vacío para alta en 2 pasos; la
   primera variante creada se marca `isDefault:true` server-side y su `sku` se autogenera vía
   `utils/sku.js generateUniqueVariantSku`, nunca lo carga el admin; rechaza `price` a nivel
-  producto. COMBO exige `price` + `comboMinItems`/`comboMaxItems`, rechaza `variants`, y valida
-  `comboOptions` vía `ensureComboOptionsValid`, que rechaza auto-referencia y combos anidados).
-  `edit` maneja la única transición real, `PRODUCTO↔COMBO`: al pasar a COMBO desactiva (no
-  borra) las variantes existentes preservando su `isDefault` (para poder reactivarlas si vuelve
-  a PRODUCTO); al volver a PRODUCTO reactiva la que era default. Al salir de COMBO desactiva
-  además las filas de `ComboAllowedProduct`. Si `edit` recibe `comboOptions`, **reemplaza toda
-  la whitelist** (delete + createMany transaccional; no hay merge incremental).
-  `getComboOptions({ tenantId, id })` expone `comboMinItems/comboMaxItems` + `allowedProducts`
-  con el stock resuelto vía la variante de cada componente (`resolveVariantForProduct`,
-  `helpers/price.js`). Un `PRODUCTO` recién creado sin variantes todavía (alta en 2 pasos) es un
+  producto. COMBO exige `price` y rechaza `variants`; su whitelist canónica son las
+  `comboCategoryOptions` — `[{ categoryId, minQty, maxQty, productIds }]`, donde `minQty=maxQty`
+  es la cantidad exacta del grupo y `productIds` los miembros explícitos (vacío = toda la
+  categoría) — de cuya suma se **derivan** `comboMinItems`/`comboMaxItems` (los del cliente se
+  ignoran si vienen; solo el camino legacy de `comboOptions` sin categorías los exige
+  explícitos). Valida con `ensureComboOptionsValid`/`ensureComboCategoryOptionsValid`
+  (auto-referencia, combos anidados, y que cada miembro pertenezca a la categoría de su regla —
+  `COMBO_MEMBER_CATEGORY_MISMATCH`)). `edit` maneja la única transición real, `PRODUCTO↔COMBO`:
+  al pasar a COMBO desactiva (no borra) las variantes existentes preservando su `isDefault`
+  (para poder reactivarlas si vuelve a PRODUCTO); al volver a PRODUCTO reactiva la que era
+  default. Al salir de COMBO desactiva además las filas de `ComboAllowedProduct`. Si `edit`
+  recibe `comboOptions`/`comboCategoryOptions`, **reemplaza esa whitelist completa** (delete +
+  create transaccional; no hay merge incremental): `comboOptions` gobierna SOLO las filas
+  standalone (FK null) y `comboCategoryOptions` las reglas de categoría + sus miembros (que
+  caen por cascade al borrar la regla; una fila miembro reemplaza a la standalone del mismo
+  producto si existía). `getComboOptions({ tenantId, id })` expone
+  `comboMinItems/comboMaxItems` + `allowedProducts` (solo standalone) + `allowedCategories`
+  (cada una con `memberProductIds` y `products` — sus miembros explícitos si los hay, o todos
+  los productos activos de la categoría si no) con el stock resuelto vía la variante de cada
+  componente (`resolveVariantForProduct`, `helpers/price.js`). Un `PRODUCTO` recién creado sin variantes todavía (alta en 2 pasos) es un
   estado transitorio válido: aparece en listados/stats pero no es agregable al carrito hasta
   tener al menos una variante (`CartModel.add` tira `VARIANT_REQUIRED`).
 
