@@ -1,6 +1,6 @@
 import prisma from "../lib/prisma.js";
 import { createError } from "../helpers/error.js";
-import { resolveProductStock } from "../helpers/price.js";
+import { resolveProductStock, resolveVariantForProduct } from "../helpers/price.js";
 import { validateComboSelection } from "./combos.js";
 
 export const CartModel = {
@@ -25,10 +25,11 @@ export const CartModel = {
   },
 
   /**
-   * Agrega 1 unidad de un producto UNIDAD/VARIANTE al carrito. `variantId` es
-   * obligatorio si el producto es VARIANTE, se ignora si es UNIDAD. Para COMBO usar
-   * `addCombo`. El `findFirst` antes del create/update (dentro de la misma
-   * transacción) da un 409 de negocio legible; el índice único parcial de
+   * Agrega 1 unidad de un producto PRODUCTO al carrito. `variantId` es opcional: si
+   * no viene, se resuelve la variante principal (`isDefault`) — así "agregar al
+   * carrito" sin abrir un picker sigue andando para un producto sin opciones reales.
+   * Para COMBO usar `addCombo`. El `findFirst` antes del create/update (dentro de la
+   * misma transacción) da un 409 de negocio legible; el índice único parcial de
    * `CartItem` (ver prisma/schema.prisma) sigue siendo el backstop real contra
    * condiciones de carrera.
    */
@@ -36,7 +37,7 @@ export const CartModel = {
     return prisma.$transaction(async (tx) => {
       const product = await tx.product.findFirst({
         where: { id: productId, tenantId },
-        include: { variants: variantId != null ? { where: { id: variantId } } : false },
+        include: { variants: true },
       });
 
       if (!product) {
@@ -53,21 +54,21 @@ export const CartModel = {
         );
       }
 
-      let variant = null;
-      if (product.type === "VARIANTE") {
-        if (variantId == null) {
-          throw createError("Falta indicar la variante", "VARIANT_REQUIRED", 400);
-        }
-        variant = product.variants?.[0] ?? null;
-        if (!variant) {
-          throw createError("Variante no encontrada", "VARIANT_NOT_FOUND", 404);
-        }
-        if (!variant.isActive) {
-          throw createError("Variante no disponible", "VARIANT_NOT_AVAILABLE", 400);
-        }
+      const variant = resolveVariantForProduct(product, variantId);
+      if (!variant) {
+        throw variantId != null
+          ? createError("Variante no encontrada", "VARIANT_NOT_FOUND", 404)
+          : createError(
+              "El producto no tiene una variante disponible",
+              "VARIANT_REQUIRED",
+              400
+            );
+      }
+      if (!variant.isActive) {
+        throw createError("Variante no disponible", "VARIANT_NOT_AVAILABLE", 400);
       }
 
-      const resolvedVariantId = product.type === "VARIANTE" ? variant.id : null;
+      const resolvedVariantId = variant.id;
 
       const cart = await tx.cart.upsert({
         where: { userId: id },
@@ -175,8 +176,21 @@ export const CartModel = {
       throw createError("El carrito está vacío", "EMPTY_CART", 404);
     }
 
+    // Sin `variantId` explícito: resuelve la principal del producto (mismo criterio
+    // que `add`). Si el producto es un combo (sin variantes propias), esto no
+    // encuentra nada y `resolvedVariantId` queda en null — justo lo que necesita el
+    // lookup de abajo para una línea de combo.
+    let resolvedVariantId = variantId ?? null;
+    if (resolvedVariantId == null) {
+      const defaultVariant = await prisma.productVariant.findFirst({
+        where: { productId, tenantId, isDefault: true },
+        select: { id: true },
+      });
+      resolvedVariantId = defaultVariant?.id ?? null;
+    }
+
     const item = await prisma.cartItem.findFirst({
-      where: { cartId: cart.id, productId, variantId: variantId ?? null },
+      where: { cartId: cart.id, productId, variantId: resolvedVariantId },
     });
 
     if (!item) {

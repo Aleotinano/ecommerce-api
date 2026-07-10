@@ -1,5 +1,5 @@
 import { createError } from "../helpers/error.js";
-import { resolveProductStock } from "../helpers/price.js";
+import { resolveProductStock, resolveVariantForProduct } from "../helpers/price.js";
 
 const selectionKey = (s) => `${s.productId}::${s.variantId ?? ""}`;
 
@@ -10,9 +10,9 @@ const selectionKey = (s) => `${s.productId}::${s.variantId ?? ""}`;
  * combo). Compartido por `services/cart.js` (agregar al carrito) y
  * `services/orders.js` (`priceItems`, al pasar a orden) para no duplicar la regla.
  *
- * Cada componente elegido es un producto UNIDAD o VARIANTE de la whitelist (nunca
- * COMBO — sin anidamiento). Para VARIANTE, `variantId` es obligatorio en la selección;
- * para UNIDAD no aplica (se ignora si viene).
+ * Cada componente elegido es un producto PRODUCTO de la whitelist (nunca COMBO — sin
+ * anidamiento). `variantId` es opcional en la selección: si no viene, se resuelve la
+ * variante principal (`isDefault`) del componente, igual que en `services/cart.js`.
  *
  * @param {object} p
  * @param {object} p.tx            cliente de transacción de Prisma
@@ -83,10 +83,16 @@ export async function validateComboSelection({
   });
   const productMap = new Map(products.map((p) => [p.id, p]));
 
-  const allowed = await tx.comboAllowedProduct.findMany({
-    where: { comboProductId: comboProduct.id, tenantId, isActive: true },
-  });
+  const [allowed, allowedCategories] = await Promise.all([
+    tx.comboAllowedProduct.findMany({
+      where: { comboProductId: comboProduct.id, tenantId, isActive: true },
+    }),
+    tx.comboAllowedCategory.findMany({
+      where: { comboProductId: comboProduct.id, tenantId, isActive: true },
+    }),
+  ]);
   const allowedByProduct = new Map(allowed.map((a) => [a.allowedProductId, a]));
+  const allowedByCategory = new Map(allowedCategories.map((a) => [a.categoryId, a]));
 
   // Cantidad total por PRODUCTO (para min/maxQty de la whitelist, sin importar variante).
   const qtyByProduct = new Map();
@@ -98,7 +104,13 @@ export async function validateComboSelection({
   }
 
   for (const [productId, qty] of qtyByProduct) {
-    const rule = allowedByProduct.get(productId);
+    // Regla explícita por producto tiene prioridad; si no hay, cae a la regla de la
+    // categoría del producto (si esa categoría está permitida). Ver
+    // docs/servicios/dominio/Combos.md.
+    const product = productMap.get(productId);
+    const rule =
+      allowedByProduct.get(productId) ??
+      (product.categoryId != null ? allowedByCategory.get(product.categoryId) : undefined);
     if (!rule) {
       const error = createError(
         "Ese producto no está permitido en este combo",
@@ -136,21 +148,18 @@ export async function validateComboSelection({
       throw error;
     }
 
-    let variant = null;
-    if (product.type === "VARIANTE") {
-      variant = product.variants.find((v) => v.id === line.variantId);
-      if (!variant) {
-        throw createError("Variante no encontrada", "VARIANT_NOT_FOUND", 404);
-      }
-      if (!variant.isActive) {
-        const error = createError(
-          "Producto del combo no disponible",
-          "COMBO_PRODUCT_NOT_ALLOWED",
-          400
-        );
-        error.details = { variant: variant.id };
-        throw error;
-      }
+    const variant = resolveVariantForProduct(product, line.variantId);
+    if (!variant) {
+      throw createError("Variante no encontrada", "VARIANT_NOT_FOUND", 404);
+    }
+    if (!variant.isActive) {
+      const error = createError(
+        "Producto del combo no disponible",
+        "COMBO_PRODUCT_NOT_ALLOWED",
+        400
+      );
+      error.details = { variant: variant.id };
+      throw error;
     }
 
     const stock = resolveProductStock(product, variant);

@@ -89,8 +89,21 @@ Fuente única de verdad: `schemas/env.schema.js` (validado con zod en `config.js
 | `LLM_PROVIDER` | no | `gemini` (\|`anthropic`) |
 | `ANTHROPIC_API_KEY` | no | — |
 | `ANTHROPIC_MODEL` | no | `claude-haiku-4-5` |
+| `ANTHROPIC_BASE_URL` | no | `https://api.anthropic.com` (apuntable a un server compat de la Messages API, p. ej. Ollama en dev) |
 | `GEMINI_API_KEY` | no | — |
-| `GEMINI_MODEL` | no | `gemini-2.0-flash` |
+| `GEMINI_MODEL` | no | `gemini-2.5-flash` |
+| `IMAGE_PROVIDER` | no | `gemini` (generación de imágenes image-to-image, reusa `GEMINI_API_KEY`) |
+| `GEMINI_IMAGE_MODEL` | no | `gemini-2.5-flash-image` |
+| `CHAT_DAILY_LIMIT` | no | `500` (cost-guard del chat de tienda, por tenant) |
+| `WHATSAPP_VERIFY_TOKEN` | no | handshake de verificación del webhook (Graph API) |
+| `WHATSAPP_APP_SECRET` | no | valida la firma `X-Hub-Signature-256` de los mensajes entrantes |
+| `WHATSAPP_ACCESS_TOKEN` | no | token global de fallback si el tenant no tiene el suyo en DB |
+| `WHATSAPP_PHONE_NUMBER_ID` | no | número de prueba en dev; en prod cada tenant tiene el suyo en `TenantConfig` |
+| `WHATSAPP_GRAPH_API_VERSION` | no | `v21.0` |
+| `WHATSAPP_TOKEN_ENC_KEY` | no | clave AES-256-GCM (32 bytes, hex o base64) para cifrar `TenantConfig.whatsappAccessToken` en reposo; sin ella no se guardan ni usan tokens de DB |
+
+Todas las variables de WhatsApp son opcionales: si faltan, el módulo queda inactivo y la app
+arranca igual (`schemas/env.schema.js`).
 
 Hay archivos `.env` y `.env.test` en el repo (no se documenta su contenido).
 
@@ -108,22 +121,28 @@ e-commerce-express-1/
 ├── docker-compose.yml      # Solo Redis
 ├── vitest.config.js
 ├── routes/                 # Definición de endpoints (Router de Express) por feature
-│   └── store/              # Sub-API "storefront" (auth, products, categories, cart, orders, config, mercadopago)
+│   ├── store/              # Sub-API "storefront" (auth, products, categories, cart, orders, config, mercadopago, chat, page)
+│   └── webhooks/           # whatsapp.js — webhook de WhatsApp Business, montado FUERA de /store
 ├── controllers/            # Handlers HTTP: parsean req, llaman al service, arman respuesta
-│   └── store/              # Controllers de la storefront
+│   ├── store/              # Controllers de la storefront
+│   └── webhooks/           # whatsapp.js
 ├── services/               # Lógica de negocio. Cada feature exporta un objeto `XModel`
 │   ├── stats/              # Dashboard: queries.js, builders.js, order-helpers.js, utils.js, constants.js, README.md
-│   └── content-suggestions/# index.js (fachada) + selection.js, angles.js, queries.js, cost-guard.js
-├── lib/                    # Infra/integraciones: prisma, redis, cache, logger, mailer, cloudinary, tokens, slug, imageManager
+│   ├── content-suggestions/# index.js (fachada) + selection.js, angles.js, queries.js, cost-guard.js
+│   ├── whatsapp/           # Bot de WhatsApp: index.js, signature.js, history.js, rate-limit.js, graph-api.js, dedup.js, tenant-resolver.js
+│   ├── chat/               # Agente de chat de tienda: index.js, tools.js, prompt.js, cost-guard.js
+│   └── combos.js           # Archivo único (no carpeta): validateComboSelection, compartido por cart.js y orders.js
+├── lib/                    # Infra/integraciones: prisma, redis, cache, logger, mailer, cloudinary, tokens, slug, imageManager, crypto (AES-256-GCM)
 │   └── llm/                # Cliente LLM: index.js, prompt.js, parse.js, fallback.js
-│       └── providers/      # anthropic.js, gemini.js (fetch directo, sin SDK)
+│       ├── providers/      # anthropic.js, gemini.js (fetch directo, sin SDK)
+│       └── tools/          # schema.js — specs de tools del agente (TOOL_DEFINITIONS, AUTHENTICATED_TOOLS, CHANNEL_ORDER_TOOLS)
 ├── middleware/             # auth, role, tenant, cors, rateLimit, validate, upload, errorHandler, httpLogger
-├── schemas/                # Schemas zod (env, auth, product, order, stats, content-suggestion, etc.)
-├── helpers/                # error.js (createError), password.js (argon2), etc.
+├── schemas/                # Schemas zod (env, auth, product, order, combo, chat, page-spec, stats, content-suggestion, etc.)
+├── helpers/                # error.js (createError), password.js (argon2), price.js (getProductPrice/resolveProductStock), etc.
 ├── utils/                  # Utilidades varias
 ├── prisma/
 │   ├── schema.prisma       # Modelo de datos
-│   ├── migrations/         # 12 migraciones SQL
+│   ├── migrations/         # 26 migraciones SQL
 │   └── seed*.js            # Seeds (base, stats, tenant-config, catalog)
 ├── generated/prisma/       # Cliente Prisma generado (output custom, fuera de node_modules)
 ├── tests/                  # Tests (vitest + supertest)
@@ -134,8 +153,14 @@ e-commerce-express-1/
 ```
 
 `app.js` aplica los middlewares globales en este orden: `helmet()` → `middleWare()` (CORS) →
-`express.json({ limit: "10kb" })` → `cookieParser()` → `compression()` → `httpLogger` →
-`generalLimiter`, y luego monta los routers; cierra con `notFoundHandler` + `errorHandler`.
+`/webhooks/whatsapp` (**antes** del parser JSON global) → `express.json({ limit: "10kb" })` →
+`cookieParser()` → `compression()` → `httpLogger` → `generalLimiter`, y luego monta el resto de
+routers; cierra con `notFoundHandler` + `errorHandler`.
+
+> El webhook de WhatsApp necesita el **raw body** para validar la firma HMAC
+> (`X-Hub-Signature-256`), por eso se monta antes que `express.json()` global y arma su propio
+> `express.json({ verify })` que guarda el buffer crudo en `req.rawBody`
+> (`routes/webhooks/whatsapp.js`).
 
 ---
 
@@ -149,52 +174,88 @@ Generador con `output = "../generated/prisma"`.
 
 | Modelo | Campos clave (tipo) | Relaciones | `tenantId` |
 |---|---|---|---|
-| **Tenant** | `id`, `slug @unique`, `name`, `isActive=true`, `createdAt`, `updatedAt` | 1-N: users, categories, products, variants, carts, orders, contentSuggestions; 1-1: config | N/A (es el tenant) |
-| **TenantConfig** | branding (`logoUrl`, `storeName`, `storeTagline`…), contacto, social, SEO, políticas, `currency=ARS`, `locale=es-AR`, `showOutOfStock=false`, `allowCartGuest=true` | 1-1 `Tenant` (`onDelete: Cascade`) | **Sí** (`tenantId @unique`) |
+| **Tenant** | `id`, `slug @unique`, `name`, `isActive=true`, `createdAt`, `updatedAt` | 1-N: users, categories, products, variants, carts, orders, contentSuggestions, comboAllowedProducts, suggestionImages; 1-1: config, pageSpec | N/A (es el tenant) |
+| **TenantConfig** | branding (`logoUrl`, `storeName`, `storeTagline`…), contacto, social, SEO, políticas, `currency=ARS`, `locale=es-AR`, `showOutOfStock=false`, `allowCartGuest=true`, `productVariantsEnabled=true`, `depositEnabled=false`, `depositPercentage=50`, `whatsappPhoneNumberId? @unique`, `whatsappAccessToken?` (cifrado AES-256-GCM) | 1-1 `Tenant` (`onDelete: Cascade`) | **Sí** (`tenantId @unique`) |
 | **User** | `id`, `username`, `email`, `password`, `role: Role=CUSTOMER`, `emailVerified=false`, `emailVerificationTokenHash?`, `emailVerificationExpiresAt?` | 1-1 cart, 1-N orders, N-1 tenant | **Sí** |
-| **Categories** | `id`, `name`, `description?`, `icon?`, `isActive=true`, `parentId?` (self-relation árbol) | self `parent`/`children`, 1-N products, N-1 tenant | **Sí** |
-| **Product** | `id`, `name`, `description?`, `price: Float`, `img?`, `imgPublicId?`, `categoryId?`, `isActive=true`, `createdAt` | 1-N variants, N-1 category, N-1 tenant, 1-N contentSuggestions | **Sí** |
-| **ProductVariant** | `id`, `productId`, `color?`, `size?`, `price: Float?`, `stock: Int`, `sku`, `img?`, `imgPublicId?`, `isActive=true` | N-1 product (`onDelete: Cascade`), N-1 tenant, 1-N cartItems, 1-N orderItems | **Sí** |
+| **Categories** | `id`, `name`, `description?`, `icon?`, `imageUrl?`, `imgPublicId?`, `isActive=true`, `parentId?` (self-relation árbol) | self `parent`/`children`, 1-N products, N-1 tenant | **Sí** |
+| **Product** | `id`, `name`, `description?`, `price: Float?` (exclusivo de `COMBO`; `null` para `PRODUCTO`, el precio real vive en la variante default), `img?`, `imgPublicId?`, `categoryId?`, `isActive=true`, `createdAt`, `type: ProductType`, `isCombo=false` (deprecado, no se lee en runtime), `comboMinItems?`, `comboMaxItems?` | 1-N variants, N-1 category, N-1 tenant, 1-N contentSuggestions, 1-N cartItems, 1-N orderItems, 1-N comboOptions/allowedInCombos (`ComboAllowedProduct`), 1-N comboCategoryOptions (`ComboAllowedCategory`) | **Sí** |
+| **ProductVariant** | `id`, `productId`, `color?`, `size?`, `price: Float` (NOT NULL), `stock: Int`, `sku`, `img?`, `imgPublicId?`, `isActive=true`, `isDefault=false` (marca la variante "principal" de un `PRODUCTO`; a lo sumo una `true` por producto) | N-1 product (`onDelete: Cascade`), N-1 tenant, 1-N cartItems, 1-N orderItems | **Sí** — todo `Product.type = "PRODUCTO"` tiene **siempre** al menos una fila (la default); `COMBO` no tiene ninguna |
+| **ComboAllowedProduct** | `id`, `comboProductId`, `allowedProductId`, `minQty=0`, `maxQty?`, `isActive=true`, `createdAt` — whitelist de componentes puntuales de un combo | N-1 `Product` como `comboProduct` (`onDelete: Cascade`) y como `allowedProduct` (`onDelete: Cascade`), N-1 tenant | **Sí** |
+| **ComboAllowedCategory** | `id`, `comboProductId`, `categoryId`, `minQty=0`, `maxQty?`, `isActive=true`, `createdAt` — whitelist de categorías enteras permitidas en un combo (alternativa a whitelistear producto por producto); no baja a subcategorías | N-1 `Product` (`onDelete: Cascade`), N-1 `Categories` (`onDelete: Cascade`), N-1 tenant | **Sí** |
 | **Cart** | `id`, `userId @unique`, `createdAt`, `updatedAt` | 1-1 user, N-1 tenant, 1-N items | **Sí** |
-| **CartItem** | `id`, `cartId`, `variantId`, `quantity=1`, `createdAt` | N-1 cart, N-1 variant | **No** (scope vía Cart) |
-| **Order** | `id`, `userId`, `status: OrderStatus=PENDING`, `total: Float`, `paymentStatus: PaymentStatus=PENDING`, `paymentMethod?`, `paymentId?`, `mercadoPagoId? @unique`, `preferenceId?`, `createdAt`, `updatedAt` | N-1 user, N-1 tenant, 1-N orderItems, 1-N statusHistory | **Sí** |
+| **CartItem** | `id`, `cartId`, `productId`, `variantId?` (nullable solo para líneas COMBO — un `PRODUCTO` siempre resuelve variante), `comboSelection: Json?` (selección de componentes elegida por el cliente para un combo), `quantity=1`, `createdAt` | N-1 cart, N-1 product, N-1 variant | **No** (scope vía Cart) |
+| **Order** | `id`, `userId?` (nullable — órdenes BOT nacen sin usuario), `status: OrderStatus=PENDING`, `total: Float`, `paymentStatus: PaymentStatus=PENDING`, `paymentMethod?`, `paymentId?`, `mercadoPagoId? @unique`, `preferenceId?`, `origin: OrderOrigin=ADMIN`, `contactPhone?`, `contactName?`, `reviewedById?`, `reviewedAt?`, `requiresDeposit=false`, `depositAmount?` (snapshot), `depositConfirmedById?`, `depositConfirmedAt?`, `creationContext?`, `createdAt`, `updatedAt` | N-1 user, N-1 tenant, 1-N orderItems, 1-N statusHistory | **Sí** |
 | **OrderStatusHistory** | `id`, `orderId`, `fromStatus?`, `toStatus`, `note?`, `changedById?`, `createdAt` | N-1 order (`onDelete: Cascade`) | **No** (scope vía Order) |
-| **OrderItem** | `id`, `orderId`, `variantId`, `quantity`, `price: Float` | N-1 order (`onDelete: Cascade`), N-1 variant | **No** (scope vía Order) |
-| **ContentSuggestion** | `id`, `productId`, `angle: SuggestionAngle`, `status: SuggestionStatus=SUGGESTED`, `source: SuggestionSource=AUTO`, `date @db.Date`, `copy?`, `hashtags: String[]=[]`, `model?`, `generatedAt?`, `createdAt`, `updatedAt` | N-1 tenant, N-1 product | **Sí** |
+| **OrderItem** | `id`, `orderId`, `productId` (NOT NULL), `variantId?` (nullable solo para líneas COMBO), `quantity`, `price: Float` (snapshot), `note?`, `parentItemId?` (self-relation, árbol combo, `onDelete: Cascade`) | N-1 order (`onDelete: Cascade`), N-1 product, N-1 variant, self `parentItem`/`childItems` | **No** (scope vía Order) |
+| **ContentSuggestion** | `id`, `productId`, `angle: SuggestionAngle`, `status: SuggestionStatus=SUGGESTED`, `source: SuggestionSource=AUTO`, `date @db.Date`, `copy?`, `hashtags: String[]=[]`, `model?`, `generatedAt?`, `createdAt`, `updatedAt` | N-1 tenant, N-1 product, 1-N images (`SuggestionImage`) | **Sí** |
+| **SuggestionImage** | `id`, `suggestionId`, `imageUrl`, `imagePublicId`, `options: Json={}` (`{ imagen, infoEnPantalla, precioEnPantalla }`), `model?`, `prompt`, `chosen=false`, `createdAt` | N-1 `ContentSuggestion` (`onDelete: Cascade`), N-1 tenant | **Sí** |
+| **TenantPageSpec** | `id`, `tenantId @unique`, `draftSpec: Json?`, `publishedSpec: Json?`, `version=0`, `publishedAt?`, `createdAt`, `updatedAt` — spec del page builder (borrador editable + publicado que sirve el storefront) | 1-1 `Tenant` (`onDelete: Cascade`) | **Sí** (`tenantId @unique`) |
 
 ### Constraints / índices únicos relevantes
 
 | Modelo | Constraint |
 |---|---|
 | Tenant | `slug @unique` |
-| TenantConfig | `tenantId @unique`, `@@index([tenantId])` |
+| TenantConfig | `tenantId @unique`, `whatsappPhoneNumberId @unique`, `@@index([tenantId])` |
 | User | `@@unique([tenantId, username])`, `@@unique([tenantId, email])`, `@@index([tenantId])` |
 | Categories | `@@unique([tenantId, name])`, `@@index([tenantId])` |
 | Product | `@@index([tenantId])` |
-| ProductVariant | `@@unique([tenantId, sku])`, `@@index([tenantId])` |
+| ComboAllowedProduct | `@@unique([comboProductId, allowedProductId])`, `@@index([tenantId])`, `@@index([comboProductId])` |
+| ComboAllowedCategory | `@@unique([comboProductId, categoryId])`, `@@index([tenantId])`, `@@index([comboProductId])`, `@@index([categoryId])` |
+| ProductVariant | `@@unique([tenantId, sku])`, `@@index([tenantId])` **+ índice único parcial agregado a mano en SQL** para `isDefault = true` (`ProductVariant_product_default_key`, migración `20260710120000_product_types_collapse_expand` — no declarado en el `.prisma`, ver §11) |
 | Cart | `userId @unique`, `@@index([tenantId])` |
-| CartItem | `@@unique([cartId, variantId])` |
+| CartItem | `@@unique([cartId, productId, variantId])` **+ índice único parcial agregado a mano en SQL** para `variantId IS NULL` (`CartItem_cart_product_null_variant_key`, migración `20260708190000_product_types_add` — no declarado en el `.prisma`, ver §11) |
 | Order | `mercadoPagoId @unique`, `@@index([tenantId])` |
 | OrderStatusHistory | `@@index([orderId])` |
-| OrderItem | `@@unique([orderId, variantId])` |
+| OrderItem | **sin unique** (el viejo `@@unique([orderId, variantId])` se reemplazó por índices no únicos `@@index([orderId, variantId])`, `@@index([orderId, productId])`, `@@index([parentItemId])` en la migración `20260702214235_order_item_note` — una orden puede tener dos filas del mismo producto/variante con notas distintas) |
 | ContentSuggestion | `@@unique([tenantId, date, productId, angle])`, `@@index([tenantId])` |
+| SuggestionImage | `@@index([tenantId])`, `@@index([suggestionId])` |
+| TenantPageSpec | `tenantId @unique`, `@@index([tenantId])` |
 
 ### Enums
 
+- `ProductType`: `PRODUCTO`, `COMBO`. Todo `PRODUCTO` tiene siempre ≥1 `ProductVariant` (la
+  default, `isDefault=true`) y su precio/stock se leen siempre de ahí — nunca de columnas
+  propias de `Product`. `COMBO` usa `Product.price` como precio fijo y no tiene variantes ni
+  stock propio (se calcula sobre los componentes elegidos). Colapsado desde el enum original de
+  3 valores (`UNIDAD`/`VARIANTE`/`COMBO`) — ver migraciones `..._product_types_collapse_expand`
+  / `..._product_types_collapse_contract` más abajo.
+- `OrderOrigin`: `ADMIN`, `BOT`.
 - `SuggestionAngle`: `BEST_SELLER`, `NEW_ARRIVAL`, `LOW_STOCK`, `NO_RECENT_SALES`
 - `SuggestionStatus`: `SUGGESTED`, `USED`, `DISMISSED`
 - `SuggestionSource`: `AUTO`, `MANUAL`
 - `OrderStatus`: `PENDING`, `PROCESSING`, `COMPLETED`, `CANCELLED`
-- `PaymentStatus`: `PENDING`, `APPROVED`, `REJECTED`, `IN_PROCESS`, `REFUNDED`
+- `PaymentStatus`: `PENDING`, `APPROVED`, `REJECTED`, `IN_PROCESS`, `REFUNDED`, `DEPOSIT_PAID`,
+  `PAID_IN_FULL` (los dos últimos modelan la seña)
 - `Role`: `ADMIN`, `STAFF`, `CUSTOMER`
 
 ### Migraciones
 
-12 migraciones en `prisma/migrations/` (cronológicas): `..._initial_multi_tenant`,
-`..._email_global_unique`, `..._email_verification`, `..._add_tenant_config`,
-`..._add_product_price`, `..._expand_roles_storefront`, `..._variant_price_optional`,
-`..._add_order_status_history`, `..._add_content_suggestions`, `..._product_price_required`,
-`..._suggestions_multi_source`, `..._add_suggestion_status`.
+28 migraciones en `prisma/migrations/` (cronológicas):
+
+`..._initial_multi_tenant`, `..._email_global_unique`, `..._email_verification`,
+`..._add_tenant_config`, `..._add_product_price`, `..._expand_roles_storefront`,
+`..._variant_price_optional`, `..._add_order_status_history`, `..._add_content_suggestions`,
+`..._product_price_required`, `..._suggestions_multi_source`, `..._add_suggestion_status`,
+`..._add_whatsapp_phone_number_id`, `..._add_whatsapp_access_token`, `..._add_order_deposit`
+(seña + `userId` nullable + `origin` BOT), `20260622004619` (sin nombre descriptivo),
+`..._add_suggestion_image`, `..._add_tenant_page_spec`, `..._add_category_image_url`,
+`..._add_category_img_public_id`, `..._order_item_note`,
+`..._product_variants_enabled_flag`, `..._combos` (`ComboAllowedProduct` +
+`isCombo`/`comboMin/MaxItems` + `CartItem.comboSelection` + `OrderItem.parentItemId`),
+`..._product_types_add` (fase *expand*, primera ronda: enum `ProductType` nullable,
+`Product.stock`, `productId` en `CartItem`/`OrderItem`, `variantId` nullable), `..._product_types_harden`
+(fase *contract*, primera ronda: `Product.type`/`OrderItem.productId`/`CartItem.productId` pasan a
+NOT NULL — en esta ronda el enum todavía tenía 3 valores, `UNIDAD`/`VARIANTE`/`COMBO`),
+`20260709033159_add_combo_allowed_category` (`ComboAllowedCategory`, whitelist de combos por
+categoría entera), `20260710120000_product_types_collapse_expand` (fase *expand* del colapso a 2
+tipos: agrega el valor de enum `PRODUCTO`, columna `ProductVariant.isDefault` + su índice único
+parcial), `20260710123000_product_types_collapse_contract` (fase *contract*: colapsa el enum a
+`PRODUCTO`/`COMBO` reescribiendo `UNIDAD`→`PRODUCTO` y `VARIANTE`→`PRODUCTO`, `Product.price` pasa
+a nullable, `Product.stock` se elimina, `ProductVariant.price` pasa a NOT NULL). El backfill de
+datos entre esas dos migraciones (asignar `isDefault` y crear/completar variantes) lo hace
+`prisma/migrate-collapse-product-types.js`, corrido a mano una vez por entorno — no es una
+migración SQL.
 
 ---
 
@@ -268,9 +329,9 @@ Hay **dos mecanismos distintos** de resolución de tenant según la familia de r
 
 ## 6. API — Endpoints
 
-Prefijos de montaje (de `app.js`): `/orders`, `/products`, `/variants`, `/categories`,
-`/cart`, `/users`, `/mercadopago`, `/stats`, `/content-suggestions`, `/auth`, `/test`,
-`/tenant-config`, `/store`.
+Prefijos de montaje (de `app.js`): `/webhooks/whatsapp` (antes del parser JSON global), `/orders`,
+`/products`, `/variants`, `/categories`, `/cart`, `/users`, `/mercadopago`, `/stats`,
+`/content-suggestions`, `/page-spec`, `/auth`, `/test`, `/tenant-config`, `/store`.
 
 Convenciones de middleware citadas: `verifyToken` (cookie admin), `requireRole([...])`,
 `validate({ body|params|query })` (zod; `query` validada queda en `req.search`),
@@ -296,6 +357,8 @@ Convenciones de middleware citadas: `verifyToken` (cookie admin), `requireRole([
 | GET | `/orders/all` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(query)` | `OrderController.getUserOrders` → `OrderModel.getUserOrders` |
 | GET | `/orders/:id` | `verifyToken`, `validate(params)` | `OrderController.getById` → `OrderModel.getUserOrderById` |
 | PATCH | `/orders/:id` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params,body)` | `OrderController.update` → `OrderModel.updateOrderStatus` |
+| POST | `/orders/:id/review` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params, body: orderReview)` | `OrderController.review` → `OrderModel.reviewOrder` (marca revisado un pedido BOT; corrección inline opcional de cantidades/notas) |
+| POST | `/orders/:id/confirm-deposit` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params, body: orderConfirmDeposit)` | `OrderController.confirmDeposit` → `OrderModel.confirmDeposit` (`paymentStatus → DEPOSIT_PAID`) |
 
 ### `/products` (admin) — `routes/productos.js`
 
@@ -303,8 +366,10 @@ Convenciones de middleware citadas: `verifyToken` (cookie admin), `requireRole([
 |---|---|---|---|
 | GET | `/products` | `verifyToken`, `validate(query)` | `productsController.getAll` → `ProductModel.getAll` |
 | GET | `/products/options` | `verifyToken` | `productsController.getVariantOptions` → `ProductModel.getVariantOptions` |
+| GET | `/products/stats` | `verifyToken`, `requireRole(["ADMIN","STAFF"])` | `productsController.getStats` → `ProductModel.getStats` |
 | GET | `/products/:id` | `verifyToken`, `validate(params)` | `productsController.getById` → `ProductModel.getById` |
-| POST | `/products` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `uploadImage`, `normalizeMultipartBody`, `validate(body)` | `productsController.create` → `ProductModel.create` |
+| GET | `/products/:id/combo-options` | `verifyToken`, `validate(params)` | `productsController.getComboOptions` → `ProductModel.getComboOptions` (whitelist de componentes + stock por tipo) |
+| POST | `/products` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `uploadImage`, `normalizeMultipartBody`, `validate(body)` | `productsController.create` → `ProductModel.create` (rama por `type`: PRODUCTO/COMBO) |
 | PATCH | `/products/:id/category` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params,body)` | `productsController.assignCategory` → `ProductModel.assignCategory` |
 | PATCH | `/products/:id` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `uploadImage`, `normalizeMultipartBody`, `requireBodyOrImage`, `validate(params,body)` | `productsController.edit` → `ProductModel.edit` |
 | DELETE | `/products/:id` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params)` | `productsController.delete` → `ProductModel.delete` |
@@ -334,9 +399,13 @@ Convenciones de middleware citadas: `verifyToken` (cookie admin), `requireRole([
 | Método | Ruta | Middleware | Controller → Service |
 |---|---|---|---|
 | GET | `/cart` | `verifyToken` | `cartController.getCart` → `CartModel.getCart` |
-| POST | `/cart/:variantId` | `verifyToken`, `validate(params)` | `cartController.add` → `CartModel.add` |
-| PATCH | `/cart/:variantId` | `verifyToken`, `validate(params)` | `cartController.remove` → `CartModel.remove` |
+| POST | `/cart/combo/:productId` | `verifyToken`, `validate(params, body: comboSelectionBody)` | `cartController.addCombo` → `CartModel.addCombo` (valida selección vía `services/combos.js`) — montada antes del `POST /:productId` genérico |
+| POST | `/cart/:productId` | `verifyToken`, `validate(params, body)` | `cartController.add` → `CartModel.add` |
+| PATCH | `/cart/:productId` | `verifyToken`, `validate(params)` | `cartController.remove` → `CartModel.remove` |
 | DELETE | `/cart` | `verifyToken` | `cartController.clear` → `CartModel.clear` |
+
+> Nota: las rutas de `/cart` cambiaron de `:variantId` a `:productId` (breaking change, ver
+> [[Carrito]]) — un ítem de carrito ahora se identifica por producto (+ variante si aplica).
 
 ### `/users` (admin) — `routes/role.js`
 
@@ -409,6 +478,7 @@ Montaje en `routes/store/index.js`: **todo `/store/*` aplica `storeCors()` + `re
 | GET | `/store/products` | `optionalStoreAuth`, `validate(query)` | `StoreProductsController.getAll` → `ProductModel.getAll` |
 | GET | `/store/products/options` | `optionalStoreAuth` | `StoreProductsController.getVariantOptions` → `ProductModel.getVariantOptions` |
 | GET | `/store/products/:id` | `optionalStoreAuth`, `validate(params)` | `StoreProductsController.getById` → `ProductModel.getById` |
+| GET | `/store/products/:id/combo-options` | `optionalStoreAuth`, `validate(params)` | `StoreProductsController.getComboOptions` → `ProductModel.getComboOptions` |
 
 **`/store/categories`** — `routes/store/categories.js` (lectura pública)
 
@@ -447,11 +517,45 @@ Montaje en `routes/store/index.js`: **todo `/store/*` aplica `storeCors()` + `re
 |---|---|---|---|
 | POST | `/store/mercadopago/:id` | `verifyStoreToken`, `validate(params)` | `mercadopagoController.create` → `mercadopagoModel.create` |
 
+**`/store/page`** — `routes/store/page.js`
+
+| Método | Ruta | Middleware | Controller → Service |
+|---|---|---|---|
+| GET | `/store/page` | — (tenant ya resuelto por slug) | `StorePageController.get` → sirve el `publishedSpec` del `TenantPageSpec` del tenant |
+
+**`/store/chat`** — `routes/store/chat.js`
+
+| Método | Ruta | Middleware | Controller → Service |
+|---|---|---|---|
+| POST | `/store/chat/message` | `chatLimiter` (rate-limit por IP), `optionalStoreAuth` (bot anónimo; trae user si hay Bearer válido), `validate(body: chatMessageBody)` | `ChatController.sendMessage` → `services/chat/` (agente con tool-calling) |
+
+### `/page-spec` (admin) — `routes/page-spec.js`
+
+Todas con `verifyToken` + `requireRole(["ADMIN"])`.
+
+| Método | Ruta | Qué hace | Controller → Service |
+|---|---|---|---|
+| GET | `/page-spec` | Borrador actual del tenant | `PageSpecController.getDraft` |
+| PUT | `/page-spec/draft` | Guarda/actualiza el borrador (no publica), `validate(body: pageSpecDraftBody)` | `PageSpecController.saveDraft` |
+| POST | `/page-spec/publish` | Promueve el borrador a publicado (acción humana) | `PageSpecController.publish` |
+
+### `/webhooks/whatsapp` — `routes/webhooks/whatsapp.js`
+
+Montado en `app.js` **antes** del parser JSON global (necesita el raw body para la firma). Sin
+`verifyToken`: la autenticación es la firma HMAC (`X-Hub-Signature-256`, `WHATSAPP_APP_SECRET`)
+más el `WHATSAPP_VERIFY_TOKEN` del handshake inicial.
+
+| Método | Ruta | Qué hace | Controller → Service |
+|---|---|---|---|
+| GET | `/webhooks/whatsapp` | Handshake de verificación de la Graph API (sin body) | `WhatsappWebhookController.verify` |
+| POST | `/webhooks/whatsapp` | Recepción de mensajes; valida firma sobre raw body, responde 200 antes de procesar (fire-and-forget) | `WhatsappWebhookController.receive` → `services/whatsapp/` → `services/chat/` |
+
 ### Rate limiters (`middleware/rateLimit.js`)
 - `generalLimiter`: 200 req / 15 min (global; `skip` cuando **no** es producción).
 - `loginLimiter`: 5 / 15 min, key por `email`, `skipSuccessfulRequests`.
 - `registerLimiter`: 10 / 60 min.
 - `webhookLimiter`: 30 / 60 s.
+- `chatLimiter`: rate-limit por IP del chat de tienda (complementa el cost-guard por tenant en Redis, `CHAT_DAILY_LIMIT`).
 - Usan store de Redis (`rate-limit-redis`) con prefijos `rl:general:`/`rl:login:`/`rl:register:`/`rl:webhook:`; si Redis no está, caen a store en memoria.
 
 ---
@@ -464,9 +568,60 @@ Montaje en `routes/store/index.js`: **todo `/store/*` aplica `storeCors()` + `re
   `CartModel`, `VariantModel`, `StatsModel`, `TenantConfigModel`, `mercadopagoModel`,
   `roleModel`).
 - Features grandes son **carpetas** con `index.js` (la fachada `XModel`) y submódulos
-  puros: `services/stats/` y `services/content-suggestions/`.
+  puros: `services/stats/`, `services/content-suggestions/`, `services/whatsapp/`,
+  `services/chat/`.
+- **Excepción a la convención `XModel`:** `services/combos.js` no exporta un modelo, sino una
+  única función pura `validateComboSelection({ tx, tenantId, comboProduct, selection,
+  checkStock })`, compartida por `services/cart.js` (`CartModel.addCombo`) y
+  `services/orders.js` (`priceItems`, al pricear una línea `COMBO`). Agrupa la selección por
+  producto+variante, valida cantidad total contra `comboMinItems/comboMaxItems`, valida cada
+  línea contra su `ComboAllowedProduct` (`minQty`/`maxQty`), rechaza combos anidados y
+  componentes inactivos, chequea stock (`resolveProductStock`) y devuelve los `children`
+  normalizados.
 - Los **controllers pasan `tenantId` explícito** a cada método; los services lo usan en el
   `where` (scoping manual, §4).
+- `services/productos.js` (`ProductModel`): `create`/`edit` ramifican por `Product.type`
+  (PRODUCTO acepta un array `variants` opcional — puede venir vacío para alta en 2 pasos; la
+  primera variante creada se marca `isDefault:true` server-side y su `sku` se autogenera vía
+  `utils/sku.js generateUniqueVariantSku`, nunca lo carga el admin; rechaza `price` a nivel
+  producto. COMBO exige `price` + `comboMinItems`/`comboMaxItems`, rechaza `variants`, y valida
+  `comboOptions` vía `ensureComboOptionsValid`, que rechaza auto-referencia y combos anidados).
+  `edit` maneja la única transición real, `PRODUCTO↔COMBO`: al pasar a COMBO desactiva (no
+  borra) las variantes existentes preservando su `isDefault` (para poder reactivarlas si vuelve
+  a PRODUCTO); al volver a PRODUCTO reactiva la que era default. Al salir de COMBO desactiva
+  además las filas de `ComboAllowedProduct`. Si `edit` recibe `comboOptions`, **reemplaza toda
+  la whitelist** (delete + createMany transaccional; no hay merge incremental).
+  `getComboOptions({ tenantId, id })` expone `comboMinItems/comboMaxItems` + `allowedProducts`
+  con el stock resuelto vía la variante de cada componente (`resolveVariantForProduct`,
+  `helpers/price.js`). Un `PRODUCTO` recién creado sin variantes todavía (alta en 2 pasos) es un
+  estado transitorio válido: aparece en listados/stats pero no es agregable al carrito hasta
+  tener al menos una variante (`CartModel.add` tira `VARIANT_REQUIRED`).
+
+### Bot de WhatsApp (`services/whatsapp/`)
+Canal de entrada del chatbot vía WhatsApp Business (Graph API). `index.js` expone
+`WhatsappModel.processInbound`: resuelve el tenant por `phone_number_id`
+(`tenant-resolver.js`, contra `TenantConfig.whatsappPhoneNumberId`), deduplica mensajes
+(`dedup.js`), aplica rate-limit por remitente (`rate-limit.js`), guarda historial en Redis
+(`history.js`) y delega en `ChatModel.sendMessage` (`services/chat/`) pasando
+`channel: { kind: "whatsapp", waId, contactName }` — ese `channel.kind` es lo que habilita la
+tool de escritura `createDraftOrder` (`CHANNEL_ORDER_TOOLS` en `lib/llm/tools/schema.js`). La
+firma HMAC (`X-Hub-Signature-256`) se valida en `controllers/webhooks/whatsapp.js`
+(`signature.js`); el webhook responde 200 antes de procesar (fire-and-forget) para no bloquear
+la Graph API. El acceso a la Graph API en sí (`graph-api.js`) usa el token per-tenant
+(`TenantConfig.whatsappAccessToken`, cifrado con `lib/crypto.js`) o cae al
+`WHATSAPP_ACCESS_TOKEN` global.
+
+### Chat de tienda / Agente LLM (`services/chat/`)
+Asistente conversacional con tool-calling, montado por `/store/chat/message` y por el bot de
+WhatsApp. `index.js` corre el loop agéntico (`runAgent`); `tools.js` implementa los handlers de
+cada tool, incluida **`createDraftOrder`** (única tool de escritura): acepta `note` por línea
+(máx 150 chars) y **rechaza explícitamente** productos `type === "COMBO"` (mensaje amigable —
+el bot todavía no vende combos, ver [[Combos]] y [[WhatsApp]]). `cost-guard.js` aplica
+`CHAT_DAILY_LIMIT` por tenant en Redis, **fail-closed** (a diferencia del cost-guard de
+Sugerencias de contenido, que degrada abierto si Redis falla). Las specs de todas las tools
+(qué tools existen, cuáles requieren usuario autenticado, cuáles solo se habilitan por canal)
+viven centralizadas en `lib/llm/tools/schema.js` (`TOOL_DEFINITIONS`, `AUTHENTICATED_TOOLS`,
+`CHANNEL_ORDER_TOOLS`), separado del cliente LLM one-shot de §8.
 
 ### `services/stats/`
 - Fachada: **`StatsModel.getDashboard({ tenantId, days = 30, lowStockThreshold = 5 })`**
@@ -654,4 +809,16 @@ docs asumen **Next.js**) debería consumir esta API:
   `requireRole(["ADMIN"])`). Conviene revisar si debe existir en producción.
 - **`generalLimiter` se desactiva fuera de producción** (`skip: (req) => !isProd`): en
   desarrollo/test no hay rate limit general.
+- **`CartItem` y `ProductVariant` tienen índices únicos que no están en `prisma/schema.prisma`.**
+  El caso `CartItem.variantId IS NULL` (líneas COMBO) lo cubre un índice único parcial creado a
+  mano en SQL (`CartItem_cart_product_null_variant_key`, migración
+  `20260708190000_product_types_add`); el caso `ProductVariant.isDefault = true` (a lo sumo una
+  por producto) lo cubre otro (`ProductVariant_product_default_key`, migración
+  `20260710120000_product_types_collapse_expand`) — ambos porque Postgres no colisiona `NULL`
+  contra `NULL` en un `@@unique` normal / porque un índice parcial no se puede declarar en el
+  DSL de Prisma. Es drift intencional (el propio schema trae comentarios pidiendo no
+  "corregirlo"), pero cualquiera que lea solo el `.prisma` no lo va a ver.
+- **`Product.isCombo` queda deprecado sin limpiar.** Fue reemplazado por `type = "COMBO"`, no
+  se lee en ningún camino de código, pero la columna se mantiene "por si hace falta re-derivar
+  `type` a mano". Candidato a limpieza futura si se confirma que no hace falta.
 ```

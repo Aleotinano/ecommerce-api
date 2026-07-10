@@ -103,10 +103,10 @@ export class productsController {
         isActive,
         type,
         variants = [],
-        stock,
         comboMinItems,
         comboMaxItems,
         comboOptions,
+        comboCategoryOptions,
       } = req.body;
 
       if (uploadedFile) {
@@ -126,10 +126,10 @@ export class productsController {
         isActive,
         type,
         variants,
-        stock,
         comboMinItems,
         comboMaxItems,
         comboOptions,
+        comboCategoryOptions,
       });
 
       return res.status(201).json({
@@ -165,10 +165,10 @@ export class productsController {
         isActive,
         type,
         variants,
-        stock,
         comboMinItems,
         comboMaxItems,
         comboOptions,
+        comboCategoryOptions,
       } = req.body;
 
       const imageData = {};
@@ -197,10 +197,10 @@ export class productsController {
           isActive,
           type,
           variants,
-          stock,
           comboMinItems,
           comboMaxItems,
           comboOptions,
+          comboCategoryOptions,
           ...imageData,
         }
       );

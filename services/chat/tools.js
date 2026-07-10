@@ -23,7 +23,7 @@
 import { ProductModel } from "../productos.js";
 import { CategoryModel } from "../categories.js";
 import { OrderModel } from "../orders.js";
-import { getProductPrice, resolveProductStock } from "../../helpers/price.js";
+import { getProductPrice, resolveVariantForProduct } from "../../helpers/price.js";
 import {
   TOOL_DEFINITIONS,
   AUTHENTICATED_TOOLS,
@@ -54,32 +54,24 @@ const buildCreationContext = (history = [], message = "") => {
 };
 
 /**
- * ¿Hay algo para vender de este producto? VARIANTE mira si alguna variante activa
- * tiene stock; UNIDAD mira `Product.stock`. COMBO no tiene stock propio — se
+ * ¿Hay algo para vender de este producto? PRODUCTO mira si alguna variante activa
+ * tiene stock (siempre hay al menos la principal). COMBO no tiene stock propio — se
  * reporta siempre disponible en v1 (el bot igual no lo vende, ver `createDraftOrder`).
  */
 const hasStock = (product) => {
-  if (product.type === "VARIANTE") {
-    return (product.variants ?? []).some((v) => v.isActive && v.stock > 0);
+  if (product.type === "COMBO") {
+    return true;
   }
-  if (product.type === "UNIDAD") {
-    return (resolveProductStock(product, null) ?? 0) > 0;
-  }
-  return true;
+  return (product.variants ?? []).some((v) => v.isActive && v.stock > 0);
 };
 
 /**
- * Precio para listados (sin variante puntual elegida todavía): UNIDAD/COMBO usan
- * `Product.price` directo; VARIANTE muestra el precio de la primera variante con
- * precio propio (referencial — el precio real se resuelve por variante elegida).
+ * Precio para listados (sin variante puntual elegida todavía): COMBO usa
+ * `Product.price` directo (su precio fijo); PRODUCTO muestra el precio de su
+ * variante principal (referencial — el precio real se resuelve por variante elegida).
  */
-const effectiveProductPrice = (product) => {
-  if (product.type === "VARIANTE") {
-    const priced = (product.variants ?? []).find((v) => v.price != null);
-    return priced?.price ?? null;
-  }
-  return product.price ?? null;
-};
+const effectiveProductPrice = (product) =>
+  getProductPrice(resolveVariantForProduct(product, null), product);
 
 /** Carga un mapa id->nombre de categorias del tenant (para etiquetar productos). */
 const loadCategoryNames = async (tenantId) => {
@@ -146,7 +138,7 @@ export const buildToolContext = ({ tenantId, user, config, channel }) => {
 
       const product = await ProductModel.getById({ tenantId, id: productId });
 
-      if (product.type !== "VARIANTE") {
+      if (product.type === "COMBO") {
         const disponible = hasStock(product);
         if (!disponible && !showOutOfStock) {
           return {
@@ -190,13 +182,8 @@ export const buildToolContext = ({ tenantId, user, config, channel }) => {
 
       const product = await ProductModel.getById({ tenantId, id: productId });
 
-      if (product.type !== "VARIANTE") {
-        const stock = resolveProductStock(product, null);
-        const disponible = product.type === "COMBO" ? true : (stock ?? 0) > 0;
-        if (disponible || showOutOfStock) {
-          return stock != null ? { disponible, stock } : { disponible };
-        }
-        return { disponible };
+      if (product.type === "COMBO") {
+        return { disponible: true };
       }
 
       const variants = product.variants ?? [];
@@ -272,10 +259,10 @@ export const buildToolContext = ({ tenantId, user, config, channel }) => {
         return { error: "Decime al menos un producto y su cantidad." };
       }
 
-      // Resolvemos productId(+color/size) -> { productId, variantId? } server-side,
+      // Resolvemos productId(+color/size) -> { productId, variantId } server-side,
       // scopeado al tenant. El bot solo propone; el server valida catalogo y
-      // desambigua. VARIANTE exige matchear una única variante; UNIDAD no necesita
-      // variante en absoluto.
+      // desambigua contra las variantes del producto (todo PRODUCTO tiene al menos
+      // la principal, así que siempre hay que resolver una).
       const resolved = [];
       for (const raw of items) {
         const { productId, quantity, color, size, note } = raw ?? {};
@@ -305,11 +292,6 @@ export const buildToolContext = ({ tenantId, user, config, channel }) => {
         }
 
         const noteValue = typeof note === "string" ? note.slice(0, 150) : null;
-
-        if (product.type === "UNIDAD") {
-          resolved.push({ productId, quantity, note: noteValue });
-          continue;
-        }
 
         const variants = product.variants ?? [];
         const candidates = variants.filter(

@@ -31,19 +31,16 @@ const activeVariants = (product) =>
   product.variants.filter((variant) => variant.isActive);
 
 /**
- * Stock total del producto, segun su tipo: VARIANTE suma todas sus variantes
- * activas, UNIDAD usa `Product.stock`. COMBO no tiene stock propio (depende de sus
+ * Stock total del producto: PRODUCTO suma todas sus variantes activas (siempre hay
+ * >=1, la principal incluida). COMBO no tiene stock propio (depende de sus
  * componentes) -> `null`, lo que excluye a los combos de LOW_STOCK/NO_RECENT_SALES
  * mas abajo. Ver docs/servicios/dominio/Combos.md.
  */
 const totalStock = (product) => {
-  if (product.type === "VARIANTE") {
-    return activeVariants(product).reduce((sum, variant) => sum + variant.stock, 0);
+  if (product.type === "COMBO") {
+    return null;
   }
-  if (product.type === "UNIDAD") {
-    return product.stock ?? 0;
-  }
-  return null;
+  return activeVariants(product).reduce((sum, variant) => sum + variant.stock, 0);
 };
 
 const hasAvailableStock = (product) => {

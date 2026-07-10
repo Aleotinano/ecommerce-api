@@ -15,17 +15,18 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users                User[]
-  categories           Categories[]
-  products             Product[]
-  variants             ProductVariant[]
-  carts                Cart[]
-  orders               Order[]
-  config               TenantConfig?
-  contentSuggestions   ContentSuggestion[]
-  pageSpec             TenantPageSpec?
-  suggestionImages     SuggestionImage[]
-  comboAllowedProducts ComboAllowedProduct[]
+  users                  User[]
+  categories             Categories[]
+  products               Product[]
+  variants               ProductVariant[]
+  carts                  Cart[]
+  orders                 Order[]
+  config                 TenantConfig?
+  contentSuggestions     ContentSuggestion[]
+  pageSpec               TenantPageSpec?
+  suggestionImages       SuggestionImage[]
+  comboAllowedProducts   ComboAllowedProduct[]
+  comboAllowedCategories ComboAllowedCategory[]
 }
 
 model TenantConfig {
@@ -69,8 +70,9 @@ model TenantConfig {
   showOutOfStock Boolean @default(false)
   allowCartGuest Boolean @default(true)
 
-  // Si es false, el panel admin no debería pedir variantes (color/talle) al crear
-  // productos — usa el flujo de `stock` a nivel producto (ver services/productos.js).
+  // Todo PRODUCTO tiene siempre >=1 variante (la default); este flag no cambia eso.
+  // Solo gatilla si el admin puede agregar MÁS de una variante (mostrar/ocultar
+  // "Agregar variante" en el panel) — no se lee todavía del lado del backend.
   productVariantsEnabled Boolean @default(true)
 
   // Seña / depósito: si depositEnabled es true, las órdenes del tenant exigen un
@@ -115,32 +117,32 @@ model User {
 }
 
 model Categories {
-  id          Int          @id @default(autoincrement())
-  tenantId    Int
-  name        String
-  description String?
-  icon        String?
-  imageUrl    String?
-  imgPublicId String?
-  isActive    Boolean      @default(true)
-  parentId    Int?
-  parent      Categories?  @relation("CategoryToSubcategories", fields: [parentId], references: [id])
-  children    Categories[] @relation("CategoryToSubcategories")
-  products    Product[]
-  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  id             Int                    @id @default(autoincrement())
+  tenantId       Int
+  name           String
+  description    String?
+  icon           String?
+  imageUrl       String?
+  imgPublicId    String?
+  isActive       Boolean                @default(true)
+  parentId       Int?
+  parent         Categories?            @relation("CategoryToSubcategories", fields: [parentId], references: [id])
+  children       Categories[]           @relation("CategoryToSubcategories")
+  products       Product[]
+  comboAllowedIn ComboAllowedCategory[]
+  tenant         Tenant                 @relation(fields: [tenantId], references: [id])
 
   @@unique([tenantId, name])
   @@index([tenantId])
 }
 
-// UNIDAD: stock/precio viven en columnas propias de Product (`stock`, `price`), sin
-// ProductVariant. VARIANTE: precio/stock viven en ProductVariant, como siempre.
-// COMBO: `price` es el precio fijo del combo; no tiene stock propio (se valida/descuenta
-// sobre los componentes elegidos). Ver docs/servicios/dominio/Productos.md y Combos.md.
-//
+// PRODUCTO: todo producto no-combo tiene siempre >=1 ProductVariant, marcada `isDefault`
+// la principal — precio/stock se leen SIEMPRE de la variante, nunca de columnas propias
+// de Product (ver `ProductVariant.isDefault`). COMBO: `Product.price` es su precio fijo;
+// no tiene stock ni variantes propias (se valida/descuenta sobre los componentes
+// elegidos). Ver docs/servicios/dominio/Productos.md y Combos.md.
 enum ProductType {
-  UNIDAD
-  VARIANTE
+  PRODUCTO
   COMBO
 }
 
@@ -151,7 +153,9 @@ model Product {
   imgPublicId        String?
   name               String
   description        String?
-  price              Float
+  // Exclusivo de COMBO (precio fijo del combo). Para PRODUCTO es siempre null — el
+  // precio real vive en la variante default (ver `ProductVariant.isDefault`).
+  price              Float?
   categoryId         Int?
   isActive           Boolean             @default(true)
   createdAt          DateTime            @default(now())
@@ -162,21 +166,19 @@ model Product {
   cartItems          CartItem[]
   orderItems         OrderItem[]
 
-  type  ProductType
-  // Solo se usa cuando `type = UNIDAD`. Para VARIANTE el stock vive en ProductVariant;
-  // para COMBO no hay stock propio.
-  stock Int?
+  type ProductType
 
   // Combos: producto compuesto de otros productos, el cliente elige la selección
   // dentro del whitelist de `comboOptions` respetando comboMinItems/comboMaxItems
   // (unidades totales, no líneas distintas). Ver docs/servicios/dominio/Combos.md.
   // `isCombo` queda deprecado (reemplazado por `type = COMBO`) — no se lee en código,
   // se conserva la columna un tiempo por si hace falta re-derivar `type` a mano.
-  isCombo         Boolean                @default(false)
-  comboMinItems   Int?
-  comboMaxItems   Int?
-  comboOptions    ComboAllowedProduct[]  @relation("ComboOptions")
-  allowedInCombos ComboAllowedProduct[]  @relation("AllowedInCombos")
+  isCombo              Boolean                @default(false)
+  comboMinItems        Int?
+  comboMaxItems        Int?
+  comboOptions         ComboAllowedProduct[]  @relation("ComboOptions")
+  allowedInCombos      ComboAllowedProduct[]  @relation("AllowedInCombos")
+  comboCategoryOptions ComboAllowedCategory[] @relation("ComboCategoryOptions")
 
   @@index([tenantId])
 }
@@ -204,13 +206,39 @@ model ComboAllowedProduct {
   @@index([comboProductId])
 }
 
+// Whitelist de CATEGORÍAS enteras permitidas dentro de un combo — alternativa a listar
+// productos uno por uno en `ComboAllowedProduct` (ej. "elegí 2 de la categoría
+// Panadería"). Si un producto tiene regla explícita en `ComboAllowedProduct` Y su
+// categoría está acá, gana la regla explícita. minQty/maxQty son límites POR PRODUCTO
+// individual dentro de la categoría (no un tope agregado de la categoría) — el tope
+// agregado global sigue siendo `Product.comboMinItems`/`comboMaxItems`.
+model ComboAllowedCategory {
+  id             Int      @id @default(autoincrement())
+  tenantId       Int
+  comboProductId Int
+  categoryId     Int
+  minQty         Int      @default(0)
+  maxQty         Int?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  comboProduct Product    @relation("ComboCategoryOptions", fields: [comboProductId], references: [id], onDelete: Cascade)
+  category     Categories @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  tenant       Tenant     @relation(fields: [tenantId], references: [id])
+
+  @@unique([comboProductId, categoryId])
+  @@index([tenantId])
+  @@index([comboProductId])
+  @@index([categoryId])
+}
+
 model ProductVariant {
   id          Int         @id @default(autoincrement())
   tenantId    Int
   productId   Int
   color       String?
   size        String?
-  price       Float?
+  price       Float
   stock       Int
   sku         String
   img         String?
@@ -220,6 +248,14 @@ model ProductVariant {
   tenant      Tenant      @relation(fields: [tenantId], references: [id])
   cartItems   CartItem[]
   orderItems  OrderItem[]
+
+  // Marca la variante "principal" de un Product tipo PRODUCTO — todo producto no-combo
+  // tiene siempre exactamente una. El índice único parcial que garantiza "a lo sumo una
+  // por producto" vive SOLO en la migración
+  // `prisma/migrations/<ts>_product_types_collapse_expand/migration.sql`
+  // (mismo motivo que el de CartItem más abajo: no declararlo acá para no generar drift
+  // en `migrate diff`).
+  isDefault Boolean @default(false)
 
   @@unique([tenantId, sku])
   @@index([tenantId])
@@ -238,11 +274,11 @@ model Cart {
   @@index([tenantId])
 }
 
-// `variantId` es NULL para líneas de producto UNIDAD/COMBO (no tienen variante).
-// El `@@unique` de abajo cubre el caso VARIANTE (variantId no-null); el caso NULL
-// (UNIDAD/COMBO) lo cubre un índice único PARCIAL agregado a mano en la migración
-// `prisma/migrations/20260708190000_product_types_add/migration.sql` (Postgres no
-// colisiona NULL contra NULL en un unique normal) — no lo declares acá ni lo borres
+// `variantId` es NULL solo para líneas de producto COMBO (un PRODUCTO siempre resuelve
+// su variante, default o explícita). El `@@unique` de abajo cubre el caso variantId
+// no-null; el caso NULL (COMBO) lo cubre un índice único PARCIAL agregado a mano en la
+// migración `prisma/migrations/20260708190000_product_types_add/migration.sql` (Postgres
+// no colisiona NULL contra NULL en un unique normal) — no lo declares acá ni lo borres
 // pensando que es drift, ver ese archivo de migración.
 model CartItem {
   id        Int             @id @default(autoincrement())
@@ -316,7 +352,7 @@ model OrderStatusHistory {
   @@index([orderId])
 }
 
-// `variantId` es NULL para líneas de producto UNIDAD/COMBO (no tienen variante);
+// `variantId` es NULL solo para líneas de producto COMBO (no tienen variante propia);
 // `productId` siempre está presente e identifica el producto de la línea.
 model OrderItem {
   id        Int             @id @default(autoincrement())
@@ -348,9 +384,9 @@ model ContentSuggestion {
   tenantId  Int
   productId Int
   angle     SuggestionAngle
-  status    SuggestionStatus  @default(SUGGESTED)
-  source    SuggestionSource  @default(AUTO)
-  date      DateTime          @db.Date
+  status    SuggestionStatus @default(SUGGESTED)
+  source    SuggestionSource @default(AUTO)
+  date      DateTime         @db.Date
 
   // Campos de IA (Fase 2) — nullable por ahora
   copy        String?
@@ -361,8 +397,8 @@ model ContentSuggestion {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant  Tenant  @relation(fields: [tenantId], references: [id])
-  product Product @relation(fields: [productId], references: [id])
+  tenant  Tenant            @relation(fields: [tenantId], references: [id])
+  product Product           @relation(fields: [productId], references: [id])
   images  SuggestionImage[]
 
   // Identidad natural = dimension del cache on-demand (tenant+dia+producto+angulo).

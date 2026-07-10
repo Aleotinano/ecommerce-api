@@ -33,7 +33,6 @@ export const loadSelectionData = async ({ tenantId, windowStart, now }) => {
         isActive: true,
         createdAt: true,
         type: true,
-        stock: true,
         variants: {
           select: { stock: true, isActive: true },
         },

@@ -41,3 +41,29 @@ export function generateSkuSequential(productName, existingCount) {
   const seq = String(existingCount + 1).padStart(3, "0");
   return `${initials}-${seq}`;
 }
+
+// Genera un SKU único por tenant reintentando contra `productVariant.findUnique`
+// (y contra `reservedSkus`, para no chocar dentro del mismo batch antes de que la
+// fila exista en DB). Compartido por services/productos.js y services/variants.js —
+// antes estaba duplicado en ambos.
+export async function generateUniqueVariantSku({
+  prisma,
+  tenantId,
+  productName,
+  reservedSkus = new Set(),
+}) {
+  let sku;
+
+  do {
+    sku = generateSku({ productName });
+  } while (
+    reservedSkus.has(sku) ||
+    (await prisma.productVariant.findUnique({
+      where: { tenantId_sku: { tenantId, sku } },
+      select: { id: true },
+    }))
+  );
+
+  reservedSkus.add(sku);
+  return sku;
+}

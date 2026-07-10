@@ -16,8 +16,7 @@ beforeAll(async () => {
     data: {
       tenantId: acme.id,
       name: "Remera agotada",
-      price: 5000,
-      type: "VARIANTE",
+      type: "PRODUCTO",
       variants: {
         create: {
           tenantId: acme.id,
@@ -26,6 +25,7 @@ beforeAll(async () => {
           price: 5000,
           stock: 0,
           sku: "ACM-REM-AGOT",
+          isDefault: true,
         },
       },
     },

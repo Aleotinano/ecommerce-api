@@ -1,43 +1,42 @@
 /**
  * Precio efectivo de una línea, según el tipo de producto (`Product.type`):
- * - VARIANTE: precio de la variante (autoritativo, sin fallback a `product.price` — el
- *   tipo ya saca la ambigüedad). `null` si la variante no tiene precio.
- * - UNIDAD / COMBO: `product.price` (para COMBO es el precio fijo del combo).
- *
- * Si `product.type` no viene definido (código legado / objeto parcial), mantiene el
- * fallback anterior (`variant?.price ?? product?.price`) para no romper llamadas que
- * todavía no pasan un `product` con `type`.
+ * - COMBO: `product.price` (precio fijo del combo).
+ * - PRODUCTO: `variant.price` (autoritativo — todo PRODUCTO tiene siempre una
+ *   variante, nunca hay fallback a nivel producto). `null` si por algún motivo no
+ *   se resolvió ninguna variante (ver `resolveVariantForProduct`).
  */
 export function getProductPrice(variant, product) {
-  if (product?.type === "VARIANTE") {
-    return variant?.price ?? null;
-  }
-  if (product?.type === "UNIDAD" || product?.type === "COMBO") {
+  if (product?.type === "COMBO") {
     return product.price ?? null;
   }
-
-  if (variant?.price != null) {
-    return variant.price;
-  }
-  if (product?.price != null) {
-    return product.price;
-  }
-  return null;
+  return variant?.price ?? null;
 }
 
 /**
  * Stock efectivo de una línea, según el tipo de producto:
- * - VARIANTE: `variant.stock`.
- * - UNIDAD: `product.stock`.
  * - COMBO: `null` — no tiene stock propio, se valida/descuenta sobre los componentes
  *   elegidos (ver services/combos.js, services/orders.js).
+ * - PRODUCTO: `variant.stock`.
  */
 export function resolveProductStock(product, variant) {
-  if (product?.type === "VARIANTE") {
-    return variant?.stock ?? 0;
+  if (product?.type === "COMBO") {
+    return null;
   }
-  if (product?.type === "UNIDAD") {
-    return product?.stock ?? 0;
+  return variant?.stock ?? 0;
+}
+
+/**
+ * Resuelve qué `ProductVariant` de un `product` ya cargado (con `variants`) aplica a
+ * una línea: la indicada por `variantId` si viene, o la principal (`isDefault`) si
+ * no — así una línea sin elección explícita (ej. "agregar al carrito" sin abrir el
+ * picker) sigue funcionando igual que antes para un producto sin opciones reales.
+ * `null` si no se encuentra (ej. producto sin ninguna variante todavía — estado
+ * transitorio de un alta en 2 pasos). No aplica a COMBO (no tiene variantes propias).
+ */
+export function resolveVariantForProduct(product, variantId) {
+  const variants = product?.variants ?? [];
+  if (variantId != null) {
+    return variants.find((v) => v.id === variantId) ?? null;
   }
-  return null;
+  return variants.find((v) => v.isDefault) ?? null;
 }

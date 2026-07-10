@@ -1,6 +1,6 @@
 import prisma from "../lib/prisma.js";
 import { createError } from "../helpers/error.js";
-import { generateSku } from "../utils/sku.js";
+import { generateUniqueVariantSku } from "../utils/sku.js";
 import { wrap, delPattern, hashParams, tenantNs } from "../lib/cache.js";
 import { addDays, startOfDay } from "./stats/utils.js";
 import {
@@ -45,9 +45,9 @@ const buildPriceRange = ({ minPrice, maxPrice }) => {
   return Object.keys(range).length ? range : null;
 };
 
-// Construye el WHERE de producto por tipo: VARIANTE resuelve precio/atributos contra
-// ProductVariant; UNIDAD/COMBO contra las columnas propias de Product. Un filtro de
-// color/talle excluye UNIDAD/COMBO (no tienen esos atributos).
+// Construye el WHERE de producto por tipo: PRODUCTO resuelve precio/atributos contra
+// ProductVariant (siempre tiene >=1); COMBO contra `Product.price` (su precio fijo,
+// no tiene atributos color/talle).
 const buildProductWhere = ({ base, color, size, minPrice, maxPrice }) => {
   const where = { ...base };
   const attributeFilter = buildVariantAttributeFilter({ color, size });
@@ -56,19 +56,17 @@ const buildProductWhere = ({ base, color, size, minPrice, maxPrice }) => {
   const and = [];
 
   if (hasAttributeFilter) {
-    and.push({ type: "VARIANTE", variants: { some: attributeFilter } });
+    and.push({ type: "PRODUCTO", variants: { some: attributeFilter } });
   }
 
   if (priceRange) {
     and.push({
       OR: [
-        // VARIANTE: precio de alguna variante activa (que además matchee el filtro de atributos si hay).
-        { type: "VARIANTE", variants: { some: { ...attributeFilter, price: priceRange } } },
-        // UNIDAD/COMBO: precio propio del producto. No aplica si hay filtro de atributos
-        // (esos tipos no tienen color/talle).
-        ...(hasAttributeFilter
-          ? []
-          : [{ type: { in: ["UNIDAD", "COMBO"] }, price: priceRange }]),
+        // PRODUCTO: precio de alguna variante activa (que además matchee el filtro de atributos si hay).
+        { type: "PRODUCTO", variants: { some: { ...attributeFilter, price: priceRange } } },
+        // COMBO: precio fijo del combo. No aplica si hay filtro de atributos (un
+        // combo no tiene color/talle).
+        ...(hasAttributeFilter ? [] : [{ type: "COMBO", price: priceRange }]),
       ],
     });
   }
@@ -132,21 +130,28 @@ const ensureComboOptionsValid = async (tenantId, comboOptions, comboProductId = 
   }
 };
 
-const generateUniqueVariantSku = async ({ tenantId, productName, reservedSkus = new Set() }) => {
-  let sku;
+// Combos: valida la whitelist de CATEGORÍAS enteras antes de persistirla. A diferencia
+// de `ensureComboOptionsValid`, no hay auto-referencia ni anidamiento que chequear (una
+// categoría no puede ser un combo) — solo que cada categoría exista y sea del tenant.
+const ensureComboCategoryOptionsValid = async (tenantId, comboCategoryOptions) => {
+  if (!comboCategoryOptions.length) return;
 
-  do {
-    sku = generateSku({ productName });
-  } while (
-    reservedSkus.has(sku) ||
-    (await prisma.productVariant.findUnique({
-      where: { tenantId_sku: { tenantId, sku } },
-      select: { id: true },
-    }))
-  );
+  const ids = comboCategoryOptions.map((o) => o.categoryId);
+  const categories = await prisma.categories.findMany({
+    where: { id: { in: ids }, tenantId },
+    select: { id: true },
+  });
+  const foundIds = new Set(categories.map((c) => c.id));
 
-  reservedSkus.add(sku);
-  return sku;
+  for (const id of ids) {
+    if (!foundIds.has(id)) {
+      throw createError(
+        "Una de las categorías permitidas no existe",
+        "CATEGORY_NOT_FOUND",
+        404
+      );
+    }
+  }
 };
 
 const buildVariantsWithSku = async ({ tenantId, productName, variants }) => {
@@ -154,21 +159,22 @@ const buildVariantsWithSku = async ({ tenantId, productName, variants }) => {
   return Promise.all(
     variants.map(async (variant) => ({
       ...variant,
-      sku: await generateUniqueVariantSku({ tenantId, productName, reservedSkus }),
+      sku: await generateUniqueVariantSku({ prisma, tenantId, productName, reservedSkus }),
     }))
   );
 };
 
-const toVariantCreateData = (tenantId, variant) => ({
+const toVariantCreateData = (tenantId, variant, isDefault = false) => ({
   tenantId,
   color: variant.color ?? null,
   size: variant.size ?? null,
-  price: variant.price ?? null,
+  price: variant.price,
   stock: variant.stock,
   sku: variant.sku,
   img: variant.img ?? null,
   imgPublicId: variant.imgPublicId ?? null,
   isActive: variant.isActive ?? true,
+  isDefault,
 });
 
 export const ProductModel = {
@@ -315,7 +321,7 @@ export const ProductModel = {
             tenantId,
             isActive: true,
             color: { not: null },
-            product: { type: "VARIANTE" },
+            product: { type: "PRODUCTO" },
           },
           select: { color: true },
           distinct: ["color"],
@@ -326,7 +332,7 @@ export const ProductModel = {
             tenantId,
             isActive: true,
             size: { not: null },
-            product: { type: "VARIANTE" },
+            product: { type: "PRODUCTO" },
           },
           select: { size: true },
           distinct: ["size"],
@@ -342,33 +348,34 @@ export const ProductModel = {
   },
 
   /**
-   * Agregados del catálogo para las stat cards del header de Productos. El stock vive
-   * en `Product.stock` para UNIDAD y en `ProductVariant.stock` para VARIANTE; COMBO no
-   * tiene stock propio (se excluye de bajo/sin stock, pero cuenta en total/activos).
+   * Agregados del catálogo para las stat cards del header de Productos. El stock de
+   * PRODUCTO siempre vive en sus `ProductVariant` (nunca en columnas de Product);
+   * COMBO no tiene stock propio (se excluye de bajo/sin stock, pero cuenta en
+   * total/activos).
    */
   async getStats({ tenantId, lowStockThreshold = 5 }) {
     const key = `${tenantNs(tenantId)}:prod:stats:${lowStockThreshold}`;
 
     return wrap(key, PRODUCTS_LIST_TTL, async () => {
-      const [total, activeProducts, stockByVariantProduct] = await Promise.all([
+      const [total, activeProducts, stockByProduct] = await Promise.all([
         prisma.product.count({ where: { tenantId } }),
         prisma.product.findMany({
           where: { tenantId, isActive: true },
-          select: { id: true, type: true, stock: true },
+          select: { id: true, type: true },
         }),
         prisma.productVariant.groupBy({
           by: ["productId"],
           where: {
             tenantId,
             isActive: true,
-            product: { isActive: true, type: "VARIANTE" },
+            product: { isActive: true, type: "PRODUCTO" },
           },
           _sum: { stock: true },
         }),
       ]);
 
-      const variantStockOf = new Map(
-        stockByVariantProduct.map((row) => [row.productId, row._sum.stock ?? 0])
+      const stockOf = new Map(
+        stockByProduct.map((row) => [row.productId, row._sum.stock ?? 0])
       );
 
       let lowStock = 0;
@@ -376,10 +383,7 @@ export const ProductModel = {
       for (const product of activeProducts) {
         if (product.type === "COMBO") continue;
 
-        const stock =
-          product.type === "VARIANTE"
-            ? variantStockOf.get(product.id) ?? 0
-            : product.stock ?? 0;
+        const stock = stockOf.get(product.id) ?? 0;
 
         if (stock === 0) outOfStock += 1;
         else if (stock <= lowStockThreshold) lowStock += 1;
@@ -445,42 +449,32 @@ export const ProductModel = {
     isActive,
     type,
     variants = [],
-    stock,
     comboMinItems,
     comboMaxItems,
     comboOptions = [],
+    comboCategoryOptions = [],
   }) {
     await ensureCategoryExists(tenantId, categoryId);
 
     let variantsWithSku = [];
 
-    if (type === "UNIDAD") {
+    if (type === "PRODUCTO") {
+      // `variants` puede venir vacío: alta en 2 pasos (el admin agrega la variante
+      // principal después vía /variants/:productId). Si vienen, la primera queda
+      // marcada `isDefault`.
       if (variants.length > 0) {
-        throw createError(
-          "Un producto UNIDAD no admite variantes",
-          "VARIANTS_NOT_ALLOWED",
-          400
-        );
+        variantsWithSku = await buildVariantsWithSku({ tenantId, productName: name, variants });
       }
-      if (stock === undefined) {
-        throw createError(
-          "El stock es requerido para un producto UNIDAD",
-          "STOCK_REQUIRED",
-          400
-        );
-      }
-    } else if (type === "VARIANTE") {
-      if (variants.length === 0) {
-        throw createError(
-          "Un producto VARIANTE necesita al menos una variante",
-          "VARIANTS_REQUIRED",
-          400
-        );
-      }
-      variantsWithSku = await buildVariantsWithSku({ tenantId, productName: name, variants });
     } else if (type === "COMBO") {
       if (variants.length > 0) {
         throw createError("Un combo no admite variantes", "VARIANTS_NOT_ALLOWED", 400);
+      }
+      if (price === undefined) {
+        throw createError(
+          "El precio es requerido para un combo",
+          "PRICE_REQUIRED",
+          400
+        );
       }
       if (comboMinItems == null || comboMaxItems == null) {
         throw createError(
@@ -490,6 +484,7 @@ export const ProductModel = {
         );
       }
       await ensureComboOptionsValid(tenantId, comboOptions);
+      await ensureComboCategoryOptionsValid(tenantId, comboCategoryOptions);
     }
 
     const data = {
@@ -497,12 +492,12 @@ export const ProductModel = {
       name,
       description: description ?? null,
       categoryId: categoryId ?? null,
-      price,
+      // Exclusivo de COMBO — para PRODUCTO el precio vive en cada variante.
+      price: type === "COMBO" ? price : null,
       img: img ?? null,
       imgPublicId: imgPublicId ?? null,
       isActive: isActive ?? true,
       type,
-      stock: type === "UNIDAD" ? stock : null,
       isCombo: type === "COMBO",
       comboMinItems: type === "COMBO" ? comboMinItems ?? null : null,
       comboMaxItems: type === "COMBO" ? comboMaxItems ?? null : null,
@@ -513,7 +508,11 @@ export const ProductModel = {
         ...data,
         variants:
           variantsWithSku.length > 0
-            ? { create: variantsWithSku.map((variant) => toVariantCreateData(tenantId, variant)) }
+            ? {
+                create: variantsWithSku.map((variant, index) =>
+                  toVariantCreateData(tenantId, variant, index === 0)
+                ),
+              }
             : undefined,
         comboOptions:
           type === "COMBO" && comboOptions.length
@@ -526,12 +525,24 @@ export const ProductModel = {
                 })),
               }
             : undefined,
+        comboCategoryOptions:
+          type === "COMBO" && comboCategoryOptions.length
+            ? {
+                create: comboCategoryOptions.map((option) => ({
+                  tenantId,
+                  categoryId: option.categoryId,
+                  minQty: option.minQty ?? 0,
+                  maxQty: option.maxQty ?? null,
+                })),
+              }
+            : undefined,
       },
       include: {
         variants: {
           orderBy: { id: "asc" },
         },
         comboOptions: true,
+        comboCategoryOptions: true,
       },
     });
 
@@ -550,11 +561,11 @@ export const ProductModel = {
       imgPublicId,
       isActive,
       type,
-      stock,
       variants,
       comboMinItems,
       comboMaxItems,
       comboOptions,
+      comboCategoryOptions,
     }
   ) {
     const existing = await this.getByIdForManagement({ tenantId, id });
@@ -567,11 +578,16 @@ export const ProductModel = {
     if (targetType === "COMBO" && comboOptions !== undefined) {
       await ensureComboOptionsValid(tenantId, comboOptions, id);
     }
+    if (targetType === "COMBO" && comboCategoryOptions !== undefined) {
+      await ensureComboCategoryOptionsValid(tenantId, comboCategoryOptions);
+    }
 
-    // Transición de tipo: desactiva (nunca borra) lo que deja de aplicar — por
-    // integridad de OrderItem históricos que puedan referenciarlo.
+    // Transición PRODUCTO -> COMBO: desactiva (nunca borra) lo que deja de aplicar —
+    // por integridad de OrderItem históricos que puedan referenciarlo. `isDefault` se
+    // preserva (no se limpia) para poder reactivar la misma variante si el producto
+    // vuelve a PRODUCTO más adelante (ver más abajo).
     if (isTypeChange) {
-      if (currentType === "VARIANTE") {
+      if (currentType === "PRODUCTO") {
         await prisma.productVariant.updateMany({
           where: { productId: id, isActive: true },
           data: { isActive: false },
@@ -582,33 +598,39 @@ export const ProductModel = {
           where: { comboProductId: id, isActive: true },
           data: { isActive: false },
         });
+        await prisma.comboAllowedCategory.updateMany({
+          where: { comboProductId: id, isActive: true },
+          data: { isActive: false },
+        });
       }
     }
 
-    if (targetType === "VARIANTE") {
-      const willHaveActiveVariants =
-        Array.isArray(variants) && variants.length > 0
-          ? true
-          : !isTypeChange && existing.variants.some((v) => v.isActive);
-      if (!willHaveActiveVariants) {
+    if (targetType === "COMBO") {
+      const willHavePrice = price !== undefined || (!isTypeChange && existing.price != null);
+      if (!willHavePrice) {
         throw createError(
-          "Un producto VARIANTE necesita al menos una variante",
-          "VARIANTS_REQUIRED",
+          "El precio es requerido para un combo",
+          "PRICE_REQUIRED",
           400
         );
       }
     }
 
-    if (targetType === "UNIDAD" && isTypeChange && stock === undefined) {
-      throw createError(
-        "El stock es requerido al pasar un producto a UNIDAD",
-        "STOCK_REQUIRED",
-        400
-      );
+    let newVariants;
+    // Al volver a PRODUCTO desde COMBO reactivamos la que era default (si había
+    // alguna) en vez de exigir variantes nuevas — un combo sin componentes propios
+    // vuelve al mismo estado transitorio "sin variante todavía" que un alta nueva.
+    if (currentType === "COMBO" && targetType === "PRODUCTO" && isTypeChange) {
+      const previousDefault = existing.variants.find((v) => v.isDefault);
+      if (previousDefault) {
+        await prisma.productVariant.update({
+          where: { id: previousDefault.id },
+          data: { isActive: true },
+        });
+      }
     }
 
-    let newVariants;
-    if (targetType === "VARIANTE" && Array.isArray(variants) && variants.length > 0) {
+    if (targetType === "PRODUCTO" && Array.isArray(variants) && variants.length > 0) {
       newVariants = await buildVariantsWithSku({
         tenantId,
         productName: existing.name,
@@ -620,12 +642,11 @@ export const ProductModel = {
       name,
       description,
       categoryId,
-      price,
+      price: targetType === "COMBO" ? price : isTypeChange ? null : undefined,
       img,
       imgPublicId,
       isActive,
       type,
-      stock: targetType === "UNIDAD" ? stock : undefined,
       isCombo: type !== undefined ? targetType === "COMBO" : undefined,
       comboMinItems:
         targetType === "COMBO" ? comboMinItems : isTypeChange ? null : undefined,
@@ -638,30 +659,61 @@ export const ProductModel = {
     );
 
     if (newVariants) {
+      // Si el producto no tenía NINGUNA variante marcada default todavía (alta en 2
+      // pasos, o un combo que nunca fue PRODUCTO), la primera que se agrega ahora lo
+      // es. Se chequea contra `existing` (estado ANTES de esta edición) para no
+      // pisar una default reactivada más arriba (transición COMBO -> PRODUCTO).
+      const hasDefault = existing.variants.some((v) => v.isDefault);
       updateData.variants = {
-        create: newVariants.map((variant) => toVariantCreateData(tenantId, variant)),
+        create: newVariants.map((variant, index) =>
+          toVariantCreateData(tenantId, variant, !hasDefault && index === 0)
+        ),
       };
     }
 
-    // `comboOptions` reemplaza la whitelist completa (no hay merge incremental
-    // en v1): borra las reglas actuales y crea las nuevas en una transacción.
+    // `comboOptions`/`comboCategoryOptions` reemplazan la whitelist completa (no hay
+    // merge incremental en v1): borran las reglas actuales y crean las nuevas en una
+    // transacción. Cada whitelist se toca solo si vino en el request (independientes
+    // entre sí), pero si vinieron las dos se aplican atómicamente juntas.
+    const comboWhitelistOps = [];
     if (comboOptions !== undefined) {
-      await prisma.$transaction([
-        prisma.comboAllowedProduct.deleteMany({ where: { comboProductId: id } }),
-        ...(comboOptions.length
-          ? [
-              prisma.comboAllowedProduct.createMany({
-                data: comboOptions.map((option) => ({
-                  tenantId,
-                  comboProductId: id,
-                  allowedProductId: option.allowedProductId,
-                  minQty: option.minQty ?? 0,
-                  maxQty: option.maxQty ?? null,
-                })),
-              }),
-            ]
-          : []),
-      ]);
+      comboWhitelistOps.push(
+        prisma.comboAllowedProduct.deleteMany({ where: { comboProductId: id } })
+      );
+      if (comboOptions.length) {
+        comboWhitelistOps.push(
+          prisma.comboAllowedProduct.createMany({
+            data: comboOptions.map((option) => ({
+              tenantId,
+              comboProductId: id,
+              allowedProductId: option.allowedProductId,
+              minQty: option.minQty ?? 0,
+              maxQty: option.maxQty ?? null,
+            })),
+          })
+        );
+      }
+    }
+    if (comboCategoryOptions !== undefined) {
+      comboWhitelistOps.push(
+        prisma.comboAllowedCategory.deleteMany({ where: { comboProductId: id } })
+      );
+      if (comboCategoryOptions.length) {
+        comboWhitelistOps.push(
+          prisma.comboAllowedCategory.createMany({
+            data: comboCategoryOptions.map((option) => ({
+              tenantId,
+              comboProductId: id,
+              categoryId: option.categoryId,
+              minQty: option.minQty ?? 0,
+              maxQty: option.maxQty ?? null,
+            })),
+          })
+        );
+      }
+    }
+    if (comboWhitelistOps.length) {
+      await prisma.$transaction(comboWhitelistOps);
     }
 
     const result = await prisma.product.update({
@@ -673,6 +725,7 @@ export const ProductModel = {
           orderBy: { id: "asc" },
         },
         comboOptions: true,
+        comboCategoryOptions: true,
       },
     });
 
@@ -696,40 +749,82 @@ export const ProductModel = {
         throw createError("El producto no es un combo", "PRODUCT_NOT_COMBO", 400);
       }
 
-      const options = await prisma.comboAllowedProduct.findMany({
-        where: { comboProductId: id, tenantId, isActive: true },
-        include: {
-          allowedProduct: {
-            include: {
-              variants: { where: { isActive: true }, orderBy: { id: "asc" } },
+      const [options, categoryOptions] = await Promise.all([
+        prisma.comboAllowedProduct.findMany({
+          where: { comboProductId: id, tenantId, isActive: true },
+          include: {
+            allowedProduct: {
+              include: {
+                variants: { where: { isActive: true }, orderBy: { id: "asc" } },
+              },
             },
           },
-        },
+        }),
+        prisma.comboAllowedCategory.findMany({
+          where: { comboProductId: id, tenantId, isActive: true },
+          include: { category: { select: { id: true, name: true } } },
+        }),
+      ]);
+
+      const toAllowedProduct = (product, minQty, maxQty) => ({
+        productId: product.id,
+        name: product.name,
+        img: product.img,
+        type: product.type,
+        minQty,
+        maxQty,
+        variants: product.variants.map((variant) => ({
+          id: variant.id,
+          color: variant.color,
+          size: variant.size,
+          price: variant.price,
+          stock: variant.stock,
+        })),
       });
+
+      const explicitProductIds = new Set(options.map((option) => option.allowedProductId));
+
+      // Categorías enteras permitidas: expande cada regla a sus productos activos
+      // (siempre PRODUCTO, nunca COMBO ni el propio combo), salteando los que ya
+      // están whitelisteados individualmente (esos ya aparecen en `allowedProducts`
+      // con su propia regla, más específica — ver services/combos.js).
+      const allowedCategories = await Promise.all(
+        categoryOptions
+          .filter((option) => option.category != null)
+          .map(async (option) => {
+            const categoryProducts = await prisma.product.findMany({
+              where: {
+                tenantId,
+                categoryId: option.categoryId,
+                isActive: true,
+                type: "PRODUCTO",
+                id: { notIn: [id, ...explicitProductIds] },
+              },
+              include: { variants: { where: { isActive: true }, orderBy: { id: "asc" } } },
+            });
+
+            return {
+              categoryId: option.categoryId,
+              categoryName: option.category.name,
+              minQty: option.minQty,
+              maxQty: option.maxQty,
+              // minQty/maxQty son de la regla de categoría, iguales para cada producto
+              // del grupo (no hay override por producto individual dentro de una
+              // categoría permitida — para eso está la whitelist explícita).
+              products: categoryProducts.map((product) =>
+                toAllowedProduct(product, option.minQty, option.maxQty)
+              ),
+            };
+          })
+      );
 
       return {
         comboMinItems: product.comboMinItems,
         comboMaxItems: product.comboMaxItems,
         allowedProducts: options
           .filter((option) => option.allowedProduct.isActive)
-          .map((option) => ({
-            productId: option.allowedProduct.id,
-            name: option.allowedProduct.name,
-            img: option.allowedProduct.img,
-            type: option.allowedProduct.type,
-            price: option.allowedProduct.price,
-            // Solo UNIDAD tiene stock propio a nivel producto; VARIANTE lo trae por
-            // variante en `variants[]`, COMBO no es elegible como componente.
-            stock: option.allowedProduct.type === "UNIDAD" ? option.allowedProduct.stock : null,
-            minQty: option.minQty,
-            maxQty: option.maxQty,
-            variants: option.allowedProduct.variants.map((variant) => ({
-              id: variant.id,
-              color: variant.color,
-              size: variant.size,
-              stock: variant.stock,
-            })),
-          })),
+          .map((option) => toAllowedProduct(option.allowedProduct, option.minQty, option.maxQty)),
+        allowedCategories,
       };
     });
   },

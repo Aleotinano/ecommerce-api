@@ -16,56 +16,55 @@ afterAll(async () => {
 });
 
 describe("Resolución de precios", () => {
-  it("variante con precio → retorna precio de variante", () => {
+  it("COMBO → retorna el precio fijo del producto, no el de la variante", () => {
+    const variant = { price: 999 };
+    const product = { type: "COMBO", price: 2000 };
+
+    const price = getProductPrice(variant, product);
+    expect(price).toBe(2000);
+  });
+
+  it("COMBO sin precio → retorna null", () => {
+    const product = { type: "COMBO", price: null };
+
+    const price = getProductPrice(null, product);
+    expect(price).toBeNull();
+  });
+
+  it("PRODUCTO → retorna el precio de la variante", () => {
     const variant = { price: 5000 };
-    const product = { price: 2000 };
+    const product = { type: "PRODUCTO" };
 
     const price = getProductPrice(variant, product);
     expect(price).toBe(5000);
   });
 
-  it("variante sin precio, producto con precio → retorna precio del producto", () => {
-    const variant = { price: null };
-    const product = { price: 3500 };
+  it("PRODUCTO sin variante resuelta → retorna null (sin fallback a nivel producto)", () => {
+    const product = { type: "PRODUCTO" };
 
-    const price = getProductPrice(variant, product);
-    expect(price).toBe(3500);
-  });
-
-  it("ambos sin precio → retorna null", () => {
-    const variant = { price: null };
-    const product = { price: null };
-
-    const price = getProductPrice(variant, product);
+    const price = getProductPrice(null, product);
     expect(price).toBeNull();
   });
 
-  it("undefined en ambos → retorna null", () => {
-    const variant = {};
-    const product = {};
-
-    const price = getProductPrice(variant, product);
-    expect(price).toBeNull();
-  });
-
-  it("variante 0 es válido (precio cero) → retorna 0", () => {
+  it("variante con precio 0 es válida → retorna 0", () => {
     const variant = { price: 0 };
-    const product = { price: 100 };
+    const product = { type: "PRODUCTO" };
 
     const price = getProductPrice(variant, product);
     expect(price).toBe(0);
   });
 });
 
-describe("Productos con precios en BD", () => {
-  it("crear producto con precio", async () => {
+describe("Producto COMBO — precio fijo en Product", () => {
+  it("crear combo con precio", async () => {
     const product = await prisma.product.create({
       data: {
         tenantId: tenant.id,
-        name: "Remera premium",
-        description: "Remera con precio global",
+        name: "Combo test",
         price: 3500,
-        type: "UNIDAD",
+        type: "COMBO",
+        comboMinItems: 1,
+        comboMaxItems: 2,
       },
     });
 
@@ -73,26 +72,15 @@ describe("Productos con precios en BD", () => {
     expect(product.id).toBeDefined();
   });
 
-  it("el precio del producto es obligatorio (rechaza crear sin precio)", async () => {
-    await expect(
-      prisma.product.create({
-        data: {
-          tenantId: tenant.id,
-          name: "Producto sin precio",
-          description: "Sin precio inicial",
-          type: "UNIDAD",
-        },
-      })
-    ).rejects.toThrow();
-  });
-
-  it("actualizar precio del producto", async () => {
+  it("actualizar precio del combo", async () => {
     const product = await prisma.product.create({
       data: {
         tenantId: tenant.id,
-        name: "Producto actualizable",
+        name: "Combo actualizable",
         price: 1000,
-        type: "UNIDAD",
+        type: "COMBO",
+        comboMinItems: 1,
+        comboMaxItems: 2,
       },
     });
 
@@ -104,13 +92,15 @@ describe("Productos con precios en BD", () => {
     expect(updated.price).toBe(2500);
   });
 
-  it("obtener producto incluye precio", async () => {
+  it("obtener combo incluye precio", async () => {
     const product = await prisma.product.create({
       data: {
         tenantId: tenant.id,
-        name: "Producto consulta",
+        name: "Combo consulta",
         price: 4200,
-        type: "UNIDAD",
+        type: "COMBO",
+        comboMinItems: 1,
+        comboMaxItems: 2,
       },
     });
 
@@ -121,82 +111,94 @@ describe("Productos con precios en BD", () => {
     expect(fetched.price).toBe(4200);
   });
 
-  it("variante con precio tiene prioridad sobre precio del producto", async () => {
+  it("un producto PRODUCTO no tiene price a nivel Product — vive en la variante", async () => {
     const product = await prisma.product.create({
       data: {
         tenantId: tenant.id,
-        name: "Producto multi-precio",
-        price: 2000,
-        type: "VARIANTE",
+        name: "Producto simple",
+        type: "PRODUCTO",
+        variants: {
+          create: [
+            {
+              tenantId: tenant.id,
+              price: 3500,
+              stock: 10,
+              sku: "TEST-PROD-PRICE",
+              isDefault: true,
+            },
+          ],
+        },
       },
+      include: { variants: true },
     });
 
-    const variant = await prisma.productVariant.create({
-      data: {
-        tenantId: tenant.id,
-        productId: product.id,
-        color: "azul",
-        size: "M",
-        price: 3500,
-        stock: 20,
-        sku: "TEST-OVERRIDE-1",
-      },
-    });
-
-    // Variante tiene precio, debe tener prioridad sobre producto
-    const resolvedPrice = getProductPrice(variant, product);
-    expect(resolvedPrice).toBe(3500);
+    expect(product.price).toBeNull();
+    expect(product.variants[0].price).toBe(3500);
   });
 });
 
-describe("Producto UNIDAD (preset Mesa Dulce, sin variantes)", () => {
-  it("crear con type=UNIDAD y stock → stock/precio viven en Product, sin ProductVariant", async () => {
+describe("ProductModel.create — reglas por tipo", () => {
+  it("crear PRODUCTO con variantes → la primera queda marcada isDefault", async () => {
     const product = await ProductModel.create({
       tenantId: tenant.id,
       name: "Torta de chocolate",
-      description: "Torta entera, sin variantes",
-      price: 8000,
-      type: "UNIDAD",
-      stock: 5,
+      description: "Torta entera",
+      type: "PRODUCTO",
+      variants: [{ price: 8000, stock: 5 }],
     });
 
-    expect(product.type).toBe("UNIDAD");
-    expect(product.stock).toBe(5);
+    expect(product.type).toBe("PRODUCTO");
+    expect(product.variants).toHaveLength(1);
+    expect(product.variants[0].isDefault).toBe(true);
+    expect(product.variants[0].stock).toBe(5);
+    expect(product.variants[0].price).toBe(8000);
+  });
+
+  it("crear PRODUCTO sin variantes → queda en estado transitorio (alta en 2 pasos)", async () => {
+    const product = await ProductModel.create({
+      tenantId: tenant.id,
+      name: "Producto sin variante todavía",
+      type: "PRODUCTO",
+    });
+
+    expect(product.type).toBe("PRODUCTO");
     expect(product.variants).toHaveLength(0);
   });
 
-  it("crear type=UNIDAD y sin stock → falla con STOCK_REQUIRED", async () => {
+  it("crear COMBO sin price → falla con PRICE_REQUIRED", async () => {
     await expect(
       ProductModel.create({
         tenantId: tenant.id,
-        name: "Torta sin stock",
-        price: 8000,
-        type: "UNIDAD",
+        name: "Combo sin precio",
+        type: "COMBO",
+        comboMinItems: 1,
+        comboMaxItems: 2,
       })
-    ).rejects.toMatchObject({ code: "STOCK_REQUIRED" });
+    ).rejects.toMatchObject({ code: "PRICE_REQUIRED" });
   });
 
-  it("crear type=UNIDAD con variants → falla con VARIANTS_NOT_ALLOWED", async () => {
+  it("crear COMBO con variants → falla con VARIANTS_NOT_ALLOWED", async () => {
     await expect(
       ProductModel.create({
         tenantId: tenant.id,
-        name: "Torta con variantes de más",
+        name: "Combo con variantes de más",
+        type: "COMBO",
         price: 8000,
-        type: "UNIDAD",
-        stock: 5,
-        variants: [{ color: "#fff", stock: 1, sku: "X" }],
+        comboMinItems: 1,
+        comboMaxItems: 2,
+        variants: [{ color: "#fff", stock: 1, price: 100 }],
       })
     ).rejects.toMatchObject({ code: "VARIANTS_NOT_ALLOWED" });
   });
 
-  it("crear type=VARIANTE sin variantes → falla con VARIANTS_REQUIRED", async () => {
+  it("crear COMBO sin comboMinItems/comboMaxItems → falla con COMBO_RANGE_REQUIRED", async () => {
     await expect(
       ProductModel.create({
         tenantId: tenant.id,
-        name: "Remera sin variantes",
-        price: 5000,
-        type: "VARIANTE",
+        name: "Combo sin rango",
+        type: "COMBO",
+        price: 8000,
       })
-    ).rejects.toMatchObject({ code: "VARIANTS_REQUIRED" });
+    ).rejects.toMatchObject({ code: "COMBO_RANGE_REQUIRED" });
   });
 });

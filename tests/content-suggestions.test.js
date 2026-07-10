@@ -52,10 +52,9 @@ beforeAll(async () => {
     data: {
       tenantId: acme.id,
       name: "Stock bajo",
-      price: 1000,
       categoryId: acme.categories[0].id,
       createdAt: new Date("2026-04-01T00:00:00.000Z"),
-      type: "VARIANTE",
+      type: "PRODUCTO",
       variants: {
         create: [
           {
@@ -64,6 +63,7 @@ beforeAll(async () => {
             price: 1000,
             sku: "ACM-LOW-1",
             isActive: true,
+            isDefault: true,
           },
         ],
       },

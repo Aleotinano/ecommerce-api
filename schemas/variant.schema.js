@@ -13,13 +13,14 @@ export const createVariant = z.object({
     .string({ invalid_type_error: "La talla debe ser texto" })
     .nullable()
     .optional(),
+  // Requerido: ya no existe `Product.price` al que una variante pueda "heredar" si
+  // se omite — cada variante tiene siempre su propio precio.
   price: z.coerce
     .number({
+      required_error: "El precio es requerido",
       invalid_type_error: "El precio debe ser un número",
     })
-    .positive("El precio debe ser mayor a 0")
-    .nullable()
-    .optional(),
+    .positive("El precio debe ser mayor a 0"),
   stock: z.coerce
     .number({
       required_error: "El stock es requerido",
@@ -51,10 +52,11 @@ export const updateVariant = z
       .string({ invalid_type_error: "La talla debe ser texto" })
       .nullable()
       .optional(),
+    // Optional (no hace falta reenviar el precio si no cambia), pero si viene ya no
+    // acepta null — no hay "volver a heredar", cada variante siempre tiene precio.
     price: z.coerce
       .number({ invalid_type_error: "El precio debe ser un número" })
       .positive("El precio debe ser mayor a 0")
-      .nullable()
       .optional(),
     stock: z.coerce
       .number({ invalid_type_error: "El stock debe ser un número" })

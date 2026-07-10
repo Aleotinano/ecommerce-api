@@ -3,6 +3,7 @@ import request from "supertest";
 import prisma from "../lib/prisma.js";
 import { app } from "../app.js";
 import { ProductModel } from "../services/productos.js";
+import { CategoryModel } from "../services/categories.js";
 import { CartModel } from "../services/cart.js";
 import { OrderModel } from "../services/orders.js";
 import { buildToolContext } from "../services/chat/tools.js";
@@ -25,34 +26,26 @@ beforeAll(async () => {
   galletaA = await ProductModel.create({
     tenantId: acme.id,
     name: "Galleta A",
-    price: 800,
-    type: "UNIDAD",
-    variants: [],
-    stock: 20,
+    type: "PRODUCTO",
+    variants: [{ price: 800, stock: 20 }],
   });
   galletaB = await ProductModel.create({
     tenantId: acme.id,
     name: "Galleta B",
-    price: 800,
-    type: "UNIDAD",
-    variants: [],
-    stock: 20,
+    type: "PRODUCTO",
+    variants: [{ price: 800, stock: 20 }],
   });
   galletaC = await ProductModel.create({
     tenantId: acme.id,
     name: "Galleta C (no permitida)",
-    price: 800,
-    type: "UNIDAD",
-    variants: [],
-    stock: 20,
+    type: "PRODUCTO",
+    variants: [{ price: 800, stock: 20 }],
   });
   galletaD = await ProductModel.create({
     tenantId: acme.id,
     name: "Galleta D (poco stock)",
-    price: 800,
-    type: "UNIDAD",
-    variants: [],
-    stock: 1,
+    type: "PRODUCTO",
+    variants: [{ price: 800, stock: 1 }],
   });
 
   combo = await ProductModel.create({
@@ -268,8 +261,9 @@ describe("Orden con combo: precio fijo, stock sobre componentes", () => {
     });
     const order = await OrderModel.create({ tenantId: acme.id, userId: acmeCustomer.id });
 
+    const galletaAVariantId = galletaA.variants[0].id;
     const stockBeforeA = (
-      await prisma.product.findUnique({ where: { id: galletaA.id } })
+      await prisma.productVariant.findUnique({ where: { id: galletaAVariantId } })
     ).stock;
 
     await OrderModel.updateOrderStatus({
@@ -279,12 +273,142 @@ describe("Orden con combo: precio fijo, stock sobre componentes", () => {
     });
 
     const stockAfterA = (
-      await prisma.product.findUnique({ where: { id: galletaA.id } })
+      await prisma.productVariant.findUnique({ where: { id: galletaAVariantId } })
     ).stock;
-    const comboAfter = await prisma.product.findUnique({ where: { id: combo.id } });
 
     expect(stockAfterA).toBe(stockBeforeA - 2);
-    expect(comboAfter.stock).toBeNull();
+    // El combo no tiene stock propio: `Product.stock` ni siquiera existe como
+    // columna (se eliminó en el colapso a 2 tipos) — no hay nada que descontar acá.
+  });
+});
+
+describe("Combos: whitelist por categoría", () => {
+  let categoriaPromos;
+  let galletaE;
+  let galletaF;
+  let comboCategoria;
+
+  beforeAll(async () => {
+    categoriaPromos = await CategoryModel.create({
+      tenantId: acme.id,
+      name: "Categoría Promos",
+    });
+
+    galletaE = await ProductModel.create({
+      tenantId: acme.id,
+      name: "Galleta E (categoría promos)",
+      type: "PRODUCTO",
+      variants: [{ price: 800, stock: 20 }],
+      categoryId: categoriaPromos.id,
+    });
+    galletaF = await ProductModel.create({
+      tenantId: acme.id,
+      name: "Galleta F (categoría promos)",
+      type: "PRODUCTO",
+      variants: [{ price: 800, stock: 20 }],
+      categoryId: categoriaPromos.id,
+    });
+
+    comboCategoria = await ProductModel.create({
+      tenantId: acme.id,
+      name: "Combo por categoría",
+      price: 2500,
+      type: "COMBO",
+      comboMinItems: 1,
+      comboMaxItems: 3,
+      // galletaA queda whitelisteada explícitamente (prioridad sobre la categoría);
+      // el resto de la categoría "Promos" (galletaE, galletaF) entra vía
+      // comboCategoryOptions.
+      comboOptions: [{ allowedProductId: galletaA.id, minQty: 0, maxQty: 2 }],
+      comboCategoryOptions: [
+        { categoryId: categoriaPromos.id, minQty: 0, maxQty: 2 },
+      ],
+    });
+  });
+
+  it("comboCategoryOptions inexistente → CATEGORY_NOT_FOUND", async () => {
+    await expect(
+      ProductModel.create({
+        tenantId: acme.id,
+        name: "Combo con categoría inválida",
+        price: 1000,
+        type: "COMBO",
+        comboMinItems: 1,
+        comboMaxItems: 1,
+        comboCategoryOptions: [{ categoryId: 999999 }],
+      })
+    ).rejects.toMatchObject({ code: "CATEGORY_NOT_FOUND" });
+  });
+
+  it("getComboOptions expone allowedCategories con los productos activos de la categoría", async () => {
+    const options = await ProductModel.getComboOptions({
+      tenantId: acme.id,
+      id: comboCategoria.id,
+    });
+
+    expect(options.allowedCategories).toHaveLength(1);
+    const group = options.allowedCategories[0];
+    expect(group.categoryId).toBe(categoriaPromos.id);
+    expect(group.minQty).toBe(0);
+    expect(group.maxQty).toBe(2);
+
+    const groupProductIds = group.products.map((p) => p.productId).sort((a, b) => a - b);
+    expect(groupProductIds).toEqual([galletaE.id, galletaF.id].sort((a, b) => a - b));
+
+    // galletaA está whitelisteada explícitamente → aparece en allowedProducts, no
+    // duplicada dentro de allowedCategories aunque comparta tenant/categoría null.
+    expect(options.allowedProducts.map((p) => p.productId)).toEqual([galletaA.id]);
+  });
+
+  it("selecciona un producto vía categoría (no explícito) → 201", async () => {
+    const res = await request(app)
+      .post(`/cart/combo/${comboCategoria.id}`)
+      .set("Cookie", cookieFor(acmeCustomer))
+      .send({ selection: [{ productId: galletaE.id, quantity: 1 }] });
+
+    expect(res.status).toBe(201);
+  });
+
+  it("respeta maxQty de la regla de categoría para un producto de esa categoría", async () => {
+    const res = await request(app)
+      .post(`/cart/combo/${comboCategoria.id}`)
+      .set("Cookie", cookieFor(acmeCustomer))
+      .send({ selection: [{ productId: galletaF.id, quantity: 3 }] });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("COMBO_ITEM_QTY_OUT_OF_RANGE");
+  });
+
+  it("producto fuera de la whitelist explícita y de la categoría permitida → COMBO_PRODUCT_NOT_ALLOWED", async () => {
+    const res = await request(app)
+      .post(`/cart/combo/${comboCategoria.id}`)
+      .set("Cookie", cookieFor(acmeCustomer))
+      .send({ selection: [{ productId: galletaC.id, quantity: 1 }] });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("COMBO_PRODUCT_NOT_ALLOWED");
+  });
+
+  it("edit reemplaza comboCategoryOptions de forma independiente de comboOptions", async () => {
+    const otherCategory = await CategoryModel.create({
+      tenantId: acme.id,
+      name: "Categoría Promos 2",
+    });
+
+    const edited = await ProductModel.edit(
+      { tenantId: acme.id, id: comboCategoria.id },
+      { comboCategoryOptions: [{ categoryId: otherCategory.id, minQty: 0, maxQty: 1 }] }
+    );
+    expect(edited.type).toBe("COMBO");
+
+    const options = await ProductModel.getComboOptions({
+      tenantId: acme.id,
+      id: comboCategoria.id,
+    });
+    // La categoría vieja ya no está; la whitelist explícita (comboOptions) no se
+    // tocó porque no vino en este edit.
+    expect(options.allowedCategories.map((c) => c.categoryId)).toEqual([otherCategory.id]);
+    expect(options.allowedProducts.map((p) => p.productId)).toEqual([galletaA.id]);
   });
 });
 

@@ -1,6 +1,6 @@
 import prisma from "../lib/prisma.js";
 import { createError } from "../helpers/error.js";
-import { getProductPrice, resolveProductStock } from "../helpers/price.js";
+import { getProductPrice, resolveProductStock, resolveVariantForProduct } from "../helpers/price.js";
 import { sendMail, buildOrderStatusEmail } from "../lib/mailer.js";
 import { logger } from "../lib/logger.js";
 import { validateComboSelection } from "./combos.js";
@@ -38,8 +38,8 @@ const roundMoney = (n) => Math.round(n * 100) / 100;
  * bot y la revisión admin (no se duplica la validación ni el pricing). Corre dentro de
  * una transacción.
  *
- * `variantId` es obligatorio solo si el producto es VARIANTE (se resuelve contra sus
- * propias variantes). Si el producto es COMBO, el item DEBE traer `comboSelection` (la
+ * `variantId` es opcional: si no viene, se resuelve la variante principal
+ * (`isDefault`) del producto. Si el producto es COMBO, el item DEBE traer `comboSelection` (la
  * selección de UNA unidad de combo, `[{ productId, variantId?, quantity }]`) — se valida
  * contra la whitelist (`services/combos.js`) y se multiplica por `item.quantity`
  * (cantidad de combos comprados) para obtener `comboChildren`, que el caller inserta
@@ -80,8 +80,8 @@ async function priceItems(tx, tenantId, items, { checkStock = true } = {}) {
     }
 
     let variant = null;
-    if (product.type === "VARIANTE") {
-      variant = product.variants.find((v) => v.id === item.variantId);
+    if (product.type !== "COMBO") {
+      variant = resolveVariantForProduct(product, item.variantId);
       if (!variant) {
         throw createError("Variante no encontrada", "VARIANT_NOT_FOUND", 404);
       }
@@ -201,18 +201,15 @@ async function insertOrderItems(tx, orderId, pricedItems) {
   }
 }
 
-// Stock real a validar/descontar al completar: para UNIDAD, Product.stock; para
-// VARIANTE, ProductVariant.stock; COMBO no debería llegar acá (sus childItems ya
-// reemplazan la línea padre en `stockLines`, ver `updateOrderStatus`).
+// Stock real a validar/descontar al completar: siempre en ProductVariant.stock (todo
+// PRODUCTO tiene su variantId ya resuelto desde `priceItems`/`cart.add`). COMBO no
+// debería llegar acá (sus childItems ya reemplazan la línea padre en `stockLines`,
+// ver `updateOrderStatus`) — no tiene `variantId`, así que esta función es un no-op
+// para esa línea si por algún motivo llegara.
 async function decrementLineStock(tx, line) {
-  if (line.product?.type === "VARIANTE" && line.variantId != null) {
+  if (line.variantId != null) {
     await tx.productVariant.update({
       where: { id: line.variantId },
-      data: { stock: { decrement: line.quantity } },
-    });
-  } else if (line.product?.type === "UNIDAD") {
-    await tx.product.update({
-      where: { id: line.productId },
       data: { stock: { decrement: line.quantity } },
     });
   }
