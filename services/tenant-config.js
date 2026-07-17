@@ -6,8 +6,23 @@ import {
 } from "../lib/imageManager.js";
 import { wrap, del, tenantNs } from "../lib/cache.js";
 import { encryptSecret } from "../lib/crypto.js";
+import { UPDATABLE_TENANT_CONFIG_FIELDS } from "../schemas/tenant-config.schema.js";
 
 const TENANT_CONFIG_TTL = 600;
+
+// Proyección pública de la config, derivada del schema Zod para que un campo nuevo
+// aparezca en las respuestas sin tocar cada `select` a mano (evita el bug de
+// "persiste pero no se refleja"). Se excluye `whatsappAccessToken` (secreto que
+// nunca se devuelve) y se agregan campos de solo-display no actualizables (logoUrl).
+const TENANT_CONFIG_PUBLIC_SELECT = {
+  id: true,
+  logoUrl: true,
+  ...Object.fromEntries(
+    UPDATABLE_TENANT_CONFIG_FIELDS.filter(
+      (field) => field !== "whatsappAccessToken"
+    ).map((field) => [field, true])
+  ),
+};
 
 function tenantConfigKey(tenantId) {
   return `${tenantNs(tenantId)}:config`;
@@ -23,37 +38,7 @@ export const TenantConfigModel = {
     return wrap(key, TENANT_CONFIG_TTL, async () => {
       const config = await prisma.tenantConfig.findUnique({
         where: { tenantId },
-        select: {
-          id: true,
-          storeName: true,
-          storeDescription: true,
-          storeTagline: true,
-          logoUrl: true,
-          contactEmail: true,
-          contactPhone: true,
-          contactAddress: true,
-          socialInstagram: true,
-          socialTiktok: true,
-          socialFacebook: true,
-          socialTwitter: true,
-          socialYoutube: true,
-          socialPinterest: true,
-          socialWhatsapp: true,
-          whatsappPhoneNumberId: true,
-          seoTitle: true,
-          seoDescription: true,
-          seoKeywords: true,
-          shippingPolicy: true,
-          returnsPolicy: true,
-          privacyPolicy: true,
-          currency: true,
-          locale: true,
-          showOutOfStock: true,
-          allowCartGuest: true,
-          depositEnabled: true,
-          depositPercentage: true,
-          productVariantsEnabled: true,
-        },
+        select: TENANT_CONFIG_PUBLIC_SELECT,
       });
 
       if (!config) {
@@ -94,37 +79,7 @@ export const TenantConfigModel = {
         tenantId,
         ...data,
       },
-      select: {
-        id: true,
-        storeName: true,
-        storeDescription: true,
-        storeTagline: true,
-        logoUrl: true,
-        contactEmail: true,
-        contactPhone: true,
-        contactAddress: true,
-        socialInstagram: true,
-        socialTiktok: true,
-        socialFacebook: true,
-        socialTwitter: true,
-        socialYoutube: true,
-        socialPinterest: true,
-        socialWhatsapp: true,
-        whatsappPhoneNumberId: true,
-        seoTitle: true,
-        seoDescription: true,
-        seoKeywords: true,
-        shippingPolicy: true,
-        returnsPolicy: true,
-        privacyPolicy: true,
-        currency: true,
-        locale: true,
-        showOutOfStock: true,
-        allowCartGuest: true,
-        depositEnabled: true,
-        depositPercentage: true,
-        productVariantsEnabled: true,
-      },
+      select: TENANT_CONFIG_PUBLIC_SELECT,
     });
 
     await invalidateTenantConfigCache(tenantId);

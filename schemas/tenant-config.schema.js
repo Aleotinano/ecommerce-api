@@ -7,7 +7,7 @@ export const getTenantConfig = z.object({
     .positive("El ID del tenant es inválido"),
 });
 
-export const updateTenantConfig = z
+const updateTenantConfigObject = z
   .object({
     storeName: z
       .string({ invalid_type_error: "El nombre debe ser texto" })
@@ -190,10 +190,19 @@ export const updateTenantConfig = z
       .boolean({ invalid_type_error: "productVariantsEnabled debe ser booleano" })
       .nullable()
       .optional(),
-  })
-  .refine((data) => Object.values(data).some((value) => value !== undefined), {
-    message: "No hay cambios para actualizar",
   });
+
+export const updateTenantConfig = updateTenantConfigObject.refine(
+  (data) => Object.values(data).some((value) => value !== undefined),
+  { message: "No hay cambios para actualizar" }
+);
+
+// Campos actualizables, derivados del schema: el controller arma el `data` de
+// persistencia a partir de esta lista, así agregar un campo nuevo al schema
+// (y al modelo Prisma) basta para que fluya sin tocar el whitelist a mano.
+export const UPDATABLE_TENANT_CONFIG_FIELDS = Object.keys(
+  updateTenantConfigObject.shape
+);
 
 export const updateTenantConfigLogo = z.object({
   tenantId: z.coerce

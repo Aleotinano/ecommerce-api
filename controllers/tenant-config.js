@@ -3,6 +3,7 @@ import {
   cleanupUploadedImage,
   getUploadedImageFile,
 } from "../middleware/upload.js";
+import { UPDATABLE_TENANT_CONFIG_FIELDS } from "../schemas/tenant-config.schema.js";
 
 export class TenantConfigController {
   static async get(req, res, next) {
@@ -22,67 +23,16 @@ export class TenantConfigController {
   static async update(req, res, next) {
     try {
       const { tenantId } = req.params;
-      const {
-        storeName,
-        storeDescription,
-        storeTagline,
-        contactEmail,
-        contactPhone,
-        contactAddress,
-        socialInstagram,
-        socialTiktok,
-        socialFacebook,
-        socialTwitter,
-        socialYoutube,
-        socialPinterest,
-        socialWhatsapp,
-        whatsappPhoneNumberId,
-        whatsappAccessToken,
-        seoTitle,
-        seoDescription,
-        seoKeywords,
-        shippingPolicy,
-        returnsPolicy,
-        privacyPolicy,
-        currency,
-        locale,
-        showOutOfStock,
-        allowCartGuest,
-        depositEnabled,
-        depositPercentage,
-        productVariantsEnabled,
-      } = req.body;
 
+      // Whitelist derivado del schema Zod: solo se persisten los campos que el
+      // body trae explícitamente. `req.body` ya viene validado y con las claves
+      // desconocidas descartadas (ver middleware/validate.js).
       const data = {};
-      if (storeName !== undefined) data.storeName = storeName;
-      if (storeDescription !== undefined) data.storeDescription = storeDescription;
-      if (storeTagline !== undefined) data.storeTagline = storeTagline;
-      if (contactEmail !== undefined) data.contactEmail = contactEmail;
-      if (contactPhone !== undefined) data.contactPhone = contactPhone;
-      if (contactAddress !== undefined) data.contactAddress = contactAddress;
-      if (socialInstagram !== undefined) data.socialInstagram = socialInstagram;
-      if (socialTiktok !== undefined) data.socialTiktok = socialTiktok;
-      if (socialFacebook !== undefined) data.socialFacebook = socialFacebook;
-      if (socialTwitter !== undefined) data.socialTwitter = socialTwitter;
-      if (socialYoutube !== undefined) data.socialYoutube = socialYoutube;
-      if (socialPinterest !== undefined) data.socialPinterest = socialPinterest;
-      if (socialWhatsapp !== undefined) data.socialWhatsapp = socialWhatsapp;
-      if (whatsappPhoneNumberId !== undefined) data.whatsappPhoneNumberId = whatsappPhoneNumberId;
-      if (whatsappAccessToken !== undefined) data.whatsappAccessToken = whatsappAccessToken;
-      if (seoTitle !== undefined) data.seoTitle = seoTitle;
-      if (seoDescription !== undefined) data.seoDescription = seoDescription;
-      if (seoKeywords !== undefined) data.seoKeywords = seoKeywords;
-      if (shippingPolicy !== undefined) data.shippingPolicy = shippingPolicy;
-      if (returnsPolicy !== undefined) data.returnsPolicy = returnsPolicy;
-      if (privacyPolicy !== undefined) data.privacyPolicy = privacyPolicy;
-      if (currency !== undefined) data.currency = currency;
-      if (locale !== undefined) data.locale = locale;
-      if (showOutOfStock !== undefined) data.showOutOfStock = showOutOfStock;
-      if (allowCartGuest !== undefined) data.allowCartGuest = allowCartGuest;
-      if (depositEnabled !== undefined) data.depositEnabled = depositEnabled;
-      if (depositPercentage !== undefined) data.depositPercentage = depositPercentage;
-      if (productVariantsEnabled !== undefined)
-        data.productVariantsEnabled = productVariantsEnabled;
+      for (const field of UPDATABLE_TENANT_CONFIG_FIELDS) {
+        if (req.body[field] !== undefined) {
+          data[field] = req.body[field];
+        }
+      }
 
       const config = await TenantConfigModel.update({
         tenantId: parseInt(tenantId),
