@@ -7,7 +7,7 @@ import { createError } from "../helpers/error.js";
 import { removeLocalFile } from "../lib/imageManager.js";
 
 const TEMP_UPLOAD_DIR = path.resolve(process.cwd(), "tmp", "uploads");
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set([
   "image/jpeg",
   "image/png",
@@ -56,7 +56,7 @@ export function uploadImage(req, res, next) {
       if (error.code === "LIMIT_FILE_SIZE") {
         next(
           createError(
-            "La imagen supera el tamano maximo permitido de 5MB.",
+            "La imagen supera el tamano maximo permitido de 10MB.",
             "IMAGE_TOO_LARGE",
             400
           )
