@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import prisma from "../lib/prisma.js";
 import { getProductPrice } from "../helpers/price.js";
 import { ProductModel } from "../services/productos.js";
+import { createProduct } from "../schemas/product.schema.js";
 import { seedTenants } from "./helpers.js";
 
 let tenant;
@@ -186,7 +187,7 @@ describe("ProductModel.create — reglas por tipo", () => {
         price: 8000,
         comboMinItems: 1,
         comboMaxItems: 2,
-        variants: [{ color: "#fff", stock: 1, price: 100 }],
+        variants: [{ attributes: { color: "#fff" }, stock: 1, price: 100 }],
       })
     ).rejects.toMatchObject({ code: "VARIANTS_NOT_ALLOWED" });
   });
@@ -200,5 +201,105 @@ describe("ProductModel.create — reglas por tipo", () => {
         price: 8000,
       })
     ).rejects.toMatchObject({ code: "COMBO_RANGE_REQUIRED" });
+  });
+
+  it("crear PRODUCTO con price/stock sueltos → arma la variante default sin variants[]", async () => {
+    const product = await ProductModel.create({
+      tenantId: tenant.id,
+      name: "Servilletero",
+      type: "PRODUCTO",
+      price: 1200,
+      stock: 5,
+    });
+
+    expect(product.type).toBe("PRODUCTO");
+    expect(product.variants).toHaveLength(1);
+    expect(product.variants[0].isDefault).toBe(true);
+    expect(product.variants[0].price).toBe(1200);
+    expect(product.variants[0].stock).toBe(5);
+    expect(product.variants[0].sku).toBeTruthy();
+  });
+});
+
+describe("ProductModel.getAll — filtro por type", () => {
+  it("type=COMBO → solo devuelve combos", async () => {
+    await ProductModel.create({
+      tenantId: tenant.id,
+      name: "Producto para filtro type",
+      type: "PRODUCTO",
+      price: 1000,
+      stock: 3,
+    });
+    await ProductModel.create({
+      tenantId: tenant.id,
+      name: "Combo para filtro type",
+      type: "COMBO",
+      price: 5000,
+      comboMinItems: 1,
+      comboMaxItems: 2,
+    });
+
+    const combos = await ProductModel.getAll({ tenantId: tenant.id, type: "COMBO", limit: 100 });
+    expect(combos.length).toBeGreaterThan(0);
+    expect(combos.every((p) => p.type === "COMBO")).toBe(true);
+  });
+
+  it("type=PRODUCTO → solo devuelve productos simples", async () => {
+    const productos = await ProductModel.getAll({ tenantId: tenant.id, type: "PRODUCTO", limit: 100 });
+    expect(productos.length).toBeGreaterThan(0);
+    expect(productos.every((p) => p.type === "PRODUCTO")).toBe(true);
+  });
+
+  it("sin type → devuelve ambos tipos", async () => {
+    const todos = await ProductModel.getAll({ tenantId: tenant.id, limit: 100 });
+    const types = new Set(todos.map((p) => p.type));
+    expect(types.has("PRODUCTO")).toBe(true);
+    expect(types.has("COMBO")).toBe(true);
+  });
+});
+
+describe("createProduct schema — price/stock sueltos para PRODUCTO", () => {
+  const base = { name: "Producto", type: "PRODUCTO" };
+
+  it("PRODUCTO con price+stock → válido", () => {
+    const result = createProduct.safeParse({ ...base, price: 1200, stock: 5 });
+    expect(result.success).toBe(true);
+  });
+
+  it("PRODUCTO con price+stock+variants no vacío → inválido (mutuamente excluyente)", () => {
+    const result = createProduct.safeParse({
+      ...base,
+      price: 1200,
+      stock: 5,
+      variants: [{ price: 1000, stock: 1 }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("PRODUCTO con price sin stock → inválido", () => {
+    const result = createProduct.safeParse({ ...base, price: 1200 });
+    expect(result.success).toBe(false);
+  });
+
+  it("PRODUCTO con stock sin price → inválido", () => {
+    const result = createProduct.safeParse({ ...base, stock: 5 });
+    expect(result.success).toBe(false);
+  });
+
+  it("COMBO con stock → inválido (stock no aplica a combos)", () => {
+    const result = createProduct.safeParse({
+      name: "Combo",
+      type: "COMBO",
+      price: 8000,
+      comboMinItems: 1,
+      comboMaxItems: 2,
+      stock: 5,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("PRODUCTO sin price/stock/variants → válido (alta en 2 pasos)", () => {
+    const result = createProduct.safeParse(base);
+    expect(result.success).toBe(true);
   });
 });

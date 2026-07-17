@@ -47,6 +47,14 @@ async function buildTenant({ slug, name, adminUsername, adminEmail, customerUser
       slug,
       name,
       users: { create: users },
+      // Catálogo de atributos de variante del tenant (seteo one-time). TEXT para
+      // que los fixtures puedan usar valores legibles ("negro") sin regla HEX.
+      attributes: {
+        create: [
+          { key: "color", label: "Color", type: "TEXT", position: 0 },
+          { key: "talle", label: "Talle", type: "TEXT", position: 1 },
+        ],
+      },
     },
     include: { users: true },
   });
@@ -66,8 +74,7 @@ async function buildTenant({ slug, name, adminUsername, adminEmail, customerUser
             variants: {
               create: p.variants.map((v, index) => ({
                 tenantId: tenant.id,
-                color: v.color ?? null,
-                size: v.size ?? null,
+                attributes: v.attributes ?? {},
                 price: v.price,
                 stock: v.stock,
                 sku: v.sku,
@@ -97,6 +104,7 @@ export async function seedTenants() {
   await prisma.productVariant.deleteMany();
   await prisma.product.deleteMany();
   await prisma.categories.deleteMany();
+  await prisma.tenantAttribute.deleteMany();
   await prisma.tenantConfig.deleteMany();
   await prisma.user.deleteMany();
   await prisma.tenant.deleteMany();
@@ -115,7 +123,7 @@ export async function seedTenants() {
           {
             name: "Remera básica",
             variants: [
-              { color: "negro", size: "M", price: 4500, stock: 10, sku: "ACM-REM-NM" },
+              { attributes: { color: "negro", talle: "M" }, price: 4500, stock: 10, sku: "ACM-REM-NM" },
             ],
           },
         ],
@@ -137,7 +145,7 @@ export async function seedTenants() {
           {
             name: "Auriculares BT",
             variants: [
-              { color: "negro", price: 25000, stock: 15, sku: "SHC-AUR-N" },
+              { attributes: { color: "negro" }, price: 25000, stock: 15, sku: "SHC-AUR-N" },
             ],
           },
         ],

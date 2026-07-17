@@ -20,8 +20,7 @@ beforeAll(async () => {
       variants: {
         create: {
           tenantId: acme.id,
-          color: "blanco",
-          size: "L",
+          attributes: { color: "blanco", talle: "L" },
           price: 5000,
           stock: 0,
           sku: "ACM-REM-AGOT",
@@ -111,8 +110,7 @@ describe("chat tools — seguridad multi-tenant", () => {
 
     const out = await executeTool("checkAvailability", {
       productId: product.id,
-      color: "negro",
-      size: "M",
+      attributes: { color: "negro", talle: "M" },
     });
     expect(out.disponible).toBe(true);
     expect(out.stock).toBeGreaterThan(0);

@@ -10,6 +10,7 @@
  * persistencia mas adelante (ver TODO) sin cambiar la firma publica.
  */
 import { TenantConfigModel } from "../tenant-config.js";
+import { TenantAttributeModel } from "../tenant-attributes.js";
 import { runAgent } from "../../lib/llm/agent.js";
 import { consumeChatQuota } from "./cost-guard.js";
 import { buildToolContext } from "./tools.js";
@@ -21,6 +22,20 @@ const loadBrandConfig = async (tenantId) => {
     return await TenantConfigModel.get({ tenantId });
   } catch {
     return null;
+  }
+};
+
+/**
+ * Labels de los atributos de variante del tenant (["color","talle"] o
+ * ["sabor","tamaño"]) para que el prompt hable en los términos del tenant.
+ * Sin cortar el chat si falla: el prompt tiene fallback genérico.
+ */
+const loadAttributeLabels = async (tenantId) => {
+  try {
+    const catalog = await TenantAttributeModel.get({ tenantId });
+    return catalog.map((attribute) => attribute.label.toLowerCase());
+  } catch {
+    return [];
   }
 };
 
@@ -48,11 +63,15 @@ export const ChatModel = {
     // Degrada CERRADO: si no se puede verificar la cuota, no se llama al LLM.
     await consumeChatQuota({ tenantId, now });
 
-    const config = await loadBrandConfig(tenantId);
+    const [config, attributeLabels] = await Promise.all([
+      loadBrandConfig(tenantId),
+      loadAttributeLabels(tenantId),
+    ]);
 
     const system = buildSystemPrompt({
       config,
       canCreateOrders: channel?.kind === "whatsapp",
+      attributeLabels,
     });
     const { tools, executeTool } = buildToolContext({
       tenantId,

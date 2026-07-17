@@ -19,6 +19,7 @@ model Tenant {
   categories             Categories[]
   products               Product[]
   variants               ProductVariant[]
+  attributes             TenantAttribute[]
   carts                  Cart[]
   orders                 Order[]
   config                 TenantConfig?
@@ -244,12 +245,39 @@ model ComboAllowedCategory {
   @@index([categoryId])
 }
 
+// Tipo de valor de un atributo de variante del tenant.
+enum AttributeType {
+  TEXT
+  COLOR // valor HEX (#RGB/#RRGGBB), para swatch en el storefront
+}
+
+// Catálogo de atributos de variante del tenant (ropa: color+talle; mesa dulce:
+// sabor+tamaño). Se define UNA sola vez en el onboarding (el setup devuelve 409 si
+// ya existe) — cambiarlo después dejaría inconsistentes las `attributes` de las
+// variantes existentes. Las keys son slugs estables en minúsculas; `label` es lo
+// que ve el cliente. Ver services/tenant-attributes.js.
+model TenantAttribute {
+  id       Int           @id @default(autoincrement())
+  tenantId Int
+  key      String // slug estable: "color", "talle", "sabor"
+  label    String // display: "Color", "Talle", "Sabor"
+  type     AttributeType @default(TEXT)
+  position Int           @default(0) // orden de display y de normalización de keys
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+}
+
 model ProductVariant {
   id          Int         @id @default(autoincrement())
   tenantId    Int
   productId   Int
-  color       String?
-  size        String?
+  // Atributos de la variante como pares key->valor (ej: {"color":"#fff","talle":"M"}).
+  // Las keys deben existir en el catálogo `TenantAttribute` del tenant; se validan y
+  // normalizan (orden por `position`) en el service, nunca se escriben crudas.
+  attributes  Json        @default("{}")
   price       Float
   stock       Int
   sku         String
@@ -300,7 +328,7 @@ model CartItem {
   quantity  Int             @default(1)
   createdAt DateTime        @default(now())
   cart      Cart            @relation(fields: [cartId], references: [id])
-  product   Product         @relation(fields: [productId], references: [id])
+  product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
   variant   ProductVariant? @relation(fields: [variantId], references: [id])
 
   // Combos: selección elegida por el cliente para ESTE combo, `[{ productId,
@@ -410,7 +438,7 @@ model ContentSuggestion {
   updatedAt DateTime @updatedAt
 
   tenant  Tenant            @relation(fields: [tenantId], references: [id])
-  product Product           @relation(fields: [productId], references: [id])
+  product Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
   images  SuggestionImage[]
 
   // Identidad natural = dimension del cache on-demand (tenant+dia+producto+angulo).

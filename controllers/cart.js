@@ -25,8 +25,7 @@ export class cartController {
           variant: item.variant
             ? {
                 id: item.variant.id,
-                color: item.variant.color,
-                size: item.variant.size,
+                attributes: item.variant.attributes,
                 sku: item.variant.sku,
               }
             : null,
@@ -91,8 +90,7 @@ export class cartController {
           variant: cartItem.variant
             ? {
                 id: cartItem.variant.id,
-                color: cartItem.variant.color,
-                size: cartItem.variant.size,
+                attributes: cartItem.variant.attributes,
                 sku: cartItem.variant.sku,
               }
             : null,

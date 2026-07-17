@@ -24,13 +24,29 @@ export class variantsController {
     }
   }
 
+  static async getAllForTenant(req, res, next) {
+    try {
+      const { productId, name, limit, offset } = req.search;
+      const variants = await VariantModel.getAllForTenant({
+        tenantId: req.tenantId,
+        productId,
+        name,
+        limit,
+        offset,
+      });
+      return res.json({ variants });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async create(req, res, next) {
     const uploadedFile = getUploadedImageFile(req);
     let uploadedImage;
 
     try {
       const { productId } = req.params;
-      const { color, size, price, stock, img, isActive } = req.body;
+      const { attributes, price, stock, img, isActive } = req.body;
 
       if (uploadedFile) {
         uploadedImage = await uploadImageToCloudinary(uploadedFile.path, {
@@ -41,8 +57,7 @@ export class variantsController {
       const variant = await VariantModel.createVariant({
         tenantId: req.tenantId,
         productId,
-        color,
-        size,
+        attributes,
         price,
         stock,
         img: uploadedImage?.img ?? img,
@@ -72,7 +87,7 @@ export class variantsController {
         productId,
         variantId,
       });
-      const { color, size, price, stock, img, isActive } = req.body;
+      const { attributes, price, stock, img, isActive } = req.body;
 
       const imageData = {};
       let shouldDeletePreviousImage = false;
@@ -92,7 +107,7 @@ export class variantsController {
 
       const variant = await VariantModel.editVariant(
         { tenantId: req.tenantId, productId, variantId },
-        { color, size, price, stock, isActive, ...imageData }
+        { attributes, price, stock, isActive, ...imageData }
       );
 
       if (shouldDeletePreviousImage) {

@@ -30,6 +30,7 @@ import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { middleWare } from "./middleware/cors.js";
 import { generalLimiter } from "./middleware/rateLimit.js";
 import { tenantConfigRouter } from "./routes/tenant-config.js";
+import { tenantAttributesRouter } from "./routes/tenant-attributes.js";
 
 const PORT = DEFAULTS.PORT || 3001;
 const app = express();
@@ -61,6 +62,7 @@ app.use("/page-spec", pageSpecRouter);
 app.use("/auth", usersRouter);
 app.use("/test", testRouter);
 app.use("/tenant-config", tenantConfigRouter);
+app.use("/tenant-attributes", tenantAttributesRouter);
 app.use("/store", storeRouter);
 
 // Manejo de errores \\

@@ -15,8 +15,8 @@ const PASSWORD_PLAIN = "password123";
 // ---------------------------------------------------------------------------
 const CLOUD_NAME = "dqukj1pac";
 
-function cld({ id, v }) {
-  return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/q_auto/f_auto/v${v}/${id}.jpg`;
+function cld({ id, v, ext = "jpg" }) {
+  return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/q_auto/f_auto/v${v}/${id}.${ext}`;
 }
 
 const IMG = {
@@ -56,6 +56,28 @@ function image(key) {
   return { img: cld(asset), imgPublicId: asset.id };
 }
 
+// Fotos reales de productos de Mesa Dulce (mismo Cloudinary, subidas por el
+// admin del tenant real antes de la migración de tipos — ver
+// prisma/pre-type-migration-snapshot.json). A diferencia de IMG son .png.
+const MD_IMG = {
+  browniesClasico: { id: "e-commerce-express/products/1782519094434-545073299_c7a7bh", v: 1782519095, ext: "png" },
+  browniesOreo: { id: "e-commerce-express/products/1782514272377-168062203_btlhdm", v: 1782514272, ext: "png" },
+  browniesRedVelvet: { id: "e-commerce-express/products/1782515257615-37110447_ysb5sn", v: 1782515259, ext: "png" },
+  rellenaKinderNutella: { id: "e-commerce-express/products/1782518646995-347947157_ccp4m4", v: 1782518647, ext: "png" },
+  rellenaBonBon: { id: "e-commerce-express/products/1782518675434-443904013_bqm672", v: 1782518676, ext: "png" },
+  rellenaFranui: { id: "e-commerce-express/products/1782518300466-212401095_hptmdu", v: 1782518301, ext: "png" },
+  rellenaLimonFrutosRojos: { id: "e-commerce-express/products/1782518616943-916210625_mqmv98", v: 1782518617, ext: "png" },
+  clasicaChip: { id: "e-commerce-express/products/1782519724803-909746124_hxtlr2", v: 1782519725, ext: "png" },
+  clasicaRedVelvet: { id: "e-commerce-express/products/1782519622394-973798512_t7kfjl", v: 1782519623, ext: "png" },
+  clasicaOreo: { id: "e-commerce-express/products/1782519653996-982248213_tn0bd9", v: 1782519654, ext: "png" },
+  clasicaLimon: { id: "e-commerce-express/products/1782519692868-667836172_twhjgr", v: 1782519693, ext: "png" },
+};
+
+function mdImage(key) {
+  const asset = MD_IMG[key];
+  return { img: cld(asset), imgPublicId: asset.id };
+}
+
 const PAYMENT_BY_STATUS = {
   COMPLETED: "APPROVED",
   PROCESSING: "IN_PROCESS",
@@ -85,6 +107,13 @@ const ACME_CATEGORIES = [
   { name: "Gorras", parent: "Accesorios", icon: "tag", description: "Gorras y caps" },
 ];
 
+// Catálogo de atributos de variante por tenant (seteo one-time del onboarding).
+// acme es una tienda de ropa: color (swatch HEX) + talle.
+const ACME_ATTRIBUTES = [
+  { key: "color", label: "Color", type: "COLOR" },
+  { key: "talle", label: "Talle", type: "TEXT" },
+];
+
 const ACME_PRODUCTS = [
   // --- Remeras -------------------------------------------------------------
   {
@@ -93,21 +122,20 @@ const ACME_PRODUCTS = [
     category: "Remeras",
     ...image("remeras1"),
     variants: [
-      { color: "#000000", size: "S", price: 14990, stock: 40, sku: "TEE-STD-BLK-S", ...image("remeras1") },
-      { color: "#000000", size: "M", price: 14990, stock: 25, sku: "TEE-STD-BLK-M", ...image("remeras1") },
+      { attributes: { color: "#000000", talle: "S" }, price: 14990, stock: 40, sku: "TEE-STD-BLK-S", ...image("remeras1") },
+      { attributes: { color: "#000000", talle: "M" }, price: 14990, stock: 25, sku: "TEE-STD-BLK-M", ...image("remeras1") },
       // Sin stock: con showOutOfStock=false NO debería aparecer en la tienda.
-      { color: "#F5F5DC", size: "L", price: 14990, stock: 0, sku: "TEE-STD-CRM-L", ...image("remeras2") },
+      { attributes: { color: "#F5F5DC", talle: "L" }, price: 14990, stock: 0, sku: "TEE-STD-CRM-L", ...image("remeras2") },
     ],
   },
   {
     name: "Remera graphic caramelus",
     description: "Estampa frontal edición limitada.",
     category: "Remeras",
-    price: 16990, // precio a nivel producto: las variantes con price null lo heredan
     ...image("remeras5"),
     variants: [
-      { color: "#F5F5DC", size: "M", price: null, stock: 18, sku: "TEE-CAR-CRM-M", ...image("remeras5") },
-      { color: "#F5F5DC", size: "L", price: null, stock: 6, sku: "TEE-CAR-CRM-L", ...image("remeras5") }, // poco stock
+      { attributes: { color: "#F5F5DC", talle: "M" }, price: 16990, stock: 18, sku: "TEE-CAR-CRM-M", ...image("remeras5") },
+      { attributes: { color: "#F5F5DC", talle: "L" }, price: 16990, stock: 6, sku: "TEE-CAR-CRM-L", ...image("remeras5") }, // poco stock
     ],
   },
   {
@@ -116,8 +144,8 @@ const ACME_PRODUCTS = [
     category: "Remeras",
     ...image("remeras6"),
     variants: [
-      { color: "#F5F5DC", size: "M", price: 15990, stock: 30, sku: "TEE-MID-CRM-M", ...image("remeras6") },
-      { color: "#F5F5DC", size: "L", price: 15990, stock: 12, sku: "TEE-MID-CRM-L", ...image("remeras6") },
+      { attributes: { color: "#F5F5DC", talle: "M" }, price: 15990, stock: 30, sku: "TEE-MID-CRM-M", ...image("remeras6") },
+      { attributes: { color: "#F5F5DC", talle: "L" }, price: 15990, stock: 12, sku: "TEE-MID-CRM-L", ...image("remeras6") },
     ],
   },
   {
@@ -126,8 +154,8 @@ const ACME_PRODUCTS = [
     category: "Remeras",
     ...image("remeras4"),
     variants: [
-      { color: "#2E7D32", size: "M", price: 13990, stock: 22, sku: "TEE-BOX-GRN-M", ...image("remeras10") },
-      { color: "#000000", size: "L", price: 13990, stock: 0, sku: "TEE-BOX-BLK-L", ...image("remeras4") }, // sin stock
+      { attributes: { color: "#2E7D32", talle: "M" }, price: 13990, stock: 22, sku: "TEE-BOX-GRN-M", ...image("remeras10") },
+      { attributes: { color: "#000000", talle: "L" }, price: 13990, stock: 0, sku: "TEE-BOX-BLK-L", ...image("remeras4") }, // sin stock
     ],
   },
   {
@@ -136,8 +164,8 @@ const ACME_PRODUCTS = [
     category: "Remeras",
     ...image("remeras7"),
     variants: [
-      { color: "#808080", size: "M", price: 17990, stock: 9, sku: "TEE-PHO-GRY-M", ...image("remeras7") },
-      { color: "#808080", size: "L", price: 17990, stock: 4, sku: "TEE-PHO-GRY-L", ...image("remeras7") }, // poco stock
+      { attributes: { color: "#808080", talle: "M" }, price: 17990, stock: 9, sku: "TEE-PHO-GRY-M", ...image("remeras7") },
+      { attributes: { color: "#808080", talle: "L" }, price: 17990, stock: 4, sku: "TEE-PHO-GRY-L", ...image("remeras7") }, // poco stock
     ],
   },
   // --- Zapatillas ----------------------------------------------------------
@@ -147,9 +175,9 @@ const ACME_PRODUCTS = [
     category: "Zapatillas",
     ...image("zapas1"),
     variants: [
-      { color: "#FFFFFF", size: "40", price: 39990, stock: 10, sku: "ZAP-CRT-WHT-40", ...image("zapas1") },
-      { color: "#FFFFFF", size: "41", price: 39990, stock: 7, sku: "ZAP-CRT-WHT-41", ...image("zapas1") },
-      { color: "#FFFFFF", size: "42", price: 39990, stock: 0, sku: "ZAP-CRT-WHT-42", ...image("zapas2") }, // sin stock
+      { attributes: { color: "#FFFFFF", talle: "40" }, price: 39990, stock: 10, sku: "ZAP-CRT-WHT-40", ...image("zapas1") },
+      { attributes: { color: "#FFFFFF", talle: "41" }, price: 39990, stock: 7, sku: "ZAP-CRT-WHT-41", ...image("zapas1") },
+      { attributes: { color: "#FFFFFF", talle: "42" }, price: 39990, stock: 0, sku: "ZAP-CRT-WHT-42", ...image("zapas2") }, // sin stock
     ],
   },
   {
@@ -158,19 +186,18 @@ const ACME_PRODUCTS = [
     category: "Zapatillas",
     ...image("zapas4"),
     variants: [
-      { color: "#5C4033", size: "41", price: 45990, stock: 5, sku: "ZAP-SDE-BRN-41", ...image("zapas4") },
-      { color: "#5C4033", size: "42", price: 45990, stock: 3, sku: "ZAP-SDE-BRN-42", ...image("zapas4") }, // poco stock
+      { attributes: { color: "#5C4033", talle: "41" }, price: 45990, stock: 5, sku: "ZAP-SDE-BRN-41", ...image("zapas4") },
+      { attributes: { color: "#5C4033", talle: "42" }, price: 45990, stock: 3, sku: "ZAP-SDE-BRN-42", ...image("zapas4") }, // poco stock
     ],
   },
   {
     name: "Zapatillas skate pro",
     description: "Silueta skate reforzada.",
     category: "Zapatillas",
-    price: 42990, // precio a nivel producto
     ...image("zapas6"),
     variants: [
-      { color: "#1E3A8A", size: "42", price: null, stock: 14, sku: "ZAP-SKT-BLU-42", ...image("zapas6") },
-      { color: "#1E3A8A", size: "43", price: null, stock: 8, sku: "ZAP-SKT-BLU-43", ...image("zapas7") },
+      { attributes: { color: "#1E3A8A", talle: "42" }, price: 42990, stock: 14, sku: "ZAP-SKT-BLU-42", ...image("zapas6") },
+      { attributes: { color: "#1E3A8A", talle: "43" }, price: 42990, stock: 8, sku: "ZAP-SKT-BLU-43", ...image("zapas7") },
     ],
   },
   // --- Gorras --------------------------------------------------------------
@@ -180,8 +207,8 @@ const ACME_PRODUCTS = [
     category: "Gorras",
     ...image("gorras2"),
     variants: [
-      { color: "#000000", size: "U", price: 11990, stock: 20, sku: "CAP-LA-BLK-U", ...image("gorras2") },
-      { color: "#1E3A8A", size: "U", price: 11990, stock: 15, sku: "CAP-LA-BLU-U", ...image("gorras8") },
+      { attributes: { color: "#000000", talle: "U" }, price: 11990, stock: 20, sku: "CAP-LA-BLK-U", ...image("gorras2") },
+      { attributes: { color: "#1E3A8A", talle: "U" }, price: 11990, stock: 15, sku: "CAP-LA-BLU-U", ...image("gorras8") },
     ],
   },
   {
@@ -190,8 +217,8 @@ const ACME_PRODUCTS = [
     category: "Gorras",
     ...image("gorras5"),
     variants: [
-      { color: "#87CEEB", size: "U", price: 12990, stock: 0, sku: "CAP-SRF-CEL-U", ...image("gorras5") }, // sin stock
-      { color: "#F5F5DC", size: "U", price: 12990, stock: 11, sku: "CAP-SRF-CRM-U", ...image("gorras7") },
+      { attributes: { color: "#87CEEB", talle: "U" }, price: 12990, stock: 0, sku: "CAP-SRF-CEL-U", ...image("gorras5") }, // sin stock
+      { attributes: { color: "#F5F5DC", talle: "U" }, price: 12990, stock: 11, sku: "CAP-SRF-CRM-U", ...image("gorras7") },
     ],
   },
   {
@@ -200,7 +227,7 @@ const ACME_PRODUCTS = [
     category: "Gorras",
     ...image("gorras9"),
     variants: [
-      { color: "#2E7D32", size: "U", price: 13990, stock: 6, sku: "CAP-CTR-GRN-U", ...image("gorras9") }, // poco stock
+      { attributes: { color: "#2E7D32", talle: "U" }, price: 13990, stock: 6, sku: "CAP-CTR-GRN-U", ...image("gorras9") }, // poco stock
     ],
   },
 ];
@@ -228,25 +255,132 @@ const SHOPCO_CATEGORIES = [
   { name: "Audio", parent: "Electrónica", icon: "headphones", description: "Auriculares y parlantes" },
 ];
 
+// shopco vende electrónica: solo color como atributo de variante.
+const SHOPCO_ATTRIBUTES = [{ key: "color", label: "Color", type: "COLOR" }];
+
 const SHOPCO_PRODUCTS = [
   {
     name: "Auriculares BT",
     description: "Bluetooth 5.0 con cancelación de ruido.",
     category: "Audio",
     variants: [
-      { color: "#000000", size: null, price: 25000, stock: 15, sku: "SHC-AUR-N" },
-      { color: "#FFFFFF", size: null, price: 25000, stock: 3, sku: "SHC-AUR-B" }, // poco stock
+      { attributes: { color: "#000000" }, price: 25000, stock: 15, sku: "SHC-AUR-N" },
+      { attributes: { color: "#FFFFFF" }, price: 25000, stock: 3, sku: "SHC-AUR-B" }, // poco stock
     ],
   },
   {
     name: "Parlante portátil",
     description: "Resistente al agua, 12h de batería.",
     category: "Audio",
-    price: 18000,
     variants: [
       // shopco tiene showOutOfStock=true: este SÍ debería verse aunque esté en 0.
-      { color: "#000000", size: null, price: null, stock: 0, sku: "SHC-PAR-N" },
+      { attributes: { color: "#000000" }, price: 18000, stock: 0, sku: "SHC-PAR-N" },
     ],
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Datos de MESA DULCE (catálogo real del tenant, tomado del menú vigente al
+// 2026-07-14 — ver capturas del pedido original. Imágenes reales via MD_IMG
+// donde el producto existe en prisma/pre-type-migration-snapshot.json; los
+// productos de ese dump que no están en el menú actual (Turrón de Avena,
+// Pirinea, Chocotorta, etc.) se omiten a propósito. Los combos del menú
+// (Combo Mesa Dulce, Combo Familiar, Promos) los carga el usuario aparte,
+// ver prisma/seed-mesa-dulce-combos.js).
+// ---------------------------------------------------------------------------
+const MESA_DULCE_CATEGORIES = [
+  { name: "Brownies", icon: "cookie", description: "Brownies de autor" },
+  { name: "Cookies Clásicas", icon: "cookie", description: "Cookies clásicas de todos los días" },
+  { name: "Cookies Rellenas", icon: "cookie", description: "Cookies rellenas gourmet" },
+];
+
+const MESA_DULCE_PRODUCTS = [
+  // --- Brownies --------------------------------------------------------------
+  {
+    name: "Brownie Clásico",
+    description: "Brownie de chocolate semiamargo y cacao amargo.",
+    category: "Brownies",
+    ...mdImage("browniesClasico"),
+    variants: [{ price: 2000, stock: 30, sku: "BRW-CLS" }],
+  },
+  {
+    name: "Brownie Oreo",
+    description: "Brownie de chocolate con trozos de Oreo y cacao Oreo.",
+    category: "Brownies",
+    ...mdImage("browniesOreo"),
+    variants: [{ price: 2600, stock: 30, sku: "BRW-ORE" }],
+  },
+  {
+    name: "Brownie Red Velvet",
+    description: "Brownie de vainilla, cacao amargo con cobertura de cheesecake.",
+    category: "Brownies",
+    ...mdImage("browniesRedVelvet"),
+    variants: [{ price: 2000, stock: 30, sku: "BRW-RVL" }],
+  },
+  // --- Cookies Rellenas --------------------------------------------------------
+  {
+    name: "Kinder y Nutella",
+    description: "Cookie de vainilla, kinder, rellena de nutella.",
+    category: "Cookies Rellenas",
+    ...mdImage("rellenaKinderNutella"),
+    variants: [{ price: 4300, stock: 25, sku: "COR-KIN" }],
+  },
+  {
+    name: "Bon o Bon",
+    description: "Cookie de vainilla, bon o bon, rellena de nutella.",
+    category: "Cookies Rellenas",
+    ...mdImage("rellenaBonBon"),
+    variants: [{ price: 4000, stock: 25, sku: "COR-BON" }],
+  },
+  {
+    name: "Limón y Frutos Rojos",
+    description: "Cookie de limón, pistachos, rellena de curd de limón y reducción de frutos rojos.",
+    category: "Cookies Rellenas",
+    ...mdImage("rellenaLimonFrutosRojos"),
+    variants: [{ price: 3900, stock: 25, sku: "COR-LIM" }],
+  },
+  {
+    name: "Red Velvet",
+    description: "Cookie de vainilla, cacao amargo, chocolate blanco, rellena con frosting de queso crema.",
+    category: "Cookies Rellenas",
+    // Sin foto real disponible (no está en el dump pre-migración).
+    variants: [{ price: 4000, stock: 25, sku: "COR-RVL" }],
+  },
+  {
+    name: "Franuki",
+    description: "Masa de cacao con chips de chocolate blanco, rellena con reducción de frutos rojos y decorada con chocolate blanco y franuí.",
+    category: "Cookies Rellenas",
+    ...mdImage("rellenaFranui"),
+    variants: [{ price: 4000, stock: 25, sku: "COR-FRA" }],
+  },
+  // --- Cookies Clásicas --------------------------------------------------------
+  {
+    name: "Chips",
+    description: "Masa de vainilla con chocolate semiamargo.",
+    category: "Cookies Clásicas",
+    ...mdImage("clasicaChip"),
+    variants: [{ price: 800, stock: 50, sku: "COC-CHI" }],
+  },
+  {
+    name: "Red velvet",
+    description: "Masa de vainilla, cacao amargo y chocolate blanco.",
+    category: "Cookies Clásicas",
+    ...mdImage("clasicaRedVelvet"),
+    variants: [{ price: 800, stock: 50, sku: "COC-RVL" }],
+  },
+  {
+    name: "Oreo",
+    description: "Masa de oreo, oreos trituradas y chocolate blanco.",
+    category: "Cookies Clásicas",
+    ...mdImage("clasicaOreo"),
+    variants: [{ price: 800, stock: 50, sku: "COC-ORE" }],
+  },
+  {
+    name: "Limón",
+    description: "Masa de limón con amapolas.",
+    category: "Cookies Clásicas",
+    ...mdImage("clasicaLimon"),
+    variants: [{ price: 800, stock: 50, sku: "COC-LIM" }],
   },
 ];
 
@@ -296,6 +430,19 @@ async function seedCategories(tenantId, specs) {
   return idByName;
 }
 
+// Catálogo de atributos del tenant (equivale al setup one-time del onboarding).
+async function seedTenantAttributes(tenantId, specs) {
+  await prisma.tenantAttribute.createMany({
+    data: specs.map((attribute, index) => ({
+      tenantId,
+      key: attribute.key,
+      label: attribute.label,
+      type: attribute.type ?? "TEXT",
+      position: index,
+    })),
+  });
+}
+
 async function seedProducts(tenantId, categoryIdByName, specs) {
   for (const p of specs) {
     await prisma.product.create({
@@ -303,24 +450,25 @@ async function seedProducts(tenantId, categoryIdByName, specs) {
         tenantId,
         name: p.name,
         description: p.description ?? null,
-        // El precio de producto es obligatorio: si el spec no lo trae, se deriva
-        // de una variante con precio (sino 0).
-        price: p.price ?? p.variants.find((v) => v.price != null)?.price ?? 0,
+        // Todos los specs son PRODUCTO: el precio vive en cada variante y la
+        // primera queda como principal (isDefault).
+        type: "PRODUCTO",
+        price: null,
         img: p.img ?? null,
         imgPublicId: p.imgPublicId ?? null,
         categoryId: categoryIdByName.get(p.category) ?? null,
         isActive: p.isActive ?? true,
         variants: {
-          create: p.variants.map((v) => ({
+          create: p.variants.map((v, index) => ({
             tenantId,
-            color: v.color ?? null,
-            size: v.size ?? null,
-            price: v.price ?? null,
+            attributes: v.attributes ?? {},
+            price: v.price,
             stock: v.stock,
             sku: v.sku,
             img: v.img ?? null,
             imgPublicId: v.imgPublicId ?? null,
             isActive: v.isActive ?? true,
+            isDefault: index === 0,
           })),
         },
       },
@@ -343,7 +491,12 @@ async function seedCartForUser({ tenantId, userId, items }) {
     if (!variant) continue;
 
     await prisma.cartItem.create({
-      data: { cartId: cart.id, variantId: variant.id, quantity: item.quantity },
+      data: {
+        cartId: cart.id,
+        productId: variant.productId,
+        variantId: variant.id,
+        quantity: item.quantity,
+      },
     });
   }
 
@@ -392,7 +545,12 @@ async function seedOrdersForUser({ tenantId, userId, orders }) {
       if (!variant) continue;
       // Precio efectivo: variante o, si es null, el del producto.
       const price = variant.price ?? variant.product.price ?? 0;
-      items.push({ variantId: variant.id, quantity: line.quantity, price });
+      items.push({
+        productId: variant.productId,
+        variantId: variant.id,
+        quantity: line.quantity,
+        price,
+      });
     }
 
     if (!items.length) continue;
@@ -435,7 +593,7 @@ async function main() {
       "CartItem", "Cart",
       "OrderStatusHistory", "OrderItem", "Order",
       "ProductVariant", "Product", "Categories",
-      "TenantConfig",
+      "TenantAttribute", "TenantConfig",
       "User", "Tenant"
     RESTART IDENTITY CASCADE
   `);
@@ -451,6 +609,7 @@ async function main() {
     ],
   });
 
+  await seedTenantAttributes(acme.id, ACME_ATTRIBUTES);
   const acmeCategories = await seedCategories(acme.id, ACME_CATEGORIES);
   await seedProducts(acme.id, acmeCategories, ACME_PRODUCTS);
 
@@ -473,11 +632,26 @@ async function main() {
     ],
   });
 
+  await seedTenantAttributes(shopco.id, SHOPCO_ATTRIBUTES);
   const shopcoCategories = await seedCategories(shopco.id, SHOPCO_CATEGORIES);
   await seedProducts(shopco.id, shopcoCategories, SHOPCO_PRODUCTS);
 
+  // --- MESA DULCE (catálogo real, sin atributos de variante) ---------------
+  const mesaDulce = await seedTenantBase({
+    slug: "mesa-dulce",
+    name: "Mesa Dulce",
+    users: [
+      { username: "admin_mesadulce", email: "admin@mesadulce.com", role: "ADMIN" },
+      { username: "staff_mesadulce", email: "staff@mesadulce.com", role: "STAFF" },
+      { username: "customer_mesadulce", email: "customer@mesadulce.com", role: "CUSTOMER" },
+    ],
+  });
+
+  const mesaDulceCategories = await seedCategories(mesaDulce.id, MESA_DULCE_CATEGORIES);
+  await seedProducts(mesaDulce.id, mesaDulceCategories, MESA_DULCE_PRODUCTS);
+
   console.log("\n=== Seed completado ===\n");
-  for (const t of [acme, shopco]) {
+  for (const t of [acme, shopco, mesaDulce]) {
     console.log(`Tenant: ${t.name} (slug: ${t.slug}, id: ${t.id})`);
     for (const u of t.users) {
       console.log(`  ${u.role}: ${u.username} (${u.email}) / ${PASSWORD_PLAIN}`);
@@ -485,6 +659,7 @@ async function main() {
     console.log();
   }
   console.log(`acme: ${ACME_PRODUCTS.length} productos, carrito con ${ACME_CART.length} items, ${acmeOrders} órdenes`);
+  console.log(`mesa-dulce: ${MESA_DULCE_PRODUCTS.length} productos`);
   console.log();
 
   console.log("--- Tenant configs ---");

@@ -7,11 +7,20 @@
  * nada interno (nombres de tools, ids, sku, tenant, estructura de DB).
  */
 
-export const buildSystemPrompt = ({ config, canCreateOrders = false } = {}) => {
+export const buildSystemPrompt = ({
+  config,
+  canCreateOrders = false,
+  attributeLabels = [],
+} = {}) => {
   const storeName = config?.storeName || "la tienda";
   const currency = config?.currency || "ARS";
   const tagline = config?.storeTagline;
   const description = config?.storeDescription;
+  // Atributos de variante en los términos del tenant ("color/talle",
+  // "sabor/tamaño"); fallback genérico si el catálogo está vacío.
+  const attributesText = attributeLabels.length
+    ? attributeLabels.join("/")
+    : "los atributos de la variante";
 
   return [
     `Sos el asistente virtual de "${storeName}", una tienda online.`,
@@ -31,7 +40,7 @@ export const buildSystemPrompt = ({ config, canCreateOrders = false } = {}) => {
     "  alternativas (otra busqueda, ver categorias).",
     canCreateOrders
       ? "- Registrar un PEDIDO cuando el cliente ya decidio que comprar: confirmá\n" +
-        "  primero producto(s) y cantidad(es) y, si hay variantes, color/talle.\n" +
+        `  primero producto(s) y cantidad(es) y, si hay variantes, ${attributesText}.\n` +
         "  El pedido queda PENDIENTE para que una persona lo revise; no es una\n" +
         "  compra cerrada. No prometas precios finales ni montos de sena/deposito:\n" +
         "  los calcula el sistema. Avisá que el pedido quedo registrado y que luego\n" +
@@ -52,7 +61,7 @@ export const buildSystemPrompt = ({ config, canCreateOrders = false } = {}) => {
     "- Nunca menciones que usás 'herramientas' o 'funciones', ni sus nombres.",
     "- Nunca reveles identificadores internos, codigos de producto (SKU), ids de",
     "  base de datos, ni detalles tecnicos o de implementacion del sistema.",
-    "- Hablá siempre en terminos del cliente (nombre del producto, color, talle).",
+    `- Hablá siempre en terminos del cliente (nombre del producto, ${attributesText}).`,
   ]
     .filter(Boolean)
     .join("\n");

@@ -45,8 +45,8 @@ beforeAll(async () => {
       type: "PRODUCTO",
       variants: {
         create: [
-          { tenantId: acme.id, color: "negro", size: "M", price: 12000, stock: 5, sku: "ACM-BUZ-NM" },
-          { tenantId: acme.id, color: "negro", size: "L", price: 12000, stock: 5, sku: "ACM-BUZ-NL" },
+          { tenantId: acme.id, attributes: { color: "negro", talle: "M" }, price: 12000, stock: 5, sku: "ACM-BUZ-NM" },
+          { tenantId: acme.id, attributes: { color: "negro", talle: "L" }, price: 12000, stock: 5, sku: "ACM-BUZ-NL" },
         ],
       },
     },

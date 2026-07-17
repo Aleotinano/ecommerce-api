@@ -1,6 +1,8 @@
 import prisma from "../lib/prisma.js";
 import { createError } from "../helpers/error.js";
+import { deleteCloudinaryImage } from "../lib/imageManager.js";
 import { generateUniqueVariantSku } from "../utils/sku.js";
+import { TenantAttributeModel } from "./tenant-attributes.js";
 import { wrap, delPattern, hashParams, tenantNs } from "../lib/cache.js";
 import { addDays, startOfDay } from "./stats/utils.js";
 import {
@@ -29,12 +31,19 @@ async function invalidateProductsCache(tenantId) {
   await delPattern(`${tenantNs(tenantId)}:prod:*`);
 }
 
-// Filtro de atributos de variante (color/talla). Se usa tanto para decidir qué
-// productos matchean como para qué variantes incluir en la respuesta.
-const buildVariantAttributeFilter = ({ color, size }) => {
+// Filtro de atributos de variante (pares key->valor del catálogo del tenant, ej:
+// {"color":"#fff"} o {"sabor":"chocolate"}). Se usa tanto para decidir qué productos
+// matchean como para qué variantes incluir en la respuesta. Cada par se traduce a un
+// filtro JSON path de Postgres sobre `ProductVariant.attributes` (match exacto,
+// case-sensitive — mismo contrato que tenían las columnas color/size).
+const buildVariantAttributeFilter = (attributes = {}) => {
   const filter = { isActive: true };
-  if (color) filter.color = color;
-  if (size) filter.size = size;
+  const entries = Object.entries(attributes);
+  if (entries.length) {
+    filter.AND = entries.map(([key, value]) => ({
+      attributes: { path: [key], equals: value },
+    }));
+  }
   return filter;
 };
 
@@ -47,11 +56,11 @@ const buildPriceRange = ({ minPrice, maxPrice }) => {
 
 // Construye el WHERE de producto por tipo: PRODUCTO resuelve precio/atributos contra
 // ProductVariant (siempre tiene >=1); COMBO contra `Product.price` (su precio fijo,
-// no tiene atributos color/talle).
-const buildProductWhere = ({ base, color, size, minPrice, maxPrice }) => {
+// no tiene atributos de variante).
+const buildProductWhere = ({ base, attributes, minPrice, maxPrice }) => {
   const where = { ...base };
-  const attributeFilter = buildVariantAttributeFilter({ color, size });
-  const hasAttributeFilter = Boolean(color || size);
+  const attributeFilter = buildVariantAttributeFilter(attributes);
+  const hasAttributeFilter = Object.keys(attributes ?? {}).length > 0;
   const priceRange = buildPriceRange({ minPrice, maxPrice });
   const and = [];
 
@@ -65,7 +74,7 @@ const buildProductWhere = ({ base, color, size, minPrice, maxPrice }) => {
         // PRODUCTO: precio de alguna variante activa (que además matchee el filtro de atributos si hay).
         { type: "PRODUCTO", variants: { some: { ...attributeFilter, price: priceRange } } },
         // COMBO: precio fijo del combo. No aplica si hay filtro de atributos (un
-        // combo no tiene color/talle).
+        // combo no tiene atributos de variante).
         ...(hasAttributeFilter ? [] : [{ type: "COMBO", price: priceRange }]),
       ],
     });
@@ -233,11 +242,17 @@ const deriveComboRange = (comboCategoryOptions) => {
   return { comboMinItems, comboMaxItems };
 };
 
+// Punto único por el que pasan las variantes embebidas de create/edit: además del
+// sku, valida y normaliza sus `attributes` contra el catálogo del tenant.
 const buildVariantsWithSku = async ({ tenantId, productName, variants }) => {
   const reservedSkus = new Set();
   return Promise.all(
     variants.map(async (variant) => ({
       ...variant,
+      attributes: await TenantAttributeModel.validateAttributes({
+        tenantId,
+        attributes: variant.attributes,
+      }),
       sku: await generateUniqueVariantSku({ prisma, tenantId, productName, reservedSkus }),
     }))
   );
@@ -245,8 +260,7 @@ const buildVariantsWithSku = async ({ tenantId, productName, variants }) => {
 
 const toVariantCreateData = (tenantId, variant, isDefault = false) => ({
   tenantId,
-  color: variant.color ?? null,
-  size: variant.size ?? null,
+  attributes: variant.attributes ?? {},
   price: variant.price,
   stock: variant.stock,
   sku: variant.sku,
@@ -261,8 +275,8 @@ export const ProductModel = {
     tenantId,
     name,
     categoryId,
-    variantColor,
-    variantSize,
+    type,
+    variantAttributes,
     minPrice,
     maxPrice,
     limit,
@@ -272,8 +286,8 @@ export const ProductModel = {
     const params = {
       name,
       categoryId,
-      variantColor,
-      variantSize,
+      type,
+      variantAttributes,
       minPrice,
       maxPrice,
       limit,
@@ -290,6 +304,9 @@ export const ProductModel = {
       if (name) {
         base.name = { contains: name, mode: "insensitive" };
       }
+      if (type) {
+        base.type = type;
+      }
 
       if (Array.isArray(categoryId)) {
         if (categoryId.length) base.categoryId = { in: categoryId };
@@ -299,8 +316,7 @@ export const ProductModel = {
 
       const { where, attributeFilter } = buildProductWhere({
         base,
-        color: variantColor,
-        size: variantSize,
+        attributes: variantAttributes,
         minPrice,
         maxPrice,
       });
@@ -390,38 +406,45 @@ export const ProductModel = {
       .map(({ units, ...product }) => product);
   },
 
+  /**
+   * Opciones de filtro del storefront: por cada atributo del catálogo del tenant,
+   * los valores distintos en uso por las variantes activas. Devuelve también
+   * label/type para que el front arme los filtros sin otra llamada. La agregación
+   * es en JS (los valores viven en el JSON `attributes`, no hay `distinct` posible;
+   * el volumen por tenant es chico y además va cacheado).
+   */
   async getVariantOptions({ tenantId }) {
     const key = variantOptionsKey(tenantId);
 
     return wrap(key, VARIANT_OPTIONS_TTL, async () => {
-      const [colors, sizes] = await Promise.all([
+      const [catalog, variants] = await Promise.all([
+        TenantAttributeModel.get({ tenantId }),
         prisma.productVariant.findMany({
           where: {
             tenantId,
             isActive: true,
-            color: { not: null },
             product: { type: "PRODUCTO" },
           },
-          select: { color: true },
-          distinct: ["color"],
-          orderBy: { color: "asc" },
-        }),
-        prisma.productVariant.findMany({
-          where: {
-            tenantId,
-            isActive: true,
-            size: { not: null },
-            product: { type: "PRODUCTO" },
-          },
-          select: { size: true },
-          distinct: ["size"],
-          orderBy: { size: "asc" },
+          select: { attributes: true },
         }),
       ]);
 
+      const valuesByKey = new Map(catalog.map((attribute) => [attribute.key, new Set()]));
+      for (const variant of variants) {
+        for (const [key, value] of Object.entries(variant.attributes ?? {})) {
+          valuesByKey.get(key)?.add(value);
+        }
+      }
+
       return {
-        colors: colors.map((variant) => variant.color),
-        sizes: sizes.map((variant) => variant.size),
+        attributes: catalog.map((attribute) => ({
+          key: attribute.key,
+          label: attribute.label,
+          type: attribute.type,
+          values: [...valuesByKey.get(attribute.key)].sort((a, b) =>
+            a.localeCompare(b)
+          ),
+        })),
       };
     });
   },
@@ -523,6 +546,7 @@ export const ProductModel = {
     description,
     categoryId,
     price,
+    stock,
     img,
     imgPublicId,
     isActive,
@@ -539,10 +563,17 @@ export const ProductModel = {
 
     if (type === "PRODUCTO") {
       // `variants` puede venir vacío: alta en 2 pasos (el admin agrega la variante
-      // principal después vía /variants/:productId). Si vienen, la primera queda
-      // marcada `isDefault`.
-      if (variants.length > 0) {
-        variantsWithSku = await buildVariantsWithSku({ tenantId, productName: name, variants });
+      // principal después vía /variants/:productId), o traer `price`/`stock` sueltos
+      // como atajo de alta en 1 paso (mutuamente excluyente con `variants[]`, ya
+      // validado en el schema). Si vienen, la primera queda marcada `isDefault`.
+      const effectiveVariants =
+        variants.length > 0 ? variants : price !== undefined ? [{ price, stock }] : [];
+      if (effectiveVariants.length > 0) {
+        variantsWithSku = await buildVariantsWithSku({
+          tenantId,
+          productName: name,
+          variants: effectiveVariants,
+        });
       }
     } else if (type === "COMBO") {
       if (variants.length > 0) {
@@ -906,8 +937,7 @@ export const ProductModel = {
         maxQty,
         variants: product.variants.map((variant) => ({
           id: variant.id,
-          color: variant.color,
-          size: variant.size,
+          attributes: variant.attributes,
           price: variant.price,
           stock: variant.stock,
         })),
@@ -1003,6 +1033,28 @@ export const ProductModel = {
 
   async delete({ tenantId, id }) {
     await this.getByIdForManagement({ tenantId, id });
+
+    const orderItemsCount = await prisma.orderItem.count({
+      where: { productId: id },
+    });
+    if (orderItemsCount > 0) {
+      throw createError(
+        "No se puede eliminar un producto con pedidos asociados. Desactivalo en su lugar.",
+        "PRODUCT_HAS_ORDERS",
+        409
+      );
+    }
+
+    // Los assets de Cloudinary de las sugerencias no viajan en la cascada de la
+    // DB (ver ContentSuggestion/SuggestionImage en schema.prisma) — hay que
+    // limpiarlos a mano, best-effort, antes de borrar el producto.
+    const suggestionImages = await prisma.suggestionImage.findMany({
+      where: { suggestion: { productId: id } },
+      select: { imagePublicId: true },
+    });
+    await Promise.allSettled(
+      suggestionImages.map((image) => deleteCloudinaryImage(image.imagePublicId))
+    );
 
     const result = await prisma.product.delete({
       where: { id },

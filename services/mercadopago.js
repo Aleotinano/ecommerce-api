@@ -5,10 +5,10 @@ import { createError } from "../helpers/error.js";
 import { DEFAULTS } from "../config.js";
 import { OrderModel } from "./orders.js";
 
-const buildMpItemTitle = ({ productName, color, size }) => {
-  const descriptors = [productName].filter(Boolean);
-  if (color) descriptors.push(color);
-  if (size) descriptors.push(size);
+// `attributeValues` son los valores de `variant.attributes` en el orden del catálogo
+// del tenant (la escritura los normaliza por `position`, ver TenantAttributeModel).
+const buildMpItemTitle = ({ productName, attributeValues = [] }) => {
+  const descriptors = [productName, ...attributeValues].filter(Boolean);
   return descriptors.join(" - ") || "Variante";
 };
 
@@ -52,8 +52,7 @@ export const mercadopagoModel = {
       return {
         title: buildMpItemTitle({
           productName,
-          color: variant.color,
-          size: variant.size,
+          attributeValues: Object.values(variant.attributes ?? {}),
         }),
         description: variant.product?.description ?? productName,
         quantity: item.quantity,

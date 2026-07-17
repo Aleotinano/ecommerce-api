@@ -207,11 +207,30 @@ async function insertOrderItems(tx, orderId, pricedItems) {
 // ver `updateOrderStatus`) — no tiene `variantId`, así que esta función es un no-op
 // para esa línea si por algún motivo llegara.
 async function decrementLineStock(tx, line) {
-  if (line.variantId != null) {
-    await tx.productVariant.update({
-      where: { id: line.variantId },
-      data: { stock: { decrement: line.quantity } },
-    });
+  if (line.variantId == null) return;
+
+  // Decremento condicional atómico: la fila solo baja si al momento del UPDATE
+  // todavía hay stock suficiente (`stock >= quantity` en el WHERE). Es lo que
+  // cierra la sobreventa por carrera: un chequeo previo sobre el snapshot leído
+  // fuera de la transacción dejaba pasar dos COMPLETED simultáneos. Si `count`
+  // es 0, no había stock -> se lanza y la transacción entera hace rollback.
+  const { count } = await tx.productVariant.updateMany({
+    where: { id: line.variantId, stock: { gte: line.quantity } },
+    data: { stock: { decrement: line.quantity } },
+  });
+
+  if (count === 0) {
+    const error = createError(
+      "Stock insuficiente al completar la orden",
+      "INSUFFICIENT_STOCK",
+      409
+    );
+    error.details = {
+      productId: line.productId,
+      variant: line.variantId,
+      solicitado: line.quantity,
+    };
+    throw error;
   }
 }
 
@@ -441,32 +460,15 @@ export const OrderModel = {
     );
 
     const updated = await prisma.$transaction(async (tx) => {
-      if (status === "COMPLETED") {
-        for (const line of stockLines) {
-          const stock = resolveProductStock(line.product, line.variant) ?? 0;
-          if (line.quantity > stock) {
-            const error = createError(
-              "Stock insuficiente al completar la orden",
-              "INSUFFICIENT_STOCK",
-              409
-            );
-            error.details = {
-              productId: line.productId,
-              variant: line.variantId,
-              solicitado: line.quantity,
-              disponible: stock,
-            };
-            throw error;
-          }
-        }
-      }
-
       const result = await tx.order.update({
         where: { id: orderId },
         data: { status, ...extraData },
         ...orderItemsInclude,
       });
 
+      // El decremento es condicional (ver `decrementLineStock`): valida y baja el
+      // stock en un solo UPDATE atómico. Si alguna línea no alcanza, lanza y toda
+      // la transacción —incluido el cambio de status— hace rollback.
       if (status === "COMPLETED") {
         for (const line of stockLines) {
           await decrementLineStock(tx, line);

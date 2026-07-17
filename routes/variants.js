@@ -12,6 +12,7 @@ import {
   createVariant,
   updateVariant,
   variantParams,
+  variantListQuery,
 } from "../schemas/variant.schema.js";
 
 export const variantRouter = Router();
@@ -23,7 +24,16 @@ const validation = {
   create: validate({ params: variantParams, body: createVariant }),
   update: validate({ params: variantParams, body: updateVariant }),
   id: validate({ params: variantParams }),
+  list: validate({ query: variantListQuery }),
 };
+
+variantRouter.get(
+  "/",
+  verifyToken,
+  requireRole(roleRequired),
+  validation.list,
+  variantsController.getAllForTenant
+);
 
 variantRouter.get(
   "/:productId",

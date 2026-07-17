@@ -23,14 +23,14 @@ describe("Variante default: promoción automática", () => {
       tenantId: acme.id,
       name: "Remera multicolor",
       type: "PRODUCTO",
-      variants: [{ color: "#000000", stock: 5, price: 1000 }],
+      variants: [{ attributes: { color: "#000000" }, stock: 5, price: 1000 }],
     });
     const defaultVariant = product.variants[0];
 
     const second = await VariantModel.createVariant({
       tenantId: acme.id,
       productId: product.id,
-      color: "#FFFFFF",
+      attributes: { color: "#FFFFFF" },
       stock: 5,
       price: 1000,
     });
@@ -51,13 +51,13 @@ describe("Variante default: promoción automática", () => {
       tenantId: acme.id,
       name: "Buzo dos colores",
       type: "PRODUCTO",
-      variants: [{ color: "#111111", stock: 5, price: 2000 }],
+      variants: [{ attributes: { color: "#111111" }, stock: 5, price: 2000 }],
     });
     const first = product.variants[0];
     const second = await VariantModel.createVariant({
       tenantId: acme.id,
       productId: product.id,
-      color: "#222222",
+      attributes: { color: "#222222" },
       stock: 5,
       price: 2000,
     });

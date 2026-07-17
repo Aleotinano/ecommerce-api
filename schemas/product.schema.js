@@ -82,11 +82,18 @@ export const createProduct = z
       .positive("El ID de categoría es inválido")
       .nullable()
       .optional(),
-    // Exclusivo de COMBO (precio fijo). Para PRODUCTO el precio vive en cada
-    // variante — no se acepta acá (ver superRefine).
+    // COMBO: precio fijo del combo. PRODUCTO: atajo de alta en 1 paso — junto con
+    // `stock` arma la variante default sin necesidad de mandar `variants[]` (ver
+    // superRefine: mutuamente excluyente con `variants[]`, y price/stock van juntos).
     price: z.coerce
       .number({ invalid_type_error: "El precio debe ser un número" })
       .positive("El precio debe ser mayor a 0")
+      .optional(),
+    // Solo aplica a PRODUCTO, junto con `price` (ver comentario de `price` arriba).
+    stock: z.coerce
+      .number({ invalid_type_error: "El stock debe ser un número" })
+      .int("El stock debe ser un número entero")
+      .min(0, "El stock no puede ser negativo")
       .optional(),
     img: z
       .string({ invalid_type_error: "La imagen debe ser texto" })
@@ -147,12 +154,29 @@ export const createProduct = z
             "Un combo necesita categorías con cantidad (comboCategoryOptions) o comboMinItems/comboMaxItems explícitos",
         });
       }
-    } else if (data.price !== undefined) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["price"],
-        message: "El precio de un producto vive en cada variante, no a nivel producto",
-      });
+      if (data.stock !== undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["stock"],
+          message: "El stock no aplica a combos",
+        });
+      }
+    } else {
+      // PRODUCTO
+      if (data.variants.length > 0 && (data.price !== undefined || data.stock !== undefined)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["variants"],
+          message: "Enviá price/stock o variants, no ambos",
+        });
+      }
+      if ((data.price !== undefined) !== (data.stock !== undefined)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: data.price === undefined ? ["price"] : ["stock"],
+          message: "price y stock van juntos",
+        });
+      }
     }
   });
 
@@ -275,8 +299,28 @@ export const productQuery = z
       )
       .pipe(z.array(z.number().int().positive()))
       .optional(),
-    variantColor: z.string().optional(),
-    variantSize: z.string().optional(),
+    // Filtro por atributos de variante, JSON-encoded en la query string (ej:
+    // ?attributes={"color":"%23fff","talle":"M"} URL-encodeado). JSON en un solo
+    // param para no depender del query parser de Express para bracket-syntax.
+    attributes: z
+      .string()
+      .transform((value, ctx) => {
+        try {
+          return JSON.parse(value);
+        } catch {
+          ctx.addIssue({ code: "custom", message: "attributes debe ser JSON válido" });
+          return z.NEVER;
+        }
+      })
+      .pipe(
+        z.record(
+          z.string().max(30, "Key de atributo demasiado larga"),
+          z.string().min(1).max(80, "Valor de atributo demasiado largo")
+        )
+      )
+      .optional(),
+    // Filtro por tipo de producto (PRODUCTO/COMBO): match exacto sobre Product.type.
+    type: z.enum(PRODUCT_TYPES, { invalid_type_error: "Tipo de producto inválido" }).optional(),
     // Destacados por ángulo de marketing (Page Builder → OfertContainer). Reusa el
     // mismo enum que Sugerencias; la resolución reusa ANGLE_PREDICATES (fuente única).
     angle: z.enum(SUGGESTION_ANGLES).optional(),

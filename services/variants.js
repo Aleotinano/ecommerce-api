@@ -1,6 +1,15 @@
 import prisma from "../lib/prisma.js";
 import { createError } from "../helpers/error.js";
 import { generateUniqueVariantSku } from "../utils/sku.js";
+import { TenantAttributeModel } from "./tenant-attributes.js";
+import { delPattern, tenantNs } from "../lib/cache.js";
+
+// Una variante respalda precio/stock/atributos del producto en el storefront, así
+// que cualquier alta/edición/baja debe invalidar el mismo namespace `prod:*` que
+// usa el catálogo (ver `invalidateProductsCache` en services/productos.js).
+async function invalidateProductsCache(tenantId) {
+  await delPattern(`${tenantNs(tenantId)}:prod:*`);
+}
 
 const ensureProductIsNotCombo = async (tenantId, productId) => {
   const product = await prisma.product.findFirst({
@@ -57,6 +66,25 @@ export const VariantModel = {
     return product.variants;
   },
 
+  // Listado cross-producto (tabulado "Variantes" del admin): todas las variantes
+  // del tenant con el producto padre embebido, para no requerir una segunda
+  // consulta por variante al renderizar la lista.
+  async getAllForTenant({ tenantId, productId, name, limit, offset }) {
+    const where = { tenantId };
+    if (productId !== undefined) where.productId = productId;
+    if (name) where.product = { name: { contains: name, mode: "insensitive" } };
+
+    return prisma.productVariant.findMany({
+      where,
+      include: {
+        product: { select: { id: true, name: true, img: true, type: true } },
+      },
+      take: limit,
+      skip: offset,
+      orderBy: { id: "asc" },
+    });
+  },
+
   async getByIdForManagement({ tenantId, productId, variantId }) {
     const variant = await prisma.productVariant.findFirst({
       where: { id: variantId, productId, tenantId },
@@ -72,8 +100,7 @@ export const VariantModel = {
   async createVariant({
     tenantId,
     productId,
-    color,
-    size,
+    attributes,
     price,
     stock,
     img,
@@ -81,6 +108,12 @@ export const VariantModel = {
     isActive,
   }) {
     const product = await ensureProductIsNotCombo(tenantId, productId);
+
+    // Valida contra el catálogo del tenant y normaliza (orden de keys estable).
+    const normalizedAttributes = await TenantAttributeModel.validateAttributes({
+      tenantId,
+      attributes,
+    });
 
     const sku = await generateUniqueVariantSku({
       prisma,
@@ -95,12 +128,11 @@ export const VariantModel = {
       where: { tenantId, productId },
     });
 
-    return prisma.productVariant.create({
+    const created = await prisma.productVariant.create({
       data: {
         tenantId,
         productId,
-        color: color ?? null,
-        size: size ?? null,
+        attributes: normalizedAttributes,
         price,
         stock,
         sku,
@@ -110,14 +142,23 @@ export const VariantModel = {
         isDefault: existingCount === 0,
       },
     });
+
+    await invalidateProductsCache(tenantId);
+    return created;
   },
 
   async editVariant(
     { tenantId, productId, variantId },
-    { color, size, price, stock, img, imgPublicId, isActive }
+    { attributes, price, stock, img, imgPublicId, isActive }
   ) {
     await ensureProductIsNotCombo(tenantId, productId);
     const existing = await this.getByIdForManagement({ tenantId, productId, variantId });
+
+    // `attributes` reemplaza el objeto completo (semántica PUT del campo).
+    const normalizedAttributes =
+      attributes !== undefined
+        ? await TenantAttributeModel.validateAttributes({ tenantId, attributes })
+        : undefined;
 
     // Desactivar la última variante activa de un producto lo dejaría invendible —
     // misma guarda que en `deleteVariant`.
@@ -129,8 +170,7 @@ export const VariantModel = {
 
     const updateData = Object.fromEntries(
       Object.entries({
-        color,
-        size,
+        attributes: normalizedAttributes,
         price,
         stock,
         img,
@@ -144,8 +184,8 @@ export const VariantModel = {
       updateData.isDefault = false;
     }
 
-    return prisma.$transaction(async (tx) => {
-      const updated = await tx.productVariant.update({
+    const updated = await prisma.$transaction(async (tx) => {
+      const result = await tx.productVariant.update({
         where: { id: variantId },
         data: updateData,
       });
@@ -154,8 +194,11 @@ export const VariantModel = {
         await promoteNewDefault(tx, { tenantId, productId });
       }
 
-      return updated;
+      return result;
     });
+
+    await invalidateProductsCache(tenantId);
+    return updated;
   },
 
   async deleteVariant({ tenantId, productId, variantId }) {
@@ -163,15 +206,18 @@ export const VariantModel = {
     const existing = await this.getByIdForManagement({ tenantId, productId, variantId });
     await ensureNotLastActiveVariant({ tenantId, productId, variantId });
 
-    return prisma.$transaction(async (tx) => {
-      const deleted = await tx.productVariant.delete({ where: { id: variantId } });
+    const deleted = await prisma.$transaction(async (tx) => {
+      const result = await tx.productVariant.delete({ where: { id: variantId } });
 
       if (existing.isDefault) {
         await promoteNewDefault(tx, { tenantId, productId });
       }
 
-      return deleted;
+      return result;
     });
+
+    await invalidateProductsCache(tenantId);
+    return deleted;
   },
 };
 

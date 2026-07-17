@@ -179,7 +179,8 @@ Generador con `output = "../generated/prisma"`.
 | **User** | `id`, `username`, `email`, `password`, `role: Role=CUSTOMER`, `emailVerified=false`, `emailVerificationTokenHash?`, `emailVerificationExpiresAt?` | 1-1 cart, 1-N orders, N-1 tenant | **Sí** |
 | **Categories** | `id`, `name`, `description?`, `icon?`, `imageUrl?`, `imgPublicId?`, `isActive=true`, `parentId?` (self-relation árbol) | self `parent`/`children`, 1-N products, N-1 tenant | **Sí** |
 | **Product** | `id`, `name`, `description?`, `price: Float?` (exclusivo de `COMBO`; `null` para `PRODUCTO`, el precio real vive en la variante default), `img?`, `imgPublicId?`, `categoryId?`, `isActive=true`, `createdAt`, `type: ProductType`, `isCombo=false` (deprecado, no se lee en runtime), `comboMinItems?`, `comboMaxItems?` | 1-N variants, N-1 category, N-1 tenant, 1-N contentSuggestions, 1-N cartItems, 1-N orderItems, 1-N comboOptions/allowedInCombos (`ComboAllowedProduct`), 1-N comboCategoryOptions (`ComboAllowedCategory`) | **Sí** |
-| **ProductVariant** | `id`, `productId`, `color?`, `size?`, `price: Float` (NOT NULL), `stock: Int`, `sku`, `img?`, `imgPublicId?`, `isActive=true`, `isDefault=false` (marca la variante "principal" de un `PRODUCTO`; a lo sumo una `true` por producto) | N-1 product (`onDelete: Cascade`), N-1 tenant, 1-N cartItems, 1-N orderItems | **Sí** — todo `Product.type = "PRODUCTO"` tiene **siempre** al menos una fila (la default); `COMBO` no tiene ninguna |
+| **ProductVariant** | `id`, `productId`, `attributes: Json={}` (pares key→valor del catálogo `TenantAttribute` del tenant, ej. `{"color":"#fff","talle":"M"}` o `{"sabor":"chocolate"}`; validados/normalizados en `services/tenant-attributes.js`), `price: Float` (NOT NULL), `stock: Int`, `sku`, `img?`, `imgPublicId?`, `isActive=true`, `isDefault=false` (marca la variante "principal" de un `PRODUCTO`; a lo sumo una `true` por producto) | N-1 product (`onDelete: Cascade`), N-1 tenant, 1-N cartItems, 1-N orderItems | **Sí** — todo `Product.type = "PRODUCTO"` tiene **siempre** al menos una fila (la default); `COMBO` no tiene ninguna |
+| **TenantAttribute** | `id`, `key` (slug estable: `color`, `talle`, `sabor`…), `label` (display), `type: AttributeType=TEXT` (`TEXT` \| `COLOR` — COLOR exige valor HEX), `position=0` (orden de display/normalización) — catálogo de atributos de variante del tenant, seteo **one-time** en el onboarding (`PUT /tenant-attributes/:tenantId` devuelve 409 si ya existe) | N-1 `Tenant` (`onDelete: Cascade`) | **Sí** (`@@unique([tenantId, key])`) |
 | **ComboAllowedProduct** | `id`, `comboProductId`, `allowedProductId`, `comboAllowedCategoryId?`, `minQty=0`, `maxQty?`, `isActive=true`, `createdAt` — con FK null: regla standalone legacy (min/max per-producto); con FK: MIEMBRO explícito de esa regla de categoría (min/max no se usan) | N-1 `Product` como `comboProduct` (`onDelete: Cascade`) y como `allowedProduct` (`onDelete: Cascade`), N-1 opcional `ComboAllowedCategory` (`onDelete: Cascade`), N-1 tenant | **Sí** |
 | **ComboAllowedCategory** | `id`, `comboProductId`, `categoryId`, `minQty=0`, `maxQty?`, `isActive=true`, `createdAt` — whitelist de categorías permitidas en un combo; `minQty`/`maxQty` son el TOTAL DEL GRUPO (suma elegida de la categoría; el admin manda min=max exacto); sin `members` = toda la categoría; no baja a subcategorías | N-1 `Product` (`onDelete: Cascade`), N-1 `Categories` (`onDelete: Cascade`), 1-N `members` (`ComboAllowedProduct`), N-1 tenant | **Sí** |
 | **Cart** | `id`, `userId @unique`, `createdAt`, `updatedAt` | 1-1 user, N-1 tenant, 1-N items | **Sí** |
@@ -197,6 +198,7 @@ Generador con `output = "../generated/prisma"`.
 |---|---|
 | Tenant | `slug @unique` |
 | TenantConfig | `tenantId @unique`, `whatsappPhoneNumberId @unique`, `@@index([tenantId])` |
+| TenantAttribute | `@@unique([tenantId, key])`, `@@index([tenantId])` |
 | User | `@@unique([tenantId, username])`, `@@unique([tenantId, email])`, `@@index([tenantId])` |
 | Categories | `@@unique([tenantId, name])`, `@@index([tenantId])` |
 | Product | `@@index([tenantId])` |
@@ -220,6 +222,9 @@ Generador con `output = "../generated/prisma"`.
   stock propio (se calcula sobre los componentes elegidos). Colapsado desde el enum original de
   3 valores (`UNIDAD`/`VARIANTE`/`COMBO`) — ver migraciones `..._product_types_collapse_expand`
   / `..._product_types_collapse_contract` más abajo.
+- `AttributeType`: `TEXT`, `COLOR` — tipo de valor de un atributo de variante del tenant
+  (`TenantAttribute.type`); `COLOR` exige HEX (`#RGB`/`#RRGGBB`) al validar `attributes` de una
+  variante, pensado para swatch en el storefront.
 - `OrderOrigin`: `ADMIN`, `BOT`.
 - `SuggestionAngle`: `BEST_SELLER`, `NEW_ARRIVAL`, `LOW_STOCK`, `NO_RECENT_SALES`
 - `SuggestionStatus`: `SUGGESTED`, `USED`, `DISMISSED`
@@ -231,7 +236,7 @@ Generador con `output = "../generated/prisma"`.
 
 ### Migraciones
 
-28 migraciones en `prisma/migrations/` (cronológicas):
+30 migraciones en `prisma/migrations/` (cronológicas):
 
 `..._initial_multi_tenant`, `..._email_global_unique`, `..._email_verification`,
 `..._add_tenant_config`, `..._add_product_price`, `..._expand_roles_storefront`,
@@ -258,6 +263,11 @@ datos entre esas dos migraciones (asignar `isDefault` y crear/completar variante
 migración SQL. `20260710150000_combo_category_members` (FK nullable
 `ComboAllowedProduct.comboAllowedCategoryId` → miembros explícitos de una regla de categoría;
 sin backfill, las filas existentes quedan null = standalone legacy).
+`20260711193049_variant_flexible_attributes` (generaliza `ProductVariant.color`/`size` a
+`attributes JSONB` + tabla `TenantAttribute` — catálogo one-time de atributos por tenant; a
+diferencia del colapso de tipos, el backfill es SQL puro y va **dentro de la misma migración**:
+color→`attributes.color`, size→`attributes.talle`, y crea el catálogo color/talle para los tenants
+que ya usaban esas columnas antes de dropearlas).
 
 ---
 
@@ -333,7 +343,8 @@ Hay **dos mecanismos distintos** de resolución de tenant según la familia de r
 
 Prefijos de montaje (de `app.js`): `/webhooks/whatsapp` (antes del parser JSON global), `/orders`,
 `/products`, `/variants`, `/categories`, `/cart`, `/users`, `/mercadopago`, `/stats`,
-`/content-suggestions`, `/page-spec`, `/auth`, `/test`, `/tenant-config`, `/store`.
+`/content-suggestions`, `/page-spec`, `/auth`, `/test`, `/tenant-config`, `/tenant-attributes`,
+`/store`.
 
 Convenciones de middleware citadas: `verifyToken` (cookie admin), `requireRole([...])`,
 `validate({ body|params|query })` (zod; `query` validada queda en `req.search`),
@@ -451,6 +462,17 @@ Todas con `verifyToken` + `requireRole(["ADMIN","STAFF"])`.
 | PATCH | `/tenant-config/:tenantId` | `verifyToken`, `requireRole(["ADMIN"])`, `validate(params,body)` | `TenantConfigController.update` → `TenantConfigModel.update` |
 | PATCH | `/tenant-config/:tenantId/logo` | `verifyToken`, `requireRole(["ADMIN"])`, `uploadImage`, `normalizeMultipartBody`, `validate(params)` | `TenantConfigController.uploadLogo` → `TenantConfigModel.uploadLogo` |
 | DELETE | `/tenant-config/:tenantId/logo` | `verifyToken`, `requireRole(["ADMIN"])`, `validate(params)` | `TenantConfigController.deleteLogo` → `TenantConfigModel.deleteLogo` |
+
+### `/tenant-attributes` — `routes/tenant-attributes.js`
+
+Catálogo de atributos de variante del tenant (ver [[Variantes]] en `docs/servicios/dominio/`). El
+`PUT` es un **setup one-time**: `409 ATTRIBUTES_ALREADY_SET` si el catálogo ya existe — no hay
+edición posterior por API (cambiarlo rompería las `attributes` de las variantes existentes).
+
+| Método | Ruta | Middleware | Controller → Service |
+|---|---|---|---|
+| GET | `/tenant-attributes/:tenantId` | `attachUser`, `validate(params)` | `TenantAttributeController.get` → `TenantAttributeModel.get` |
+| PUT | `/tenant-attributes/:tenantId` | `verifyToken`, `requireRole(["ADMIN"])`, `validate(params,body)` | `TenantAttributeController.setup` → `TenantAttributeModel.setup` |
 
 ### `/test` — `routes/test.js`
 

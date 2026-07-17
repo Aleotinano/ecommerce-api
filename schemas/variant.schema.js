@@ -1,18 +1,11 @@
 import { z } from "zod";
+import { variantAttributes } from "./tenant-attribute.schema.js";
 
 export const createVariant = z.object({
-  color: z
-    .string({ invalid_type_error: "El color debe ser texto" })
-    .regex(
-      /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/,
-      "El color debe ser un HEX válido (ej: #1A2B3C o #ABC)"
-    )
-    .nullable()
-    .optional(),
-  size: z
-    .string({ invalid_type_error: "La talla debe ser texto" })
-    .nullable()
-    .optional(),
+  // Pares atributo->valor (ej: {"color":"#fff","talle":"M"}). Acá solo se valida el
+  // shape; que las keys existan en el catálogo del tenant (y HEX para type COLOR)
+  // lo valida el service (TenantAttributeModel.validateAttributes).
+  attributes: variantAttributes.optional(),
   // Requerido: ya no existe `Product.price` al que una variante pueda "heredar" si
   // se omite — cada variante tiene siempre su propio precio.
   price: z.coerce
@@ -40,18 +33,9 @@ export const createVariant = z.object({
 
 export const updateVariant = z
   .object({
-    color: z
-      .string({ invalid_type_error: "El color debe ser texto" })
-      .regex(
-        /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/,
-        "El color debe ser un HEX válido (ej: #1A2B3C o #ABC)"
-      )
-      .nullable()
-      .optional(),
-    size: z
-      .string({ invalid_type_error: "La talla debe ser texto" })
-      .nullable()
-      .optional(),
+    // Si viene, REEMPLAZA el objeto completo de atributos de la variante (semántica
+    // PUT del campo, no merge por key).
+    attributes: variantAttributes.optional(),
     // Optional (no hace falta reenviar el precio si no cambia), pero si viene ya no
     // acepta null — no hay "volver a heredar", cada variante siempre tiene precio.
     price: z.coerce
@@ -85,6 +69,24 @@ export const variantParams = z.object({
     .int("El ID debe ser un número entero")
     .positive("ID de variante inválido")
     .optional(),
+});
+
+// Listado cross-producto (GET /variants) para el tabulado "Variantes" del admin:
+// todas las variantes del tenant, opcionalmente filtradas por producto/nombre.
+export const variantListQuery = z.object({
+  productId: z.coerce
+    .number({ invalid_type_error: "El ID de producto debe ser un número" })
+    .int("El ID de producto debe ser un número entero")
+    .positive("ID de producto inválido")
+    .optional(),
+  name: z.string().optional(),
+  limit: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(100, "El límite máximo es 100")
+    .default(20),
+  offset: z.coerce.number().int().min(0).default(0),
 });
 
 export const variantId = z.object({

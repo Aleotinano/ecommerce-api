@@ -3,7 +3,7 @@
  *
  *  - `tenantId` y `user` se toman del CONTEXTO DEL SERVIDOR (closure), nunca de
  *    los argumentos que provee el LLM. El modelo solo elige filtros de dominio
- *    (query, productId, color, size). Asi un prompt no puede saltar de tenant.
+ *    (query, productId, attributes). Asi un prompt no puede saltar de tenant.
  *  - Casi todas las tools son READ-ONLY. La UNICA excepcion de escritura es
  *    `createDraftOrder` (crea un pedido BORRADOR): aun asi el LLM solo propone
  *    productId + cantidad; el server resuelve precio, total, sena y tenant, y la
@@ -23,6 +23,7 @@
 import { ProductModel } from "../productos.js";
 import { CategoryModel } from "../categories.js";
 import { OrderModel } from "../orders.js";
+import { TenantAttributeModel } from "../tenant-attributes.js";
 import { getProductPrice, resolveVariantForProduct } from "../../helpers/price.js";
 import {
   TOOL_DEFINITIONS,
@@ -35,9 +36,38 @@ const SEARCH_LIMIT = 8;
 /** Cuántos turnos de conversación guardamos como contexto de la orden del bot. */
 const CONTEXT_TURNS = 12;
 
-/** Compara color/talle: `b` nulo matchea cualquiera (filtro no especificado). */
-const variantMatches = (a, b) =>
-  b == null || String(a ?? "").toLowerCase() === String(b).toLowerCase();
+/**
+ * ¿La variante matchea los atributos pedidos? Toda key pedida (valor no-null) debe
+ * coincidir case-insensitive contra `variantAttrs[key]`; una key no pedida es
+ * wildcard (misma semántica que tenía el filtro color/talle).
+ */
+const attributesMatch = (variantAttrs = {}, requested = {}) =>
+  Object.entries(requested ?? {}).every(
+    ([key, value]) =>
+      value == null ||
+      String(variantAttrs?.[String(key).toLowerCase()] ?? "").toLowerCase() ===
+        String(value).toLowerCase()
+  );
+
+/**
+ * Normaliza el argumento `attributes` que propone el LLM: puede venir como objeto
+ * (Anthropic) o como JSON string (Gemini serializa los object sin properties, ver
+ * lib/llm/providers/gemini.js). Cualquier cosa no parseable se trata como "sin
+ * filtro" — el flujo de desambiguación pide los atributos de nuevo.
+ */
+const parseRequestedAttributes = (value) => {
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? parsed
+        : {};
+    } catch {
+      return {};
+    }
+  }
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+};
 
 /**
  * Arma el snapshot de conversación que se guarda en la orden creada por el bot.
@@ -157,8 +187,7 @@ export const buildToolContext = ({ tenantId, user, config, channel }) => {
       }
 
       let variantes = (product.variants ?? []).map((v) => ({
-        color: v.color ?? null,
-        size: v.size ?? null,
+        atributos: v.attributes ?? {},
         precio: getProductPrice(v, product),
         disponible: v.stock > 0,
       }));
@@ -175,7 +204,7 @@ export const buildToolContext = ({ tenantId, user, config, channel }) => {
       };
     },
 
-    async checkAvailability({ productId, color, size } = {}) {
+    async checkAvailability({ productId, attributes } = {}) {
       if (!Number.isInteger(productId)) {
         return { error: "Falta el identificador del producto." };
       }
@@ -187,11 +216,9 @@ export const buildToolContext = ({ tenantId, user, config, channel }) => {
       }
 
       const variants = product.variants ?? [];
-      const eq = (a, b) =>
-        b == null || String(a ?? "").toLowerCase() === String(b).toLowerCase();
-
-      const matches = variants.filter(
-        (v) => eq(v.color, color) && eq(v.size, size)
+      const requested = parseRequestedAttributes(attributes);
+      const matches = variants.filter((v) =>
+        attributesMatch(v.attributes, requested)
       );
 
       // Sin variantes que matcheen el filtro pedido.
@@ -259,13 +286,13 @@ export const buildToolContext = ({ tenantId, user, config, channel }) => {
         return { error: "Decime al menos un producto y su cantidad." };
       }
 
-      // Resolvemos productId(+color/size) -> { productId, variantId } server-side,
+      // Resolvemos productId(+attributes) -> { productId, variantId } server-side,
       // scopeado al tenant. El bot solo propone; el server valida catalogo y
       // desambigua contra las variantes del producto (todo PRODUCTO tiene al menos
       // la principal, así que siempre hay que resolver una).
       const resolved = [];
       for (const raw of items) {
-        const { productId, quantity, color, size, note } = raw ?? {};
+        const { productId, quantity, attributes, note } = raw ?? {};
 
         if (!Number.isInteger(productId)) {
           return { error: "Falta el identificador de algun producto." };
@@ -294,17 +321,24 @@ export const buildToolContext = ({ tenantId, user, config, channel }) => {
         const noteValue = typeof note === "string" ? note.slice(0, 150) : null;
 
         const variants = product.variants ?? [];
-        const candidates = variants.filter(
-          (v) =>
-            variantMatches(v.color, color) && variantMatches(v.size, size)
+        const requested = parseRequestedAttributes(attributes);
+        const candidates = variants.filter((v) =>
+          attributesMatch(v.attributes, requested)
         );
 
         if (!candidates.length) {
           return { error: `No encontre esa variante de "${product.name}".` };
         }
         if (candidates.length > 1) {
+          // Le pedimos al cliente los atributos con los labels del catálogo del
+          // tenant (color/talle, sabor/tamaño...), no con las keys internas.
+          const catalog = await TenantAttributeModel.get({ tenantId });
+          const labels = catalog.map((attribute) => attribute.label.toLowerCase());
+          const detalle = labels.length
+            ? labels.join(" y/o ")
+            : "los atributos de la variante";
           return {
-            error: `"${product.name}" tiene varias variantes; indicame color y/o talle.`,
+            error: `"${product.name}" tiene varias variantes; indicame ${detalle}.`,
           };
         }
 
