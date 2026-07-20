@@ -1,11 +1,18 @@
 import { CartModel } from "../services/cart.js";
 import { getProductPrice, resolveProductStock } from "../helpers/price.js";
 
+// Este controller es compartido por /cart (admin, exige login vía verifyToken, sin
+// req.cartOwner) y /store/cart (storefront, admite guest vía resolveCartOwner). El
+// fallback cubre el caso admin, siempre con userId.
+function resolveOwner(req) {
+  return req.cartOwner ?? { userId: req.user.id, guestId: null };
+}
+
 export class cartController {
   static async getCart(req, res, next) {
     try {
-      const { id } = req.user;
-      const cart = await CartModel.getCart({ tenantId: req.tenantId, id });
+      const { userId, guestId } = resolveOwner(req);
+      const cart = await CartModel.getCart({ tenantId: req.tenantId, userId, guestId });
 
       return res.json({
         message: "Tu carrito de compras",
@@ -43,13 +50,14 @@ export class cartController {
 
   static async addCombo(req, res, next) {
     try {
-      const { id } = req.user;
+      const { userId, guestId } = resolveOwner(req);
       const productId = req.params.productId;
       const { selection } = req.body;
 
       const cartItem = await CartModel.addCombo({
         tenantId: req.tenantId,
-        id,
+        userId,
+        guestId,
         comboProductId: productId,
         selection,
       });
@@ -70,13 +78,14 @@ export class cartController {
 
   static async add(req, res, next) {
     try {
-      const { id } = req.user;
+      const { userId, guestId } = resolveOwner(req);
       const productId = req.params.productId;
       const { variantId } = req.body ?? {};
 
       const cartItem = await CartModel.add({
         tenantId: req.tenantId,
-        id,
+        userId,
+        guestId,
         productId,
         variantId,
       });
@@ -105,13 +114,14 @@ export class cartController {
 
   static async remove(req, res, next) {
     try {
-      const { id } = req.user;
+      const { userId, guestId } = resolveOwner(req);
       const productId = req.params.productId;
       const { variantId } = req.body ?? {};
 
       const result = await CartModel.remove({
         tenantId: req.tenantId,
-        id,
+        userId,
+        guestId,
         productId,
         variantId,
       });
@@ -131,8 +141,8 @@ export class cartController {
 
   static async clear(req, res, next) {
     try {
-      const { id } = req.user;
-      const result = await CartModel.clear({ tenantId: req.tenantId, id });
+      const { userId, guestId } = resolveOwner(req);
+      const result = await CartModel.clear({ tenantId: req.tenantId, userId, guestId });
 
       return res.json({
         message: "Carrito vaciado completamente",

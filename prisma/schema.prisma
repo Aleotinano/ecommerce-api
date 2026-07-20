@@ -301,16 +301,29 @@ model ProductVariant {
   @@index([tenantId])
 }
 
+// Un Cart pertenece a un User autenticado (userId) O a un guest anónimo (guestId),
+// nunca ambos ni ninguno — reforzado con un CHECK constraint agregado a mano en la
+// migración `prisma/migrations/<ts>_cart_guest_support/migration.sql` (mismo motivo
+// que otros constraints de este schema: no declararlo acá para no generar drift en
+// `migrate diff`). guestId identifica un carrito anónimo vía cookie httpOnly (ver
+// middleware/guestCart.js); al loguearse se fusiona con el Cart del User y se borra
+// (ver CartModel.mergeGuestCartIntoUser).
 model Cart {
   id        Int        @id @default(autoincrement())
   tenantId  Int
-  userId    Int        @unique
+  userId    Int?       @unique
+  guestId   String?
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
-  user      User       @relation(fields: [userId], references: [id])
+  user      User?      @relation(fields: [userId], references: [id])
   tenant    Tenant     @relation(fields: [tenantId], references: [id])
   items     CartItem[]
 
+  // guestId se escopa por tenant (a diferencia de userId, ya único globalmente porque
+  // cada User pertenece a un solo tenant): el mismo browser/cookie puede navegar más
+  // de un tenant (resolveTenantFromSlug también acepta header X-Tenant-Slug), así que
+  // necesita un Cart de invitado distinto por tenant.
+  @@unique([tenantId, guestId])
   @@index([tenantId])
 }
 

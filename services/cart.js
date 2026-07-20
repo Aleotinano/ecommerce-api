@@ -3,10 +3,22 @@ import { createError } from "../helpers/error.js";
 import { resolveProductStock, resolveVariantForProduct } from "../helpers/price.js";
 import { validateComboSelection } from "./combos.js";
 
+// Dueño del carrito: userId (autenticado) o guestId (cookie de invitado) — nunca
+// ambos ni ninguno, ver constraint CHECK en la migración de Cart. `where` usa el
+// índice único correspondiente (tenantId_userId o tenantId_guestId vía userId
+// @unique / @@unique([tenantId, guestId])).
+function cartOwnerWhere({ tenantId, userId, guestId }) {
+  return userId != null ? { userId } : { tenantId_guestId: { tenantId, guestId } };
+}
+
+function cartOwnerFilter({ tenantId, userId, guestId }) {
+  return userId != null ? { userId, tenantId } : { tenantId, guestId };
+}
+
 export const CartModel = {
-  async getCart({ tenantId, id }) {
+  async getCart({ tenantId, userId, guestId }) {
     const cart = await prisma.cart.findFirst({
-      where: { userId: id, tenantId },
+      where: cartOwnerFilter({ tenantId, userId, guestId }),
       include: {
         items: {
           include: {
@@ -33,7 +45,7 @@ export const CartModel = {
    * `CartItem` (ver prisma/schema.prisma) sigue siendo el backstop real contra
    * condiciones de carrera.
    */
-  async add({ tenantId, id, productId, variantId }) {
+  async add({ tenantId, userId, guestId, productId, variantId }) {
     return prisma.$transaction(async (tx) => {
       const product = await tx.product.findFirst({
         where: { id: productId, tenantId },
@@ -71,9 +83,9 @@ export const CartModel = {
       const resolvedVariantId = variant.id;
 
       const cart = await tx.cart.upsert({
-        where: { userId: id },
+        where: cartOwnerWhere({ tenantId, userId, guestId }),
         update: {},
-        create: { userId: id, tenantId },
+        create: { tenantId, userId, guestId },
       });
 
       const existingItem = await tx.cartItem.findFirst({
@@ -110,7 +122,7 @@ export const CartModel = {
    * — nunca se confía en ella al leerla, se vuelve a validar al pasar a orden.
    * Volver a llamar esto reemplaza la selección anterior.
    */
-  async addCombo({ tenantId, id, comboProductId, selection }) {
+  async addCombo({ tenantId, userId, guestId, comboProductId, selection }) {
     return prisma.$transaction(async (tx) => {
       const comboProduct = await tx.product.findFirst({
         where: { id: comboProductId, tenantId },
@@ -135,9 +147,9 @@ export const CartModel = {
       });
 
       const cart = await tx.cart.upsert({
-        where: { userId: id },
+        where: cartOwnerWhere({ tenantId, userId, guestId }),
         update: {},
-        create: { userId: id, tenantId },
+        create: { tenantId, userId, guestId },
       });
 
       const existingItem = await tx.cartItem.findFirst({
@@ -166,9 +178,9 @@ export const CartModel = {
     });
   },
 
-  async remove({ tenantId, id, productId, variantId }) {
+  async remove({ tenantId, userId, guestId, productId, variantId }) {
     const cart = await prisma.cart.findFirst({
-      where: { userId: id, tenantId },
+      where: cartOwnerFilter({ tenantId, userId, guestId }),
       select: { id: true },
     });
 
@@ -214,9 +226,9 @@ export const CartModel = {
     return { deleted: false, cartItem: updated };
   },
 
-  async clear({ tenantId, id }) {
+  async clear({ tenantId, userId, guestId }) {
     const cart = await prisma.cart.findFirst({
-      where: { userId: id, tenantId },
+      where: cartOwnerFilter({ tenantId, userId, guestId }),
       select: { id: true },
     });
 
@@ -226,6 +238,75 @@ export const CartModel = {
 
     return prisma.cartItem.deleteMany({
       where: { cartId: cart.id },
+    });
+  },
+
+  /**
+   * Fusiona el carrito de invitado (cookie guestId) dentro del Cart del user que
+   * acaba de loguearse: reparenta las líneas sin conflicto, suma cantidades cuando
+   * el mismo producto+variante ya está en ambos carritos (clampeado a stock), y ante
+   * un conflicto de combo (mismo producto, variantId null) se queda con la selección
+   * que ya tenía el usuario logueado, descartando la del guest. Se llama desde
+   * StoreAuthController.login; si no hay carrito de guest, es un no-op.
+   */
+  async mergeGuestCartIntoUser({ tenantId, userId, guestId }) {
+    return prisma.$transaction(async (tx) => {
+      const guestCart = await tx.cart.findUnique({
+        where: { tenantId_guestId: { tenantId, guestId } },
+        include: { items: { include: { product: { include: { variants: true } } } } },
+      });
+
+      if (!guestCart) return;
+
+      if (guestCart.items.length === 0) {
+        await tx.cart.delete({ where: { id: guestCart.id } });
+        return;
+      }
+
+      const userCart = await tx.cart.upsert({
+        where: { userId },
+        update: {},
+        create: { tenantId, userId },
+      });
+
+      for (const guestItem of guestCart.items) {
+        const existing = await tx.cartItem.findFirst({
+          where: {
+            cartId: userCart.id,
+            productId: guestItem.productId,
+            variantId: guestItem.variantId,
+          },
+        });
+
+        if (!existing) {
+          await tx.cartItem.update({
+            where: { id: guestItem.id },
+            data: { cartId: userCart.id },
+          });
+          continue;
+        }
+
+        if (guestItem.variantId == null) {
+          await tx.cartItem.delete({ where: { id: guestItem.id } });
+          continue;
+        }
+
+        const variant =
+          guestItem.product?.variants?.find((v) => v.id === guestItem.variantId) ?? null;
+        const stock = resolveProductStock(guestItem.product, variant) ?? 0;
+        const mergedQuantity = Math.min(
+          existing.quantity + guestItem.quantity,
+          Math.max(stock, existing.quantity)
+        );
+
+        await tx.cartItem.update({
+          where: { id: existing.id },
+          data: { quantity: mergedQuantity },
+        });
+        await tx.cartItem.delete({ where: { id: guestItem.id } });
+      }
+
+      await tx.cart.delete({ where: { id: guestCart.id } });
     });
   },
 };

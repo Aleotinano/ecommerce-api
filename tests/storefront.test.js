@@ -3,6 +3,7 @@ import request from "supertest";
 import prisma from "../lib/prisma.js";
 import { app } from "../app.js";
 import { seedTenants, storeLoginAs, bearerFor } from "./helpers.js";
+import { hashPassword } from "../helpers/password.js";
 
 let acme;
 let shopco;
@@ -202,11 +203,86 @@ describe("storefront cart and orders (authenticated)", () => {
     expect(res.body.orders.length).toBeGreaterThan(0);
   });
 
-  it("no puede acceder al carrito sin auth → 401", async () => {
+  it("puede acceder al carrito sin auth (guest) → 200", async () => {
     const res = await request(app)
       .get("/store/cart")
       .set("X-Tenant-Slug", "acme");
 
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(200);
+  });
+});
+
+describe("storefront guest cart (no auth)", () => {
+  let productId;
+  let variantId;
+
+  beforeAll(() => {
+    productId = shopco.categories[0].products[0].id;
+    variantId = shopco.categories[0].products[0].variants[0].id;
+  });
+
+  it("GET /store/cart sin auth → 200 carrito vacío", async () => {
+    const res = await request(app).get("/store/cart").set("X-Tenant-Slug", "shopco");
+
+    expect(res.status).toBe(200);
+    expect(res.body.products).toEqual([]);
+  });
+
+  it("POST /store/cart/:productId sin auth → 201 y persiste vía cookie de guest", async () => {
+    const agent = request.agent(app);
+
+    const addRes = await agent
+      .post(`/store/cart/${productId}`)
+      .set("X-Tenant-Slug", "shopco")
+      .send({ variantId });
+
+    expect(addRes.status).toBe(201);
+    expect(
+      addRes.headers["set-cookie"]?.some((c) => c.startsWith("guest_cart_id="))
+    ).toBe(true);
+
+    const getRes = await agent.get("/store/cart").set("X-Tenant-Slug", "shopco");
+
+    expect(getRes.status).toBe(200);
+    expect(getRes.body.products).toHaveLength(1);
+  });
+
+  it("el carrito de invitado se fusiona con el del user al hacer login", async () => {
+    const agent = request.agent(app);
+
+    const addRes = await agent
+      .post(`/store/cart/${productId}`)
+      .set("X-Tenant-Slug", "shopco")
+      .send({ variantId });
+    expect(addRes.status).toBe(201);
+
+    const mergeUser = await prisma.user.create({
+      data: {
+        tenantId: shopco.id,
+        username: "guest_merge_user",
+        email: "guest.merge@shopco.com",
+        password: await hashPassword("password123"),
+        role: "CUSTOMER",
+        emailVerified: true,
+      },
+    });
+
+    const loginRes = await agent
+      .post("/store/auth/login")
+      .set("X-Tenant-Slug", "shopco")
+      .send({ email: mergeUser.email, password: "password123" });
+
+    expect(loginRes.status).toBe(200);
+    expect(
+      loginRes.headers["set-cookie"]?.some((c) => c.startsWith("guest_cart_id=;"))
+    ).toBe(true);
+
+    const cartRes = await request(app)
+      .get("/store/cart")
+      .set("X-Tenant-Slug", "shopco")
+      .set("Authorization", `Bearer ${loginRes.body.token}`);
+
+    expect(cartRes.status).toBe(200);
+    expect(cartRes.body.products).toHaveLength(1);
   });
 });

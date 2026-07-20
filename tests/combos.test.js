@@ -222,11 +222,11 @@ describe("Orden con combo: precio fijo, stock sobre componentes", () => {
     // El customer puede tener una línea de combo residual de los tests de
     // carrito de arriba; se limpia para que `quantity` (cantidad de combos
     // comprados) parta de 0 y las aserciones de total/quantity sean exactas.
-    await CartModel.clear({ tenantId: acme.id, id: acmeCustomer.id }).catch(() => {});
+    await CartModel.clear({ tenantId: acme.id, userId: acmeCustomer.id }).catch(() => {});
 
     await CartModel.addCombo({
       tenantId: acme.id,
-      id: acmeCustomer.id,
+      userId: acmeCustomer.id,
       comboProductId: combo.id,
       selection: [
         { productId: galletaA.id, quantity: 2 },
@@ -255,7 +255,7 @@ describe("Orden con combo: precio fijo, stock sobre componentes", () => {
   it("al completar la orden descuenta stock de los componentes, no del combo", async () => {
     await CartModel.addCombo({
       tenantId: acme.id,
-      id: acmeCustomer.id,
+      userId: acmeCustomer.id,
       comboProductId: combo.id,
       selection: [{ productId: galletaA.id, quantity: 2 }],
     });

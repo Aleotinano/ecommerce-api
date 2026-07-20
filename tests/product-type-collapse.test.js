@@ -85,12 +85,12 @@ describe("CartModel.add sin variantId resuelve la variante default", () => {
 
     const item = await CartModel.add({
       tenantId: acme.id,
-      id: customer.id,
+      userId: customer.id,
       productId: product.id,
     });
     expect(item.variantId).toBe(product.variants[0].id);
 
-    await CartModel.remove({ tenantId: acme.id, id: customer.id, productId: product.id });
+    await CartModel.remove({ tenantId: acme.id, userId: customer.id, productId: product.id });
   });
 
   it("producto sin ninguna variante todavía → VARIANT_REQUIRED", async () => {
@@ -101,7 +101,7 @@ describe("CartModel.add sin variantId resuelve la variante default", () => {
     });
 
     await expect(
-      CartModel.add({ tenantId: acme.id, id: customer.id, productId: product.id })
+      CartModel.add({ tenantId: acme.id, userId: customer.id, productId: product.id })
     ).rejects.toMatchObject({ code: "VARIANT_REQUIRED" });
   });
 });
