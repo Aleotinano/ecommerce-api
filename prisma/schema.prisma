@@ -126,6 +126,7 @@ model Categories {
   imageUrl       String?
   imgPublicId    String?
   isActive       Boolean                @default(true)
+  position       Int                    @default(0) // orden de display; ver TenantAttribute.position
   parentId       Int?
   parent         Categories?            @relation("CategoryToSubcategories", fields: [parentId], references: [id])
   children       Categories[]           @relation("CategoryToSubcategories")

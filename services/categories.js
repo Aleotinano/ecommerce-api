@@ -83,9 +83,9 @@ export const CategoryModel = {
   async getAll({ tenantId, includeChildren = false } = {}) {
     return prisma.categories.findMany({
       where: { tenantId },
-      orderBy: { id: "asc" },
+      orderBy: [{ position: "asc" }, { id: "asc" }],
       include: includeChildren
-        ? { children: { orderBy: { id: "asc" } } }
+        ? { children: { orderBy: [{ position: "asc" }, { id: "asc" }] } }
         : undefined,
     });
   },
@@ -95,7 +95,7 @@ export const CategoryModel = {
       where: { id, tenantId },
       include: {
         parent: true,
-        children: { orderBy: { id: "asc" } },
+        children: { orderBy: [{ position: "asc" }, { id: "asc" }] },
       },
     });
 
@@ -127,6 +127,7 @@ export const CategoryModel = {
     imageUrl,
     imgPublicId,
     parentId,
+    position,
   }) {
     const result = await prisma.$transaction(async (tx) => {
       const exists = await tx.categories.findFirst({
@@ -153,6 +154,7 @@ export const CategoryModel = {
           imageUrl: imageUrl ?? null,
           imgPublicId: imgPublicId ?? null,
           parentId: parentId ?? null,
+          position: position ?? 0,
         },
       });
     });
@@ -171,6 +173,7 @@ export const CategoryModel = {
     imageUrl,
     imgPublicId,
     parentId,
+    position,
   }) {
     const result = await prisma.$transaction(async (tx) => {
       const category = await tx.categories.findFirst({
@@ -210,10 +213,11 @@ export const CategoryModel = {
           ...(imageUrl !== undefined && { imageUrl }),
           ...(imgPublicId !== undefined && { imgPublicId }),
           ...(parentId !== undefined && { parentId }),
+          ...(position !== undefined && { position }),
         },
         include: {
           parent: true,
-          children: { orderBy: { id: "asc" } },
+          children: { orderBy: [{ position: "asc" }, { id: "asc" }] },
         },
       });
     });
@@ -263,7 +267,7 @@ export const CategoryModel = {
     return wrap(categoriesTreeKey(tenantId), CATEGORIES_TREE_TTL, async () => {
       const categories = await prisma.categories.findMany({
         where: { tenantId },
-        orderBy: { id: "asc" },
+        orderBy: [{ position: "asc" }, { id: "asc" }],
         include: { parent: true },
       });
 
