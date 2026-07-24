@@ -3,6 +3,10 @@ import "dotenv/config";
 import prisma from "../lib/prisma.js";
 import { hashPassword } from "../helpers/password.js";
 import { seedTenantConfigs } from "./seed-tenant-config.js";
+import { variantBySku, seedOrdersForUser } from "./lib/seed-helpers.js";
+import { seedMesaDulceCategorias } from "./mesa-dulce/categorias.js";
+import { seedMesaDulceProductos } from "./mesa-dulce/productos.js";
+import { seedMesaDulceOrdenes } from "./mesa-dulce/ordenes.js";
 
 const PASSWORD_PLAIN = "password123";
 
@@ -56,41 +60,10 @@ function image(key) {
   return { img: cld(asset), imgPublicId: asset.id };
 }
 
-// Fotos reales de productos de Mesa Dulce (mismo Cloudinary, subidas por el
-// admin del tenant real antes de la migración de tipos — ver
-// prisma/pre-type-migration-snapshot.json). A diferencia de IMG son .png.
-const MD_IMG = {
-  browniesClasico: { id: "e-commerce-express/products/1782519094434-545073299_c7a7bh", v: 1782519095, ext: "png" },
-  browniesOreo: { id: "e-commerce-express/products/1782514272377-168062203_btlhdm", v: 1782514272, ext: "png" },
-  browniesRedVelvet: { id: "e-commerce-express/products/1782515257615-37110447_ysb5sn", v: 1782515259, ext: "png" },
-  rellenaKinderNutella: { id: "e-commerce-express/products/1782518646995-347947157_ccp4m4", v: 1782518647, ext: "png" },
-  rellenaBonBon: { id: "e-commerce-express/products/1782518675434-443904013_bqm672", v: 1782518676, ext: "png" },
-  rellenaFranui: { id: "e-commerce-express/products/1782518300466-212401095_hptmdu", v: 1782518301, ext: "png" },
-  rellenaLimonFrutosRojos: { id: "e-commerce-express/products/1782518616943-916210625_mqmv98", v: 1782518617, ext: "png" },
-  clasicaChip: { id: "e-commerce-express/products/1782519724803-909746124_hxtlr2", v: 1782519725, ext: "png" },
-  clasicaRedVelvet: { id: "e-commerce-express/products/1782519622394-973798512_t7kfjl", v: 1782519623, ext: "png" },
-  clasicaOreo: { id: "e-commerce-express/products/1782519653996-982248213_tn0bd9", v: 1782519654, ext: "png" },
-  clasicaLimon: { id: "e-commerce-express/products/1782519692868-667836172_twhjgr", v: 1782519693, ext: "png" },
-};
-
-function mdImage(key) {
-  const asset = MD_IMG[key];
-  return { img: cld(asset), imgPublicId: asset.id };
-}
-
-const PAYMENT_BY_STATUS = {
-  COMPLETED: "APPROVED",
-  PROCESSING: "IN_PROCESS",
-  PENDING: "PENDING",
-  CANCELLED: "REJECTED",
-};
-
-function daysAgo(n) {
-  const date = new Date();
-  date.setDate(date.getDate() - n);
-  date.setHours(12, 30, 0, 0);
-  return date;
-}
+// Las fotos e imágenes reales del catálogo de Mesa Dulce, así como su lista de
+// productos/combos/promos, viven ahora en ./mesa-dulce/ (ver import arriba) —
+// dejaron de estar hardcodeadas acá para poder actualizarse sin tocar el seed
+// monolítico de los 3 tenants.
 
 // ---------------------------------------------------------------------------
 // Datos de ACME (catálogo rico: jerarquía + íconos + imágenes reales + stock
@@ -280,109 +253,8 @@ const SHOPCO_PRODUCTS = [
 ];
 
 // ---------------------------------------------------------------------------
-// Datos de MESA DULCE (catálogo real del tenant, tomado del menú vigente al
-// 2026-07-14 — ver capturas del pedido original. Imágenes reales via MD_IMG
-// donde el producto existe en prisma/pre-type-migration-snapshot.json; los
-// productos de ese dump que no están en el menú actual (Turrón de Avena,
-// Pirinea, Chocotorta, etc.) se omiten a propósito. Los combos del menú
-// (Combo Mesa Dulce, Combo Familiar, Promos) los carga el usuario aparte,
-// ver prisma/seed-mesa-dulce-combos.js).
+// Datos de MESA DULCE: ver ./mesa-dulce/categorias.js y ./mesa-dulce/productos.js.
 // ---------------------------------------------------------------------------
-const MESA_DULCE_CATEGORIES = [
-  { name: "Brownies", icon: "cookie", description: "Brownies de autor" },
-  { name: "Cookies Clásicas", icon: "cookie", description: "Cookies clásicas de todos los días" },
-  { name: "Cookies Rellenas", icon: "cookie", description: "Cookies rellenas gourmet" },
-];
-
-const MESA_DULCE_PRODUCTS = [
-  // --- Brownies --------------------------------------------------------------
-  {
-    name: "Brownie Clásico",
-    description: "Brownie de chocolate semiamargo y cacao amargo.",
-    category: "Brownies",
-    ...mdImage("browniesClasico"),
-    variants: [{ price: 2000, stock: 30, sku: "BRW-CLS" }],
-  },
-  {
-    name: "Brownie Oreo",
-    description: "Brownie de chocolate con trozos de Oreo y cacao Oreo.",
-    category: "Brownies",
-    ...mdImage("browniesOreo"),
-    variants: [{ price: 2600, stock: 30, sku: "BRW-ORE" }],
-  },
-  {
-    name: "Brownie Red Velvet",
-    description: "Brownie de vainilla, cacao amargo con cobertura de cheesecake.",
-    category: "Brownies",
-    ...mdImage("browniesRedVelvet"),
-    variants: [{ price: 2000, stock: 30, sku: "BRW-RVL" }],
-  },
-  // --- Cookies Rellenas --------------------------------------------------------
-  {
-    name: "Kinder y Nutella",
-    description: "Cookie de vainilla, kinder, rellena de nutella.",
-    category: "Cookies Rellenas",
-    ...mdImage("rellenaKinderNutella"),
-    variants: [{ price: 4300, stock: 25, sku: "COR-KIN" }],
-  },
-  {
-    name: "Bon o Bon",
-    description: "Cookie de vainilla, bon o bon, rellena de nutella.",
-    category: "Cookies Rellenas",
-    ...mdImage("rellenaBonBon"),
-    variants: [{ price: 4000, stock: 25, sku: "COR-BON" }],
-  },
-  {
-    name: "Limón y Frutos Rojos",
-    description: "Cookie de limón, pistachos, rellena de curd de limón y reducción de frutos rojos.",
-    category: "Cookies Rellenas",
-    ...mdImage("rellenaLimonFrutosRojos"),
-    variants: [{ price: 3900, stock: 25, sku: "COR-LIM" }],
-  },
-  {
-    name: "Red Velvet",
-    description: "Cookie de vainilla, cacao amargo, chocolate blanco, rellena con frosting de queso crema.",
-    category: "Cookies Rellenas",
-    // Sin foto real disponible (no está en el dump pre-migración).
-    variants: [{ price: 4000, stock: 25, sku: "COR-RVL" }],
-  },
-  {
-    name: "Franuki",
-    description: "Masa de cacao con chips de chocolate blanco, rellena con reducción de frutos rojos y decorada con chocolate blanco y franuí.",
-    category: "Cookies Rellenas",
-    ...mdImage("rellenaFranui"),
-    variants: [{ price: 4000, stock: 25, sku: "COR-FRA" }],
-  },
-  // --- Cookies Clásicas --------------------------------------------------------
-  {
-    name: "Chips",
-    description: "Masa de vainilla con chocolate semiamargo.",
-    category: "Cookies Clásicas",
-    ...mdImage("clasicaChip"),
-    variants: [{ price: 800, stock: 50, sku: "COC-CHI" }],
-  },
-  {
-    name: "Red velvet",
-    description: "Masa de vainilla, cacao amargo y chocolate blanco.",
-    category: "Cookies Clásicas",
-    ...mdImage("clasicaRedVelvet"),
-    variants: [{ price: 800, stock: 50, sku: "COC-RVL" }],
-  },
-  {
-    name: "Oreo",
-    description: "Masa de oreo, oreos trituradas y chocolate blanco.",
-    category: "Cookies Clásicas",
-    ...mdImage("clasicaOreo"),
-    variants: [{ price: 800, stock: 50, sku: "COC-ORE" }],
-  },
-  {
-    name: "Limón",
-    description: "Masa de limón con amapolas.",
-    category: "Cookies Clásicas",
-    ...mdImage("clasicaLimon"),
-    variants: [{ price: 800, stock: 50, sku: "COC-LIM" }],
-  },
-];
 
 // ---------------------------------------------------------------------------
 // Helpers de seeding
@@ -476,13 +348,6 @@ async function seedProducts(tenantId, categoryIdByName, specs) {
   }
 }
 
-async function variantBySku(tenantId, sku) {
-  return prisma.productVariant.findUnique({
-    where: { tenantId_sku: { tenantId, sku } },
-    include: { product: { select: { price: true } } },
-  });
-}
-
 async function seedCartForUser({ tenantId, userId, items }) {
   const cart = await prisma.cart.create({ data: { tenantId, userId } });
 
@@ -501,85 +366,6 @@ async function seedCartForUser({ tenantId, userId, items }) {
   }
 
   return cart;
-}
-
-// Secuencia de estados por los que pasó la orden hasta su estado final, para
-// poblar un timeline coherente de demo.
-const STATUS_FLOW = {
-  PENDING: ["PENDING"],
-  PROCESSING: ["PENDING", "PROCESSING"],
-  COMPLETED: ["PENDING", "PROCESSING", "COMPLETED"],
-  CANCELLED: ["PENDING", "CANCELLED"],
-};
-
-const STATUS_NOTE = {
-  PENDING: "Pedido creado",
-  PROCESSING: "Pedido en preparación",
-  COMPLETED: "Pedido completado",
-  CANCELLED: "Pedido cancelado",
-};
-
-function buildStatusHistory({ status, userId, createdAt }) {
-  const flow = STATUS_FLOW[status] ?? ["PENDING"];
-  return flow.map((toStatus, index) => {
-    // Cada transición ocurre algo después de la creación de la orden.
-    const at = new Date(createdAt.getTime() + index * 60 * 60 * 1000);
-    return {
-      fromStatus: index === 0 ? null : flow[index - 1],
-      toStatus,
-      note: STATUS_NOTE[toStatus],
-      changedById: index === 0 ? userId : null,
-      createdAt: at,
-    };
-  });
-}
-
-async function seedOrdersForUser({ tenantId, userId, orders }) {
-  let created = 0;
-
-  for (const spec of orders) {
-    const items = [];
-
-    for (const line of spec.items) {
-      const variant = await variantBySku(tenantId, line.sku);
-      if (!variant) continue;
-      // Precio efectivo: variante o, si es null, el del producto.
-      const price = variant.price ?? variant.product.price ?? 0;
-      items.push({
-        productId: variant.productId,
-        variantId: variant.id,
-        quantity: line.quantity,
-        price,
-      });
-    }
-
-    if (!items.length) continue;
-
-    const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
-    const createdAt = daysAgo(spec.daysAgo);
-
-    await prisma.order.create({
-      data: {
-        tenantId,
-        userId,
-        status: spec.status,
-        total,
-        paymentStatus: PAYMENT_BY_STATUS[spec.status],
-        paymentMethod: "seed-order",
-        paymentId: `seed-order-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        createdAt,
-        updatedAt: createdAt,
-        orderItems: { create: items },
-        statusHistory: {
-          create: buildStatusHistory({ status: spec.status, userId, createdAt }),
-        },
-      },
-    });
-
-    created += 1;
-  }
-
-  return created;
 }
 
 // ---------------------------------------------------------------------------
@@ -637,6 +423,8 @@ async function main() {
   await seedProducts(shopco.id, shopcoCategories, SHOPCO_PRODUCTS);
 
   // --- MESA DULCE (catálogo real, sin atributos de variante) ---------------
+  // Categorías/productos/combos/promo/órdenes viven en ./mesa-dulce/*.js —
+  // scripts idempotentes, reusables standalone (ver package.json seed:mesa-dulce*).
   const mesaDulce = await seedTenantBase({
     slug: "mesa-dulce",
     name: "Mesa Dulce",
@@ -647,8 +435,9 @@ async function main() {
     ],
   });
 
-  const mesaDulceCategories = await seedCategories(mesaDulce.id, MESA_DULCE_CATEGORIES);
-  await seedProducts(mesaDulce.id, mesaDulceCategories, MESA_DULCE_PRODUCTS);
+  await seedMesaDulceCategorias();
+  const { productsCreated: mesaDulceProducts } = await seedMesaDulceProductos();
+  const mesaDulceOrders = await seedMesaDulceOrdenes();
 
   console.log("\n=== Seed completado ===\n");
   for (const t of [acme, shopco, mesaDulce]) {
@@ -659,7 +448,7 @@ async function main() {
     console.log();
   }
   console.log(`acme: ${ACME_PRODUCTS.length} productos, carrito con ${ACME_CART.length} items, ${acmeOrders} órdenes`);
-  console.log(`mesa-dulce: ${MESA_DULCE_PRODUCTS.length} productos`);
+  console.log(`mesa-dulce: ${mesaDulceProducts} productos, ${mesaDulceOrders} órdenes (seña)`);
   console.log();
 
   console.log("--- Tenant configs ---");
