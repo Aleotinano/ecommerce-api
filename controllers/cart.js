@@ -1,5 +1,7 @@
+import prisma from "../lib/prisma.js";
 import { CartModel } from "../services/cart.js";
 import { getProductPrice, resolveProductStock } from "../helpers/price.js";
+import { getPromoTiersByProduct, pickPromoTier, applyPromoDiscount } from "../services/promos.js";
 
 // Este controller es compartido por /cart (admin, exige login vía verifyToken, sin
 // req.cartOwner) y /store/cart (storefront, admite guest vía resolveCartOwner). El
@@ -14,34 +16,58 @@ export class cartController {
       const { userId, guestId } = resolveOwner(req);
       const cart = await CartModel.getCart({ tenantId: req.tenantId, userId, guestId });
 
+      // Cantidad total por producto (sumando todas sus variantes en el carrito),
+      // para resolver el escalón de promo que corresponde a cada línea — ver
+      // services/promos.js.
+      const qtyByProduct = new Map();
+      for (const item of cart.items) {
+        if (item.product?.type !== "PRODUCTO") continue;
+        qtyByProduct.set(
+          item.productId,
+          (qtyByProduct.get(item.productId) ?? 0) + item.quantity
+        );
+      }
+      const promoTiersByProduct = qtyByProduct.size
+        ? await getPromoTiersByProduct(prisma, req.tenantId, [...qtyByProduct.keys()])
+        : new Map();
+
       return res.json({
         message: "Tu carrito de compras",
         cart: {
           created: cart.createdAt,
           updated: cart.updatedAt,
         },
-        products: cart.items.map((item) => ({
-          product: item.product
-            ? {
-                id: item.product.id,
-                name: item.product.name,
-                type: item.product.type,
-                img: item.product.img,
-              }
-            : null,
-          variant: item.variant
-            ? {
-                id: item.variant.id,
-                attributes: item.variant.attributes,
-                sku: item.variant.sku,
-              }
-            : null,
-          price: getProductPrice(item.variant, item.product),
-          stock: resolveProductStock(item.product, item.variant),
-          img: item.variant?.img ?? item.product?.img ?? null,
-          quantity: item.quantity,
-          comboSelection: item.comboSelection ?? null,
-        })),
+        products: cart.items.map((item) => {
+          const originalPrice = getProductPrice(item.variant, item.product);
+          const tiers =
+            item.product?.type === "PRODUCTO" ? promoTiersByProduct.get(item.productId) : null;
+          const tier = tiers ? pickPromoTier(tiers, qtyByProduct.get(item.productId)) : null;
+
+          return {
+            product: item.product
+              ? {
+                  id: item.product.id,
+                  name: item.product.name,
+                  type: item.product.type,
+                  img: item.product.img,
+                }
+              : null,
+            variant: item.variant
+              ? {
+                  id: item.variant.id,
+                  attributes: item.variant.attributes,
+                  sku: item.variant.sku,
+                }
+              : null,
+            originalPrice,
+            price: tier ? applyPromoDiscount(originalPrice, tier) : originalPrice,
+            promo: tier ? { minQty: tier.minQty, discountPercentage: tier.discountPercentage } : null,
+            stock: resolveProductStock(item.product, item.variant),
+            img: item.variant?.img ?? item.product?.img ?? null,
+            quantity: item.quantity,
+            comboSelection: item.comboSelection ?? null,
+          };
+        }),
       });
     } catch (error) {
       next(error);
