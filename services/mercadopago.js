@@ -1,5 +1,5 @@
 import prisma from "../lib/prisma.js";
-import { preference, payment } from "../config/mercadoPago.js";
+import { preference, payment } from "../config/mercadopago.js";
 import { getBackUrls, getPaymentMethods } from "../helpers/mercadopago.js";
 import { createError } from "../helpers/error.js";
 import { DEFAULTS } from "../config.js";

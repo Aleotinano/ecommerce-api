@@ -433,11 +433,29 @@ model Order {
   orderItems    OrderItem[]
   statusHistory OrderStatusHistory[]
 
-  paymentStatus PaymentStatus @default(PENDING)
-  paymentMethod String?
+  paymentStatus PaymentStatus       @default(PENDING)
+  paymentMethod OrderPaymentMethod?
   paymentId     String?
-  mercadoPagoId String?       @unique
+  mercadoPagoId String?             @unique
   preferenceId  String?
+  // Nota libre para el detalle de pago mixto (ej. "transfiere 5000, resto
+  // efectivo"). El software no gestiona el dinero: es solo información para
+  // quien revisa el pago manualmente.
+  paymentNote   String?
+
+  // Transferencia: la confirma un asistente humano tras revisarla a mano —
+  // no hay verificación automática. Solo aplica si paymentMethod ∈
+  // {TRANSFER, MIXED}. Independiente de paymentStatus (MercadoPago).
+  transferConfirmedById Int?
+  transferConfirmedAt   DateTime?
+
+  // Entrega: retiro en local o envío a una dirección. Los campos de
+  // dirección solo son relevantes si fulfillmentMethod = DELIVERY.
+  fulfillmentMethod FulfillmentMethod?
+  addressText       String?
+  addressLat        Float?
+  addressLng        Float?
+  addressDetails    String? // ej. "rejas grises", referencia para el repartidor
 
   // Procedencia + revisión (órdenes creadas por el bot nacen sin revisar).
   origin       OrderOrigin @default(ADMIN)
@@ -607,6 +625,17 @@ enum PaymentStatus {
 enum OrderOrigin {
   ADMIN
   BOT
+}
+
+enum FulfillmentMethod {
+  DELIVERY
+  PICKUP
+}
+
+enum OrderPaymentMethod {
+  CASH
+  TRANSFER
+  MIXED
 }
 
 enum Role {

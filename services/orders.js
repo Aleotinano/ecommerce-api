@@ -1,9 +1,15 @@
 import prisma from "../lib/prisma.js";
 import { createError } from "../helpers/error.js";
-import { getProductPrice, resolveProductStock, resolveVariantForProduct } from "../helpers/price.js";
+import {
+  getProductPrice,
+  resolveProductStock,
+  resolveVariantForProduct,
+  roundMoney,
+} from "../helpers/price.js";
 import { sendMail, buildOrderStatusEmail } from "../lib/mailer.js";
 import { logger } from "../lib/logger.js";
 import { validateComboSelection } from "./combos.js";
+import { getPromoTiersByProduct, pickPromoTier, applyPromoDiscount } from "./promos.js";
 
 const log = logger.child({ module: "orders" });
 
@@ -27,9 +33,6 @@ const orderItemsInclude = {
     },
   },
 };
-
-/** Redondea un monto a 2 decimales (el modelo usa Float). */
-const roundMoney = (n) => Math.round(n * 100) / 100;
 
 /**
  * Valida una lista de items `{ productId, variantId?, quantity, note?, comboSelection? }`
@@ -60,6 +63,20 @@ async function priceItems(tx, tenantId, items, { checkStock = true } = {}) {
     include: { variants: true },
   });
   const productMap = new Map(products.map((p) => [p.id, p]));
+
+  // Cantidad total por producto (sumando TODAS sus variantes), para resolver el
+  // escalón de promo que corresponde — ver services/promos.js. Excluye COMBO (precio
+  // fijo, no aplica). Se resuelve UNA vez para todo `items`, no por línea, así 2
+  // líneas del mismo producto con distinta variante caen en el mismo balde.
+  const qtyByProduct = new Map();
+  for (const item of items) {
+    const product = productMap.get(item.productId);
+    if (product?.type !== "PRODUCTO") continue;
+    qtyByProduct.set(item.productId, (qtyByProduct.get(item.productId) ?? 0) + item.quantity);
+  }
+  const promoTiersByProduct = qtyByProduct.size
+    ? await getPromoTiersByProduct(tx, tenantId, [...qtyByProduct.keys()])
+    : new Map();
 
   const pricedItems = [];
   for (const item of items) {
@@ -127,6 +144,13 @@ async function priceItems(tx, tenantId, items, { checkStock = true } = {}) {
       throw error;
     }
 
+    let finalPrice = Number(price);
+    if (product.type === "PRODUCTO") {
+      const tiers = promoTiersByProduct.get(item.productId);
+      const tier = tiers ? pickPromoTier(tiers, qtyByProduct.get(item.productId)) : null;
+      if (tier) finalPrice = applyPromoDiscount(finalPrice, tier);
+    }
+
     let comboChildren;
     if (product.type === "COMBO") {
       const perCombo = await validateComboSelection({
@@ -147,7 +171,7 @@ async function priceItems(tx, tenantId, items, { checkStock = true } = {}) {
       productId: item.productId,
       variantId: variant?.id ?? null,
       quantity: item.quantity,
-      price: Number(price),
+      price: finalPrice,
       note: item.note ?? null,
       comboChildren,
     });
@@ -235,7 +259,17 @@ async function decrementLineStock(tx, line) {
 }
 
 export const OrderModel = {
-  async create({ tenantId, userId }) {
+  async create({
+    tenantId,
+    userId,
+    fulfillmentMethod,
+    addressText,
+    addressLat,
+    addressLng,
+    addressDetails,
+    paymentMethod,
+    paymentNote,
+  }) {
     const cart = await prisma.cart.findFirst({
       where: { userId, tenantId },
       include: { items: true },
@@ -258,7 +292,19 @@ export const OrderModel = {
       );
 
       const order = await tx.order.create({
-        data: { tenantId, userId, total, status: "PENDING" },
+        data: {
+          tenantId,
+          userId,
+          total,
+          status: "PENDING",
+          fulfillmentMethod,
+          addressText,
+          addressLat,
+          addressLng,
+          addressDetails,
+          paymentMethod,
+          paymentNote,
+        },
       });
 
       await insertOrderItems(tx, order.id, pricedItems);
@@ -439,6 +485,30 @@ export const OrderModel = {
           409
         );
       }
+      if (!order.fulfillmentMethod || !order.paymentMethod) {
+        throw createError(
+          "Falta completar método de entrega y/o de pago antes de producir",
+          "FULFILLMENT_INCOMPLETE",
+          409
+        );
+      }
+      if (order.fulfillmentMethod === "DELIVERY" && !order.addressText) {
+        throw createError(
+          "Falta la dirección de entrega",
+          "ADDRESS_MISSING",
+          409
+        );
+      }
+      if (
+        ["TRANSFER", "MIXED"].includes(order.paymentMethod) &&
+        !order.transferConfirmedAt
+      ) {
+        throw createError(
+          "La transferencia debe estar confirmada antes de producir",
+          "TRANSFER_NOT_CONFIRMED",
+          409
+        );
+      }
     }
 
     const recordHistory = (tx) =>
@@ -515,8 +585,20 @@ export const OrderModel = {
    *                                  `id` es el OrderItem.id (no variantId: una
    *                                  orden puede tener 2 filas de la misma
    *                                  variante con notas distintas)
+   * @param {object} [p.fulfillment] datos de entrega/pago a completar o
+   *                                  corregir (típico en órdenes BOT, que
+   *                                  nacen sin esto): fulfillmentMethod,
+   *                                  addressText/Lat/Lng/Details,
+   *                                  paymentMethod, paymentNote — todos
+   *                                  opcionales, solo se tocan los que vienen.
    */
-  async reviewOrder({ tenantId, orderId, reviewedById, items = null }) {
+  async reviewOrder({
+    tenantId,
+    orderId,
+    reviewedById,
+    items = null,
+    fulfillment = null,
+  }) {
     const order = await prisma.order.findFirst({
       where: { id: orderId, tenantId },
       include: { ...orderItemsInclude.include },
@@ -538,6 +620,22 @@ export const OrderModel = {
 
     return prisma.$transaction(async (tx) => {
       const data = { reviewedById, reviewedAt: new Date() };
+
+      if (fulfillment) {
+        for (const key of [
+          "fulfillmentMethod",
+          "addressText",
+          "addressLat",
+          "addressLng",
+          "addressDetails",
+          "paymentMethod",
+          "paymentNote",
+        ]) {
+          if (fulfillment[key] !== undefined) {
+            data[key] = fulfillment[key];
+          }
+        }
+      }
 
       if (hasEdits) {
         const orderItemIds = new Set(order.orderItems.map((it) => it.id));
@@ -664,6 +762,47 @@ export const OrderModel = {
         paymentStatus: "DEPOSIT_PAID",
         depositConfirmedById: confirmedById,
         depositConfirmedAt: new Date(),
+      },
+      ...orderItemsInclude,
+    });
+  },
+
+  /**
+   * Acción admin: confirma que la transferencia del pago llegó (la revisa un
+   * asistente a mano, no hay verificación automática — el software no
+   * gestiona el dinero). Independiente de `paymentStatus`/MercadoPago y de
+   * la seña: solo aplica al método de pago TRANSFER/MIXED de esta orden.
+   */
+  async confirmTransfer({ tenantId, orderId, confirmedById }) {
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, tenantId },
+    });
+
+    if (!order) {
+      throw createError("Orden no encontrada", "ORDER_NOT_FOUND", 404);
+    }
+
+    if (!["TRANSFER", "MIXED"].includes(order.paymentMethod)) {
+      throw createError(
+        "La orden no tiene transferencia pendiente de confirmar",
+        "TRANSFER_NOT_APPLICABLE",
+        409
+      );
+    }
+
+    if (order.transferConfirmedAt) {
+      throw createError(
+        "La transferencia ya fue confirmada",
+        "TRANSFER_ALREADY_CONFIRMED",
+        409
+      );
+    }
+
+    return prisma.order.update({
+      where: { id: orderId },
+      data: {
+        transferConfirmedById: confirmedById,
+        transferConfirmedAt: new Date(),
       },
       ...orderItemsInclude,
     });

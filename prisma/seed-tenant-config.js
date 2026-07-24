@@ -61,6 +61,12 @@ export const tenantConfigSeeds = {
     showOutOfStock: true,
     allowCartGuest: false,
   },
+  // Sin branding todavía (el catálogo real se carga aparte, ver seed.js). Solo
+  // habilitamos seña para poder testear el flujo de depósito de mesa-dulce.
+  "mesa-dulce": {
+    depositEnabled: true,
+    depositPercentage: 50,
+  },
 };
 
 export async function seedTenantConfigs() {

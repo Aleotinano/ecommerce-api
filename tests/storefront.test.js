@@ -187,7 +187,8 @@ describe("storefront cart and orders (authenticated)", () => {
     const res = await request(app)
       .post("/store/orders")
       .set("X-Tenant-Slug", "acme")
-      .set("Authorization", bearer);
+      .set("Authorization", bearer)
+      .send({ fulfillmentMethod: "PICKUP", paymentMethod: "CASH" });
 
     expect(res.status).toBe(201);
     expect(res.body.order.status).toBe("PENDING");

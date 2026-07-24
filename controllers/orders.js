@@ -18,10 +18,26 @@ export class OrderController {
   static async create(req, res, next) {
     try {
       const { id, username } = req.user;
+      const {
+        fulfillmentMethod,
+        addressText,
+        addressLat,
+        addressLng,
+        addressDetails,
+        paymentMethod,
+        paymentNote,
+      } = req.body;
 
       const order = await OrderModel.create({
         tenantId: req.tenantId,
         userId: id,
+        fulfillmentMethod,
+        addressText,
+        addressLat,
+        addressLng,
+        addressDetails,
+        paymentMethod,
+        paymentNote,
       });
 
       return res.status(201).json({
@@ -31,6 +47,13 @@ export class OrderController {
           user: username,
           status: order.status,
           paymentStatus: order.paymentStatus,
+          fulfillmentMethod: order.fulfillmentMethod,
+          addressText: order.addressText,
+          addressLat: order.addressLat,
+          addressLng: order.addressLng,
+          addressDetails: order.addressDetails,
+          paymentMethod: order.paymentMethod,
+          paymentNote: order.paymentNote,
           total: order.total,
           createdAt: order.createdAt,
           productos: order.orderItems.map((item) => ({
@@ -117,6 +140,14 @@ export class OrderController {
         depositAmount: order.depositAmount,
         status: order.status,
         paymentStatus: order.paymentStatus,
+        fulfillmentMethod: order.fulfillmentMethod,
+        addressText: order.addressText,
+        addressLat: order.addressLat,
+        addressLng: order.addressLng,
+        addressDetails: order.addressDetails,
+        paymentMethod: order.paymentMethod,
+        paymentNote: order.paymentNote,
+        transferConfirmedAt: order.transferConfirmedAt,
         total: order.total,
         createdAt: order.createdAt,
         productos: order.orderItems.map((item) => ({
@@ -159,6 +190,14 @@ export class OrderController {
           id: order.id,
           status: order.status,
           paymentStatus: order.paymentStatus,
+          fulfillmentMethod: order.fulfillmentMethod,
+          addressText: order.addressText,
+          addressLat: order.addressLat,
+          addressLng: order.addressLng,
+          addressDetails: order.addressDetails,
+          paymentMethod: order.paymentMethod,
+          paymentNote: order.paymentNote,
+          transferConfirmedAt: order.transferConfirmedAt,
           total: order.total,
           createdAt: order.createdAt,
           updatedAt: order.updatedAt,
@@ -226,13 +265,31 @@ export class OrderController {
   static async review(req, res, next) {
     try {
       const { id: orderId } = req.params;
-      const { items } = req.body ?? {};
+      const {
+        items,
+        fulfillmentMethod,
+        addressText,
+        addressLat,
+        addressLng,
+        addressDetails,
+        paymentMethod,
+        paymentNote,
+      } = req.body ?? {};
 
       const order = await OrderModel.reviewOrder({
         tenantId: req.tenantId,
         orderId,
         reviewedById: req.user.id,
         items: items ?? null,
+        fulfillment: {
+          fulfillmentMethod,
+          addressText,
+          addressLat,
+          addressLng,
+          addressDetails,
+          paymentMethod,
+          paymentNote,
+        },
       });
 
       return res.json({
@@ -241,6 +298,13 @@ export class OrderController {
           id: order.id,
           status: order.status,
           paymentStatus: order.paymentStatus,
+          fulfillmentMethod: order.fulfillmentMethod,
+          addressText: order.addressText,
+          addressLat: order.addressLat,
+          addressLng: order.addressLng,
+          addressDetails: order.addressDetails,
+          paymentMethod: order.paymentMethod,
+          paymentNote: order.paymentNote,
           total: order.total,
           requiresDeposit: order.requiresDeposit,
           depositAmount: order.depositAmount,
@@ -284,6 +348,31 @@ export class OrderController {
           total: order.total,
           depositAmount: order.depositAmount,
           depositConfirmedAt: order.depositConfirmedAt,
+          updatedAt: order.updatedAt,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async confirmTransfer(req, res, next) {
+    try {
+      const { id: orderId } = req.params;
+
+      const order = await OrderModel.confirmTransfer({
+        tenantId: req.tenantId,
+        orderId,
+        confirmedById: req.user.id,
+      });
+
+      return res.json({
+        message: "Transferencia confirmada exitosamente",
+        order: {
+          id: order.id,
+          status: order.status,
+          paymentMethod: order.paymentMethod,
+          transferConfirmedAt: order.transferConfirmedAt,
           updatedAt: order.updatedAt,
         },
       });

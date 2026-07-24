@@ -8,6 +8,8 @@ import {
   orderQuery,
   orderReview,
   orderConfirmDeposit,
+  orderConfirmTransfer,
+  orderCreate,
 } from "../schemas/order.schema.js";
 import { validateId } from "../schemas/id.schema.js";
 
@@ -17,14 +19,16 @@ const roleRequired = ["ADMIN", "STAFF"];
 
 const validation = {
   id: validate({ params: validateId }),
+  create: validate({ body: orderCreate }),
   update: validate({ body: orderStatus }),
   review: validate({ body: orderReview }),
   confirmDeposit: validate({ body: orderConfirmDeposit }),
+  confirmTransfer: validate({ body: orderConfirmTransfer }),
   query: validate({ query: orderQuery }),
 };
 
 // Crear orden con el carrito
-ordersRouter.post("/", verifyToken, OrderController.create);
+ordersRouter.post("/", verifyToken, validation.create, OrderController.create);
 
 // Obtener todas órdenes de usuario
 ordersRouter.get("/", verifyToken, validation.query, OrderController.getAll);
@@ -69,4 +73,14 @@ ordersRouter.post(
   validation.id,
   validation.confirmDeposit,
   OrderController.confirmDeposit
+);
+
+// Confirmar que la transferencia del pago llegó (revisión manual, no automática)
+ordersRouter.post(
+  "/:id/confirm-transfer",
+  verifyToken,
+  requireRole(roleRequired),
+  validation.id,
+  validation.confirmTransfer,
+  OrderController.confirmTransfer
 );

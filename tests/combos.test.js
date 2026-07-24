@@ -259,7 +259,12 @@ describe("Orden con combo: precio fijo, stock sobre componentes", () => {
       comboProductId: combo.id,
       selection: [{ productId: galletaA.id, quantity: 2 }],
     });
-    const order = await OrderModel.create({ tenantId: acme.id, userId: acmeCustomer.id });
+    const order = await OrderModel.create({
+      tenantId: acme.id,
+      userId: acmeCustomer.id,
+      fulfillmentMethod: "PICKUP",
+      paymentMethod: "CASH",
+    });
 
     const galletaAVariantId = galletaA.variants[0].id;
     const stockBeforeA = (

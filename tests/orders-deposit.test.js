@@ -118,6 +118,7 @@ describe("guard PENDING → PROCESSING", () => {
       tenantId: acme.id,
       orderId: order.id,
       reviewedById: acmeAdminId,
+      fulfillment: { fulfillmentMethod: "PICKUP", paymentMethod: "CASH" },
     });
     await OrderModel.confirmDeposit({
       tenantId: acme.id,
