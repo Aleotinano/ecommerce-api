@@ -27,7 +27,7 @@ function variantOptionsKey(tenantId) {
   return `${tenantNs(tenantId)}:prod:options`;
 }
 
-async function invalidateProductsCache(tenantId) {
+export async function invalidateProductsCache(tenantId) {
   await delPattern(`${tenantNs(tenantId)}:prod:*`);
 }
 
@@ -512,6 +512,10 @@ export const ProductModel = {
             where: { isActive: true },
             orderBy: { id: "asc" },
           },
+          promoLinks: {
+            where: { promo: { isActive: true } },
+            include: { promo: { include: { tiers: { orderBy: { minQty: "asc" } } } } },
+          },
         },
       });
 
@@ -519,7 +523,19 @@ export const ProductModel = {
         throw createError("Producto no encontrado", "PRODUCT_NOT_FOUND", 404);
       }
 
-      return product;
+      const { promoLinks, ...rest } = product;
+      const activePromoLink = promoLinks[0] ?? null;
+
+      return {
+        ...rest,
+        activePromo: activePromoLink
+          ? {
+              id: activePromoLink.promo.id,
+              name: activePromoLink.promo.name,
+              tiers: activePromoLink.promo.tiers,
+            }
+          : null,
+      };
     });
   },
 

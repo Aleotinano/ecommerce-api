@@ -1,3 +1,6 @@
+/** Redondea un monto a 2 decimales (el modelo usa Float). */
+export const roundMoney = (n) => Math.round(n * 100) / 100;
+
 /**
  * Precio efectivo de una línea, según el tipo de producto (`Product.type`):
  * - COMBO: `product.price` (precio fijo del combo).

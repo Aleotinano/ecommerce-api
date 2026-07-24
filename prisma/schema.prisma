@@ -28,6 +28,9 @@ model Tenant {
   suggestionImages       SuggestionImage[]
   comboAllowedProducts   ComboAllowedProduct[]
   comboAllowedCategories ComboAllowedCategory[]
+  promos                 Promo[]
+  promoTiers             PromoTier[]
+  promoProducts          PromoProduct[]
 }
 
 model TenantConfig {
@@ -182,6 +185,10 @@ model Product {
   allowedInCombos      ComboAllowedProduct[]  @relation("AllowedInCombos")
   comboCategoryOptions ComboAllowedCategory[] @relation("ComboCategoryOptions")
 
+  // Promos de descuento por cantidad vinculadas a este producto (solo PRODUCTO,
+  // nunca COMBO — ver services/promos.js). Ver [[Promo]] más abajo.
+  promoLinks PromoProduct[]
+
   @@index([tenantId])
 }
 
@@ -244,6 +251,65 @@ model ComboAllowedCategory {
   @@index([tenantId])
   @@index([comboProductId])
   @@index([categoryId])
+}
+
+// Descuento por cantidad sobre productos específicos (nunca COMBO — precio fijo,
+// no tiene sentido "por cantidad de variante"; se valida al crear/editar). Escalones
+// (`tiers`) van de menor a mayor `minQty`; al pricear se aplica el de mayor `minQty`
+// que la cantidad total del producto (sumando TODAS sus variantes) todavía cumple —
+// ver `getPromoTiersByProduct`/`pickPromoTier` en services/promos.js. Un producto
+// puede estar a lo sumo en una Promo activa a la vez; se valida a nivel servicio
+// (cruza `Promo.isActive` + `PromoProduct`, no representable como constraint de una
+// sola tabla) en vez de un índice parcial. Sin rango de fechas/agendado: fuera de
+// alcance v1, no se pidió.
+model Promo {
+  id          Int      @id @default(autoincrement())
+  tenantId    Int
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  tenant   Tenant         @relation(fields: [tenantId], references: [id])
+  tiers    PromoTier[]
+  products PromoProduct[]
+
+  @@index([tenantId])
+}
+
+model PromoTier {
+  id                 Int      @id @default(autoincrement())
+  tenantId           Int
+  promoId            Int
+  minQty             Int
+  discountPercentage Float
+  createdAt          DateTime @default(now())
+
+  promo  Promo  @relation(fields: [promoId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([promoId, minQty])
+  @@index([tenantId])
+}
+
+// Join promo<->producto. Sin `isActive` propio: el estado vive en `Promo.isActive`.
+// `@@index([productId])` es el hot path real (pricear resuelve "dados estos
+// productIds, su promo activa"), a diferencia de `ComboAllowedProduct` que siempre
+// busca por `comboProductId`.
+model PromoProduct {
+  id        Int      @id @default(autoincrement())
+  tenantId  Int
+  promoId   Int
+  productId Int
+  createdAt DateTime @default(now())
+
+  promo   Promo   @relation(fields: [promoId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+
+  @@unique([promoId, productId])
+  @@index([tenantId])
+  @@index([productId])
 }
 
 // Tipo de valor de un atributo de variante del tenant.
