@@ -8,6 +8,8 @@ import cookieParser from "cookie-parser";
 import { DEFAULTS } from "./config.js";
 import { logger } from "./lib/logger.js";
 import { httpLogger } from "./middleware/httpLogger.js";
+import prisma from "./lib/prisma.js";
+import { closeRedis } from "./lib/redis.js";
 
 // rutas
 import { ordersRouter } from "./routes/orders.js";
@@ -67,6 +69,10 @@ app.use("/tenant-config", tenantConfigRouter);
 app.use("/tenant-attributes", tenantAttributesRouter);
 app.use("/store", storeRouter);
 
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "ok" });
+});
+
 // Manejo de errores \\
 app.use(notFoundHandler);
 app.use(errorHandler);
@@ -74,7 +80,17 @@ app.use(errorHandler);
 export { app };
 
 if (DEFAULTS.NODE_ENV !== "test") {
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     logger.info({ port: PORT }, "server listening");
   });
+
+  const shutdown = async (signal) => {
+    logger.info({ signal }, "shutting down");
+    server.close(() => process.exit(0));
+    await prisma.$disconnect();
+    await closeRedis();
+  };
+
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 }

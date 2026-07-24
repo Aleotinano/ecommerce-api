@@ -22,27 +22,30 @@
   "license": "ISC",
   "type": "module",
   "packageManager": "pnpm@10.24.0+sha512.01ff8ae71b4419903b65c60fb2dc9d34cf8bb6e06d03bde112ef38f7a34d6904c424ba66bea5cdcf12890230bf39f9580473140ed9c946fef328b6e5238a345a",
+  "engines": {
+    "node": ">=24 <25"
+  },
   "dependencies": {
     "@prisma/adapter-pg": "7.3.0",
-    "@prisma/client-runtime-utils": "^7.4.2",
+    "@prisma/client-runtime-utils": "7.4.2",
     "argon2": "0.44.0",
-    "cloudinary": "^2.9.0",
+    "cloudinary": "2.9.0",
     "compression": "1.8.1",
     "cookie-parser": "1.4.7",
     "cors": "2.8.5",
     "express": "5.2.1",
-    "express-rate-limit": "^8.2.1",
-    "rate-limit-redis": "^4.2.0",
-    "helmet": "^8.1.0",
-    "ioredis": "^5.4.1",
+    "express-rate-limit": "8.2.1",
+    "rate-limit-redis": "4.2.0",
+    "helmet": "8.1.0",
+    "ioredis": "5.4.1",
     "jsonwebtoken": "9.0.3",
-    "mercadopago": "^2.12.0",
+    "mercadopago": "2.12.0",
     "morgan": "1.10.1",
-    "multer": "^2.1.1",
-    "nodemailer": "^6.10.1",
+    "multer": "2.1.1",
+    "nodemailer": "6.10.1",
     "pg": "8.17.2",
-    "pino": "^9.14.0",
-    "pino-http": "^10.5.0",
+    "pino": "9.14.0",
+    "pino-http": "10.5.0",
     "zod": "4.3.6"
   },
   "devDependencies": {
@@ -52,13 +55,13 @@
     "dotenv": "17.2.3",
     "eslint": "9.39.2",
     "nodemon": "3.1.11",
-    "pino-pretty": "^11.3.0",
+    "pino-pretty": "11.3.0",
     "prisma": "7.3.0",
     "standard": "17.1.2",
-    "supertest": "^7.2.2",
+    "supertest": "7.2.2",
     "tsx": "4.21.0",
     "typescript": "5.9.3",
-    "vitest": "^4.1.6"
+    "vitest": "4.1.6"
   },
   "eslintConfig": {
     "extends": "standard"

@@ -1,4 +1,22 @@
 services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: postgres_dev
+    environment:
+      POSTGRES_DB: ecommerce
+      POSTGRES_USER: ecommerce
+      POSTGRES_PASSWORD: ecommerce
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ecommerce -d ecommerce"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   redis:
     image: redis:7-alpine
     container_name: redis_dev
@@ -9,5 +27,41 @@ services:
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     restart: unless-stopped
 
+  # Servicio de un solo shot para aplicar migraciones contra `postgres` antes
+  # de levantar `backend`. Correr a mano cuando haga falta:
+  #   docker compose run --rm migrate
+  migrate:
+    build: .
+    container_name: backend_migrate
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://ecommerce:ecommerce@postgres:5432/ecommerce
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["npx", "prisma", "migrate", "deploy"]
+    profiles: ["tools"]
+
+  backend:
+    build: .
+    container_name: backend_dev
+    env_file: .env
+    environment:
+      # PORT explícito: pisa cualquier valor de PORT en .env (que es el .env
+      # de dev local, y puede traer otro puerto) para que el contenedor
+      # siempre escuche en el puerto que compose mapea al host.
+      PORT: "3001"
+      DATABASE_URL: postgres://ecommerce:ecommerce@postgres:5432/ecommerce
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
 volumes:
   redis_data:
+  postgres_data:
