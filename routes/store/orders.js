@@ -9,8 +9,18 @@ export const storeOrdersRouter = Router();
 
 storeOrdersRouter.use(verifyStoreToken);
 
+// OrderController.create es compartido con la ruta admin (routes/orders.js), que
+// crea órdenes ya validadas por un humano. Las que entran por acá las carga el
+// cliente: quedan como STORE y no pasan a producción sin review (ver el guard
+// ORDER_NOT_REVIEWED en services/orders.js).
+function markStoreOrigin(req, _res, next) {
+  req.orderOrigin = "STORE";
+  next();
+}
+
 storeOrdersRouter.post(
   "/",
+  markStoreOrigin,
   validate({ body: orderCreate }),
   OrderController.create
 );

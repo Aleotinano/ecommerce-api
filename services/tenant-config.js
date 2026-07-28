@@ -1,4 +1,6 @@
 import prisma from "../lib/prisma.js";
+// `Prisma` (el namespace, no el client) trae `DbNull`. Ver JSON_NULLABLE_FIELDS.
+import { Prisma } from "../generated/prisma/index.js";
 import { createError } from "../helpers/error.js";
 import {
   uploadImageToCloudinary,
@@ -9,6 +11,9 @@ import { encryptSecret } from "../lib/crypto.js";
 import { UPDATABLE_TENANT_CONFIG_FIELDS } from "../schemas/tenant-config.schema.js";
 
 const TENANT_CONFIG_TTL = 600;
+
+/** Campos `Json?` del modelo: necesitan `Prisma.DbNull` para vaciarse de verdad. */
+const JSON_NULLABLE_FIELDS = ["themeSections"];
 
 // Proyección pública de la config, derivada del schema Zod para que un campo nuevo
 // aparezca en las respuestas sin tocar cada `select` a mano (evita el bug de
@@ -70,6 +75,17 @@ export const TenantConfigModel = {
         ...data,
         whatsappAccessToken: encryptSecret(data.whatsappAccessToken),
       };
+    }
+
+    // En un campo Json?, Prisma interpreta `null` como el VALOR JSON null, no
+    // como SQL NULL. Eso dejaba la columna con 'null'::jsonb, que no es un objeto
+    // y viola el CHECK `TenantConfig_theme_sections_object_check`: limpiar todos
+    // los overrides desde el panel devolvía 500. `DbNull` es el que vacía de
+    // verdad la columna. Si se agregan más campos Json?, van en esta lista.
+    for (const field of JSON_NULLABLE_FIELDS) {
+      if (field in data && data[field] === null) {
+        data = { ...data, [field]: Prisma.DbNull };
+      }
     }
 
     const config = await prisma.tenantConfig.upsert({

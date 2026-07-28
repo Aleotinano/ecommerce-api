@@ -8,12 +8,13 @@ import jwt from "jsonwebtoken";
 export class StoreAuthController {
   static async register(req, res, next) {
     try {
-      const { username, password, email } = req.body;
+      const { username, password, email, phone } = req.body;
       const { user } = await UserModel.registerCustomer({
         tenantId: req.tenantId,
         username,
         password,
         email,
+        phone,
       });
 
       return res.status(201).json({
@@ -22,6 +23,7 @@ export class StoreAuthController {
           id: user.id,
           username: user.username,
           email: user.email,
+          phone: user.phone,
           role: user.role,
           emailVerified: user.emailVerified,
         },
@@ -84,11 +86,21 @@ export class StoreAuthController {
 
   static async me(req, res, next) {
     try {
+      // El teléfono se lee de la DB y no del JWT a propósito: el token se emite
+      // en el login y dura 8h, así que un número cargado durante un checkout no
+      // aparecería hasta el siguiente login. Es una query por request en una
+      // ruta ya autenticada, y hace que `me` refleje el estado real.
+      const stored = await UserModel.getContactInfo({
+        userId: req.user.id,
+        tenantId: req.user.tenantId,
+      });
+
       return res.json({
         usuario: {
           id: req.user.id,
           username: req.user.username,
           email: req.user.email,
+          phone: stored?.phone ?? null,
           role: req.user.role,
           tenantId: req.user.tenantId,
         },

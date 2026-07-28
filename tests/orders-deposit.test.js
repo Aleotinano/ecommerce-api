@@ -17,7 +17,7 @@ let acmeAdminId;
 beforeAll(async () => {
   ({ acme, shopco } = await seedTenants());
 
-  // Desvare = tenant con seña activa (50%). Acme hace de Desvare en este test.
+  // acme = tenant con seña activa (50%) en este test.
   await seedTenantConfig(acme.id, { depositEnabled: true, depositPercentage: 50 });
   // shopco queda sin seña (default depositEnabled=false): camino convencional.
   await seedTenantConfig(shopco.id, {

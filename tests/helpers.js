@@ -39,6 +39,12 @@ async function buildTenant({ slug, name, adminUsername, adminEmail, customerUser
       password,
       role: "CUSTOMER",
       emailVerified: true,
+      // Los tenants nacen con `customerPhoneMode: "required"`, así que un
+      // cliente sin teléfono no puede completar un checkout. Los clientes de
+      // fixture traen uno para que los tests de carrito/pago/entrega sigan
+      // probando lo suyo; la política del teléfono se prueba aparte, en
+      // tests/orders-contact-phone.test.js.
+      phone: "5491155550000",
     });
   }
 
@@ -106,6 +112,9 @@ export async function seedTenants() {
   await prisma.categories.deleteMany();
   await prisma.tenantAttribute.deleteMany();
   await prisma.tenantConfig.deleteMany();
+  // Antes que User: `deleteMany` de Prisma no dispara el ON DELETE CASCADE de la
+  // FK, así que las direcciones huérfanas romperían el reseed de TODOS los tests.
+  await prisma.userAddress.deleteMany();
   await prisma.user.deleteMany();
   await prisma.tenant.deleteMany();
 

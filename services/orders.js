@@ -7,9 +7,11 @@ import {
   roundMoney,
 } from "../helpers/price.js";
 import { sendMail, buildOrderStatusEmail } from "../lib/mailer.js";
+import { normalizeCustomerPhone } from "../lib/phone.js";
 import { logger } from "../lib/logger.js";
 import { validateComboSelection } from "./combos.js";
 import { getPromoTiersByProduct, pickPromoTier, applyPromoDiscount } from "./promos.js";
+import { invalidateProductsCache } from "./productos.js";
 
 const log = logger.child({ module: "orders" });
 
@@ -258,17 +260,91 @@ async function decrementLineStock(tx, line) {
   }
 }
 
+/**
+ * Resuelve con qué teléfono se guarda una orden.
+ *
+ * Precedencia: lo que se tipeó en este checkout gana sobre lo que el cliente
+ * tenga guardado, porque alguien puede estar encargando para la casa de la madre
+ * y querer que llamen a otro número. El de la cuenta es el fallback.
+ *
+ * @returns {{ phone: string|null, saveToUser: boolean }} `saveToUser` marca que
+ *   el cliente no tenía teléfono y este hay que dejárselo guardado, para que la
+ *   próxima vez el checkout venga prellenado.
+ */
+function resolveContactPhone({ typed, stored, config, enforce }) {
+  const policy = {
+    country: config?.customerPhoneCountry ?? "54",
+    area: config?.customerPhoneArea ?? null,
+  };
+
+  // `enforce` es falso para las órdenes que carga un admin a mano: quien las
+  // carga tiene al cliente al teléfono en ese mismo momento, y el panel todavía
+  // no tiene el campo. Bloquearlas sería frenar el trabajo por un dato que esa
+  // pantalla no puede dar. El número se completa después, en la revisión.
+  const mode = enforce ? (config?.customerPhoneMode ?? "required") : "optional";
+
+  if (mode === "off") return { phone: null, saveToUser: false };
+
+  const typedRaw = typeof typed === "string" ? typed.trim() : "";
+
+  if (typedRaw) {
+    const normalized = normalizeCustomerPhone(typedRaw, policy);
+    if (!normalized) {
+      // Se avisa en vez de guardar algo inservible: un número mal cargado es
+      // indistinguible de no tener número cuando hay que llamar.
+      throw createError(
+        "El teléfono no parece válido. Revisá que tenga característica y número.",
+        "INVALID_CONTACT_PHONE",
+        400
+      );
+    }
+    return { phone: normalized, saveToUser: !stored };
+  }
+
+  if (stored) return { phone: stored, saveToUser: false };
+
+  if (mode === "required") {
+    throw createError(
+      "Hace falta un teléfono de contacto para confirmar el pedido",
+      "CONTACT_PHONE_REQUIRED",
+      400
+    );
+  }
+
+  return { phone: null, saveToUser: false };
+}
+
 export const OrderModel = {
+  /**
+   * Checkout: convierte el carrito del usuario en una orden PENDING.
+   *
+   * Los items NO los manda el cliente: se leen del carrito del server y se
+   * pricean acá (`priceItems`). El cliente solo aporta cómo recibe el pedido y
+   * cómo lo paga.
+   *
+   * @param {object} p
+   * @param {string} [p.origin="ADMIN"] procedencia de la orden. Las que llegan
+   *   por `/store/orders` son "STORE" y quedan sujetas al guard de revisión
+   *   (ver updateOrderStatus); las que carga un admin a mano son "ADMIN".
+   * @param {string|null} [p.contactPhone] tal cual lo tipeó la persona; se
+   *   normaliza acá contra la característica del tenant.
+   */
   async create({
     tenantId,
     userId,
+    origin = "ADMIN",
     fulfillmentMethod,
     addressText,
     addressLat,
     addressLng,
     addressDetails,
+    addressMapsUrl,
     paymentMethod,
     paymentNote,
+    cashAmount,
+    transferAmount,
+    contactPhone,
+    contactName,
   }) {
     const cart = await prisma.cart.findFirst({
       where: { userId, tenantId },
@@ -278,6 +354,35 @@ export const OrderModel = {
     if (!cart || cart.items.length === 0) {
       throw createError("El carrito está vacío", "EMPTY_CART", 400);
     }
+
+    // Contacto: se resuelve ANTES de abrir la transacción para que un teléfono
+    // faltante o ilegible corte el checkout sin haber tocado stock ni carrito.
+    const [config, user] = await Promise.all([
+      prisma.tenantConfig.findUnique({
+        where: { tenantId },
+        select: {
+          customerPhoneMode: true,
+          customerPhoneCountry: true,
+          customerPhoneArea: true,
+        },
+      }),
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { phone: true, username: true },
+      }),
+    ]);
+
+    const { phone: resolvedPhone, saveToUser } = resolveContactPhone({
+      typed: contactPhone,
+      stored: user?.phone ?? null,
+      config,
+      enforce: origin === "STORE",
+    });
+
+    const resolvedName =
+      (typeof contactName === "string" && contactName.trim()) ||
+      user?.username ||
+      null;
 
     return prisma.$transaction(async (tx) => {
       const { pricedItems, total } = await priceItems(
@@ -291,21 +396,56 @@ export const OrderModel = {
         }))
       );
 
+      // El desglose del pago mixto se valida contra el total que acabamos de
+      // calcular, no contra uno que mande el cliente. Zod ya garantizó que
+      // ambos montos estén presentes y sean > 0 si el método es MIXED.
+      if (paymentMethod === "MIXED") {
+        const suma = roundMoney(Number(cashAmount) + Number(transferAmount));
+        if (suma !== roundMoney(total)) {
+          const error = createError(
+            "La suma de efectivo y transferencia debe igualar el total del pedido",
+            "PAYMENT_AMOUNTS_MISMATCH",
+            400
+          );
+          error.details = { total: roundMoney(total), suma };
+          throw error;
+        }
+      }
+
       const order = await tx.order.create({
         data: {
           tenantId,
           userId,
           total,
           status: "PENDING",
+          origin,
           fulfillmentMethod,
           addressText,
           addressLat,
           addressLng,
           addressDetails,
+          addressMapsUrl,
           paymentMethod,
           paymentNote,
+          cashAmount,
+          transferAmount,
+          // Snapshot histórico, mismo criterio que las columnas addressX: si el
+          // cliente después cambia su teléfono, esta orden conserva el que dio
+          // cuando la hizo.
+          contactPhone: resolvedPhone,
+          contactName: resolvedName,
         },
       });
+
+      // Se le guarda al cliente el teléfono que acaba de dar, para que el
+      // próximo checkout venga prellenado. Solo si no tenía: el número por
+      // pedido no pisa el de la cuenta.
+      if (saveToUser && resolvedPhone) {
+        await tx.user.update({
+          where: { id: userId },
+          data: { phone: resolvedPhone },
+        });
+      }
 
       await insertOrderItems(tx, order.id, pricedItems);
 
@@ -321,7 +461,25 @@ export const OrderModel = {
 
       await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
 
-      return tx.order.findFirst({ where: { id: order.id }, ...orderItemsInclude });
+      // El config del tenant viene en el mismo round-trip: el controller lo
+      // necesita para armar el deep-link de WhatsApp (lib/whatsapp-link.js).
+      return tx.order.findFirst({
+        where: { id: order.id },
+        include: {
+          ...orderItemsInclude.include,
+          tenant: {
+            select: {
+              config: {
+                select: {
+                  currency: true,
+                  socialWhatsapp: true,
+                  contactPhone: true,
+                },
+              },
+            },
+          },
+        },
+      });
     });
   },
 
@@ -462,13 +620,14 @@ export const OrderModel = {
     }
 
     // Guard de "bueno para producir": al pasar a producción/completar exigimos
-    // que una orden del bot esté revisada por un humano y, si lleva seña, que la
-    // seña esté confirmada. CANCELLED queda libre (siempre se puede cancelar).
-    // Si el tenant no usa seña y la orden es ADMIN, nada de esto aplica.
+    // que toda orden cargada por el cliente (bot o storefront) esté revisada por
+    // un humano y, si lleva seña, que la seña esté confirmada. CANCELLED queda
+    // libre (siempre se puede cancelar). Si el tenant no usa seña y la orden es
+    // ADMIN —la cargó un humano, ya está validada de origen—, nada de esto aplica.
     if (status === "PROCESSING" || status === "COMPLETED") {
-      if (order.origin === "BOT" && order.reviewedById == null) {
+      if (order.origin !== "ADMIN" && order.reviewedById == null) {
         throw createError(
-          "La orden creada por el bot debe ser revisada antes de producir",
+          "La orden debe ser revisada por un administrador antes de producir",
           "ORDER_NOT_REVIEWED",
           409
         );
@@ -492,7 +651,13 @@ export const OrderModel = {
           409
         );
       }
-      if (order.fulfillmentMethod === "DELIVERY" && !order.addressText) {
+      // Alcanza con una de las dos: hay clientes que solo mandan el link de
+      // Maps que comparten desde el teléfono, sin escribir la calle.
+      if (
+        order.fulfillmentMethod === "DELIVERY" &&
+        !order.addressText &&
+        !order.addressMapsUrl
+      ) {
         throw createError(
           "Falta la dirección de entrega",
           "ADDRESS_MISSING",
@@ -550,6 +715,14 @@ export const OrderModel = {
       return result;
     });
 
+    // COMPLETED bajó `ProductVariant.stock`: el catálogo cacheado (`prod:*`, TTL
+    // 180 s) quedaría mostrando stock viejo — y con `showOutOfStock=false` eso es
+    // un producto agotado que el cliente sigue viendo. Mismo criterio que el resto
+    // de las escrituras: invalidar en el write, no esperar al TTL.
+    if (status === "COMPLETED") {
+      await invalidateProductsCache(tenantId);
+    }
+
     // Notificación al cliente (best-effort, no debe romper la actualización).
     if (order.user?.email) {
       try {
@@ -588,8 +761,9 @@ export const OrderModel = {
    * @param {object} [p.fulfillment] datos de entrega/pago a completar o
    *                                  corregir (típico en órdenes BOT, que
    *                                  nacen sin esto): fulfillmentMethod,
-   *                                  addressText/Lat/Lng/Details,
-   *                                  paymentMethod, paymentNote — todos
+   *                                  addressText/Lat/Lng/Details/MapsUrl,
+   *                                  paymentMethod, paymentNote,
+   *                                  cashAmount/transferAmount — todos
    *                                  opcionales, solo se tocan los que vienen.
    */
   async reviewOrder({
@@ -618,6 +792,15 @@ export const OrderModel = {
 
     const hasEdits = Array.isArray(items) && items.length > 0;
 
+    // Para normalizar un teléfono cargado a mano hace falta la característica
+    // del tenant, igual que en el checkout.
+    const config = fulfillment?.contactPhone
+      ? await prisma.tenantConfig.findUnique({
+          where: { tenantId },
+          select: { customerPhoneCountry: true, customerPhoneArea: true },
+        })
+      : null;
+
     return prisma.$transaction(async (tx) => {
       const data = { reviewedById, reviewedAt: new Date() };
 
@@ -628,11 +811,37 @@ export const OrderModel = {
           "addressLat",
           "addressLng",
           "addressDetails",
+          "addressMapsUrl",
           "paymentMethod",
           "paymentNote",
+          "cashAmount",
+          "transferAmount",
+          "contactName",
         ]) {
           if (fulfillment[key] !== undefined) {
             data[key] = fulfillment[key];
+          }
+        }
+
+        // El teléfono no entra por el whitelist de arriba: es el único campo del
+        // bloque que se guarda transformado, no tal cual vino. Es la vía por la
+        // que se completan las órdenes viejas, que nacieron sin número.
+        if (fulfillment.contactPhone !== undefined) {
+          if (fulfillment.contactPhone === null) {
+            data.contactPhone = null;
+          } else {
+            const normalized = normalizeCustomerPhone(fulfillment.contactPhone, {
+              country: config?.customerPhoneCountry ?? "54",
+              area: config?.customerPhoneArea ?? null,
+            });
+            if (!normalized) {
+              throw createError(
+                "El teléfono no parece válido. Revisá que tenga característica y número.",
+                "INVALID_CONTACT_PHONE",
+                400
+              );
+            }
+            data.contactPhone = normalized;
           }
         }
       }
@@ -714,6 +923,41 @@ export const OrderModel = {
           const pct = config?.depositPercentage ?? 50;
           data.depositAmount = roundMoney((total * pct) / 100);
         }
+      }
+
+      // Mismo invariante que en `create`, sobre el estado RESULTANTE: el review
+      // puede haber cambiado el método de pago, los montos y/o el total (si
+      // corrigió cantidades), y las tres cosas tienen que cerrar entre sí.
+      const finalPaymentMethod = data.paymentMethod ?? order.paymentMethod;
+
+      if (finalPaymentMethod === "MIXED") {
+        const finalTotal = data.total ?? order.total;
+        const finalCash = data.cashAmount ?? order.cashAmount;
+        const finalTransfer = data.transferAmount ?? order.transferAmount;
+
+        if (finalCash == null || finalTransfer == null) {
+          throw createError(
+            "El pago mixto necesita cashAmount y transferAmount",
+            "PAYMENT_AMOUNTS_MISSING",
+            400
+          );
+        }
+
+        const suma = roundMoney(Number(finalCash) + Number(finalTransfer));
+        if (suma !== roundMoney(finalTotal)) {
+          const error = createError(
+            "La suma de efectivo y transferencia debe igualar el total del pedido",
+            "PAYMENT_AMOUNTS_MISMATCH",
+            400
+          );
+          error.details = { total: roundMoney(finalTotal), suma };
+          throw error;
+        }
+      } else if (finalPaymentMethod != null) {
+        // Al salir de MIXED (ej. el cliente pagó todo en efectivo) los montos
+        // viejos dejarían un desglose fantasma en la orden.
+        if (order.cashAmount != null) data.cashAmount = null;
+        if (order.transferAmount != null) data.transferAmount = null;
       }
 
       return tx.order.update({

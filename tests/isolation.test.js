@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import prisma from "../lib/prisma.js";
 import { app } from "../app.js";
-import { seedTenants, loginAs } from "./helpers.js";
+import { seedTenants, loginAs, bearerFor } from "./helpers.js";
 
 let acme;
 let shopco;
@@ -78,6 +78,39 @@ describe("isolation cross-tenant", () => {
   it("GET sin cookie → 401 (catálogo ya no es público)", async () => {
     const res = await request(app).get("/categories");
     expect(res.status).toBe(401);
+  });
+
+  it("acme no puede editar una dirección de un cliente de shopco → 404", async () => {
+    const shopcoCustomer = shopco.users.find((u) => u.role === "CUSTOMER");
+    const address = await prisma.userAddress.create({
+      data: {
+        tenantId: shopco.id,
+        userId: shopcoCustomer.id,
+        label: "casa shopco",
+        addressText: "Calle Shopco 1",
+      },
+    });
+
+    const acmeCustomer = acme.users.find((u) => u.role === "CUSTOMER");
+    const res = await request(app)
+      .patch(`/store/addresses/${address.id}`)
+      .set("X-Tenant-Slug", "acme")
+      .set("Authorization", bearerFor(acmeCustomer))
+      .send({ label: "robada" });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe("ADDRESS_NOT_FOUND");
+  });
+
+  it("token de acme con X-Tenant-Slug de shopco → 403 (corta verifyStoreToken)", async () => {
+    const acmeCustomer = acme.users.find((u) => u.role === "CUSTOMER");
+
+    const res = await request(app)
+      .get("/store/addresses")
+      .set("X-Tenant-Slug", "shopco")
+      .set("Authorization", bearerFor(acmeCustomer));
+
+    expect(res.status).toBe(403);
   });
 });
 

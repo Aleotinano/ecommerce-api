@@ -4,14 +4,56 @@ const ORDER_STATUSES = ["PENDING", "PROCESSING", "COMPLETED", "CANCELLED"];
 const FULFILLMENT_METHODS = ["DELIVERY", "PICKUP"];
 const ORDER_PAYMENT_METHODS = ["CASH", "TRANSFER", "MIXED"];
 
-// Compartido por orderCreate y orderReview: si es DELIVERY hace falta
-// addressText, y lat/lng (si vienen) tienen que venir juntos.
+// Hosts de Google Maps que aceptamos en addressMapsUrl. No hay resolución del
+// link (no seguimos redirects ni geocodificamos): solo evitamos que entre
+// cualquier URL. `maps.app.goo.gl` es el que genera "Compartir ubicación" en
+// Android/iOS, que es como la gente manda su casa en la práctica.
+const MAPS_HOSTS = [
+  "google.com",
+  "www.google.com",
+  "maps.google.com",
+  "maps.app.goo.gl",
+  "goo.gl",
+];
+
+// Exportada para schemas/address.schema.js: la libreta de direcciones valida el
+// mismo link con la misma whitelist (es la fuente de addressMapsUrl de la orden).
+export function isGoogleMapsUrl(value) {
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+
+  if (url.protocol !== "https:" && url.protocol !== "http:") return false;
+  if (!MAPS_HOSTS.includes(url.hostname)) return false;
+
+  // google.com y goo.gl sirven cualquier cosa: en esos exigimos el path /maps.
+  if (url.hostname === "google.com" || url.hostname === "www.google.com") {
+    return url.pathname.startsWith("/maps");
+  }
+  if (url.hostname === "goo.gl") {
+    return url.pathname.startsWith("/maps");
+  }
+
+  return true;
+}
+
+// Compartido por orderCreate y orderReview: si es DELIVERY hace falta una
+// ubicación (texto y/o link de Maps), lat/lng (si vienen) tienen que venir
+// juntos, y el pago mixto tiene que traer su desglose de montos.
 function checkFulfillmentConsistency(data, ctx) {
-  if (data.fulfillmentMethod === "DELIVERY" && !data.addressText) {
+  if (
+    data.fulfillmentMethod === "DELIVERY" &&
+    !data.addressText &&
+    !data.addressMapsUrl
+  ) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["addressText"],
-      message: "addressText es obligatorio cuando fulfillmentMethod es DELIVERY",
+      message:
+        "Cuando fulfillmentMethod es DELIVERY hace falta addressText y/o addressMapsUrl",
     });
   }
   if ((data.addressLat != null) !== (data.addressLng != null)) {
@@ -20,6 +62,38 @@ function checkFulfillmentConsistency(data, ctx) {
       path: ["addressLng"],
       message: "addressLat y addressLng deben enviarse juntos",
     });
+  }
+
+  // Montos del pago mixto. Que SUMEN el total no se puede validar acá: el total
+  // lo calcula el server desde el carrito (ver OrderModel.create, que tira
+  // PAYMENT_AMOUNTS_MISMATCH). Acá solo exigimos que estén y sean coherentes
+  // con el método elegido.
+  if (data.paymentMethod === "MIXED") {
+    for (const key of ["cashAmount", "transferAmount"]) {
+      if (data[key] == null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: `${key} es obligatorio cuando paymentMethod es MIXED`,
+        });
+      } else if (data[key] <= 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: `${key} debe ser mayor a 0 cuando paymentMethod es MIXED`,
+        });
+      }
+    }
+  } else if (data.paymentMethod != null) {
+    for (const key of ["cashAmount", "transferAmount"]) {
+      if (data[key] != null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: `${key} solo aplica cuando paymentMethod es MIXED`,
+        });
+      }
+    }
   }
 }
 
@@ -38,10 +112,50 @@ const fulfillmentFields = {
     .max(300, "addressDetails no puede superar 300 caracteres")
     .nullable()
     .optional(),
+  addressMapsUrl: z
+    .string()
+    .trim()
+    .max(500, "addressMapsUrl no puede superar 500 caracteres")
+    .refine(isGoogleMapsUrl, "addressMapsUrl debe ser un link de Google Maps")
+    .nullable()
+    .optional(),
+  // nullable además de optional: un front que mande `cashAmount: null` al
+  // cambiar de MIXED a CASH no debería comerse un 400 (null cuenta como
+  // ausente en checkFulfillmentConsistency).
+  cashAmount: z.coerce
+    .number({ invalid_type_error: "cashAmount debe ser un número" })
+    .nonnegative("cashAmount no puede ser negativo")
+    .nullable()
+    .optional(),
+  transferAmount: z.coerce
+    .number({ invalid_type_error: "transferAmount debe ser un número" })
+    .nonnegative("transferAmount no puede ser negativo")
+    .nullable()
+    .optional(),
   paymentNote: z
     .string()
     .trim()
     .max(300, "paymentNote no puede superar 300 caracteres")
+    .nullable()
+    .optional(),
+
+  // Contacto de quien recibe el pedido. Va en `fulfillmentFields` —y no solo en
+  // orderCreate— para que la revisión del admin también pueda completarlo: las
+  // órdenes viejas nacieron sin teléfono y alguien tiene que poder cargarlo a
+  // mano sin salir del panel.
+  //
+  // Texto libre acá; a E.164 lo lleva `normalizeCustomerPhone` en el service,
+  // que necesita la característica del tenant y por eso no puede vivir en Zod.
+  contactPhone: z
+    .string()
+    .trim()
+    .max(30, "contactPhone no puede superar 30 caracteres")
+    .nullable()
+    .optional(),
+  contactName: z
+    .string()
+    .trim()
+    .max(100, "contactName no puede superar 100 caracteres")
     .nullable()
     .optional(),
 };

@@ -132,7 +132,7 @@ e-commerce-express-1/
 │   ├── whatsapp/           # Bot de WhatsApp: index.js, signature.js, history.js, rate-limit.js, graph-api.js, dedup.js, tenant-resolver.js
 │   ├── chat/               # Agente de chat de tienda: index.js, tools.js, prompt.js, cost-guard.js
 │   └── combos.js           # Archivo único (no carpeta): validateComboSelection, compartido por cart.js y orders.js
-├── lib/                    # Infra/integraciones: prisma, redis, cache, logger, mailer, cloudinary, tokens, slug, imageManager, crypto (AES-256-GCM)
+├── lib/                    # Infra/integraciones: prisma, redis, cache, logger, mailer, cloudinary, tokens, slug, imageManager, crypto (AES-256-GCM), whatsapp-link (deep-link wa.me del pedido — módulo puro, NO es el bot)
 │   └── llm/                # Cliente LLM: index.js, prompt.js, parse.js, fallback.js
 │       ├── providers/      # anthropic.js, gemini.js (fetch directo, sin SDK)
 │       └── tools/          # schema.js — specs de tools del agente (TOOL_DEFINITIONS, AUTHENTICATED_TOOLS, CHANNEL_ORDER_TOOLS)
@@ -185,7 +185,7 @@ Generador con `output = "../generated/prisma"`.
 | **ComboAllowedCategory** | `id`, `comboProductId`, `categoryId`, `minQty=0`, `maxQty?`, `isActive=true`, `createdAt` — whitelist de categorías permitidas en un combo; `minQty`/`maxQty` son el TOTAL DEL GRUPO (suma elegida de la categoría; el admin manda min=max exacto); sin `members` = toda la categoría; no baja a subcategorías | N-1 `Product` (`onDelete: Cascade`), N-1 `Categories` (`onDelete: Cascade`), 1-N `members` (`ComboAllowedProduct`), N-1 tenant | **Sí** |
 | **Cart** | `id`, `userId @unique`, `createdAt`, `updatedAt` | 1-1 user, N-1 tenant, 1-N items | **Sí** |
 | **CartItem** | `id`, `cartId`, `productId`, `variantId?` (nullable solo para líneas COMBO — un `PRODUCTO` siempre resuelve variante), `comboSelection: Json?` (selección de componentes elegida por el cliente para un combo), `quantity=1`, `createdAt` | N-1 cart, N-1 product, N-1 variant | **No** (scope vía Cart) |
-| **Order** | `id`, `userId?` (nullable — órdenes BOT nacen sin usuario), `status: OrderStatus=PENDING`, `total: Float`, `paymentStatus: PaymentStatus=PENDING`, `paymentMethod?`, `paymentId?`, `mercadoPagoId? @unique`, `preferenceId?`, `origin: OrderOrigin=ADMIN`, `contactPhone?`, `contactName?`, `reviewedById?`, `reviewedAt?`, `requiresDeposit=false`, `depositAmount?` (snapshot), `depositConfirmedById?`, `depositConfirmedAt?`, `creationContext?`, `createdAt`, `updatedAt` | N-1 user, N-1 tenant, 1-N orderItems, 1-N statusHistory | **Sí** |
+| **Order** | `id`, `userId?` (nullable — órdenes BOT nacen sin usuario), `status: OrderStatus=PENDING`, `total: Float`, `paymentStatus: PaymentStatus=PENDING`, `paymentId?`, `mercadoPagoId? @unique`, `preferenceId?`; **pago**: `paymentMethod: OrderPaymentMethod?` (`CASH`/`TRANSFER`/`MIXED`), `paymentNote?`, `cashAmount?`/`transferAmount?` (desglose del mixto, suman `total`), `transferConfirmedById?`/`transferConfirmedAt?` (confirmación manual); **entrega**: `fulfillmentMethod: FulfillmentMethod?` (`DELIVERY`/`PICKUP`), `addressText?`, `addressLat?`, `addressLng?`, `addressDetails?`, `addressMapsUrl?` (link de Google Maps, solo se valida el host); **procedencia**: `origin: OrderOrigin=ADMIN`, `contactPhone?`, `contactName?`, `reviewedById?`, `reviewedAt?`; **seña**: `requiresDeposit=false`, `depositAmount?` (snapshot), `depositConfirmedById?`, `depositConfirmedAt?`; `creationContext?`, `createdAt`, `updatedAt` | N-1 user, N-1 tenant, 1-N orderItems, 1-N statusHistory | **Sí** |
 | **OrderStatusHistory** | `id`, `orderId`, `fromStatus?`, `toStatus`, `note?`, `changedById?`, `createdAt` | N-1 order (`onDelete: Cascade`) | **No** (scope vía Order) |
 | **OrderItem** | `id`, `orderId`, `productId` (NOT NULL), `variantId?` (nullable solo para líneas COMBO), `quantity`, `price: Float` (snapshot), `note?`, `parentItemId?` (self-relation, árbol combo, `onDelete: Cascade`) | N-1 order (`onDelete: Cascade`), N-1 product, N-1 variant, self `parentItem`/`childItems` | **No** (scope vía Order) |
 | **ContentSuggestion** | `id`, `productId`, `angle: SuggestionAngle`, `status: SuggestionStatus=SUGGESTED`, `source: SuggestionSource=AUTO`, `date @db.Date`, `copy?`, `hashtags: String[]=[]`, `model?`, `generatedAt?`, `createdAt`, `updatedAt` | N-1 tenant, N-1 product, 1-N images (`SuggestionImage`) | **Sí** |
@@ -225,7 +225,9 @@ Generador con `output = "../generated/prisma"`.
 - `AttributeType`: `TEXT`, `COLOR` — tipo de valor de un atributo de variante del tenant
   (`TenantAttribute.type`); `COLOR` exige HEX (`#RGB`/`#RRGGBB`) al validar `attributes` de una
   variante, pensado para swatch en el storefront.
-- `OrderOrigin`: `ADMIN`, `BOT`.
+- `OrderOrigin`: `ADMIN`, `BOT`, `STORE`. Determina si la orden necesita revisión humana antes de
+  producir: todo lo que **no** es `ADMIN` lo cargó un cliente (bot de WhatsApp o storefront) y pasa
+  por el guard `ORDER_NOT_REVIEWED`.
 - `SuggestionAngle`: `BEST_SELLER`, `NEW_ARRIVAL`, `LOW_STOCK`, `NO_RECENT_SALES`
 - `SuggestionStatus`: `SUGGESTED`, `USED`, `DISMISSED`
 - `SuggestionSource`: `AUTO`, `MANUAL`
@@ -236,7 +238,7 @@ Generador con `output = "../generated/prisma"`.
 
 ### Migraciones
 
-30 migraciones en `prisma/migrations/` (cronológicas):
+36 migraciones en `prisma/migrations/` (cronológicas):
 
 `..._initial_multi_tenant`, `..._email_global_unique`, `..._email_verification`,
 `..._add_tenant_config`, `..._add_product_price`, `..._expand_roles_storefront`,
@@ -268,6 +270,17 @@ sin backfill, las filas existentes quedan null = standalone legacy).
 diferencia del colapso de tipos, el backfill es SQL puro y va **dentro de la misma migración**:
 color→`attributes.color`, size→`attributes.talle`, y crea el catálogo color/talle para los tenants
 que ya usaban esas columnas antes de dropearlas).
+`20260713222206_product_delete_cascade_content_suggestions_cart`,
+`20260720120000_cart_guest_support` (carrito de invitado por cookie, `Cart.guestId`),
+`20260720130000_add_category_position` (orden de display de categorías),
+`20260723001137_order_fulfillment_and_payment_method` (entrega + forma de pago: enums
+`FulfillmentMethod`/`OrderPaymentMethod`, campos de dirección, `paymentNote`, confirmación manual de
+transferencia; `Order.paymentMethod` pasó de `String?` libre a enum tipado — destructivo, pero solo
+contenía placeholders de seed), `20260723022006_add_promos` (descuento por cantidad),
+`20260726104943_order_checkout_whatsapp` (`Order.addressMapsUrl` para el link de Google Maps,
+`cashAmount`/`transferAmount` para el desglose del pago mixto, y el valor `STORE` en el enum
+`OrderOrigin` — puramente aditiva, sin backfill: las órdenes de storefront anteriores quedan como
+`ADMIN` y no se les exige revisión retroactiva).
 
 ---
 
@@ -365,12 +378,12 @@ Convenciones de middleware citadas: `verifyToken` (cookie admin), `requireRole([
 
 | Método | Ruta | Middleware | Controller → Service |
 |---|---|---|---|
-| POST | `/orders` | `verifyToken` | `OrderController.create` → `OrderModel.create` |
+| POST | `/orders` | `verifyToken`, `validate(body: orderCreate)` | `OrderController.create` → `OrderModel.create` (`origin: ADMIN`) |
 | GET | `/orders` | `verifyToken`, `validate(query)` | `OrderController.getAll` → `OrderModel.getAll` |
 | GET | `/orders/all` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(query)` | `OrderController.getUserOrders` → `OrderModel.getUserOrders` |
 | GET | `/orders/:id` | `verifyToken`, `validate(params)` | `OrderController.getById` → `OrderModel.getUserOrderById` |
 | PATCH | `/orders/:id` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params,body)` | `OrderController.update` → `OrderModel.updateOrderStatus` |
-| POST | `/orders/:id/review` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params, body: orderReview)` | `OrderController.review` → `OrderModel.reviewOrder` (marca revisado un pedido BOT; corrección inline opcional de cantidades/notas) |
+| POST | `/orders/:id/review` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params, body: orderReview)` | `OrderController.review` → `OrderModel.reviewOrder` (marca revisado un pedido BOT o STORE; corrección inline opcional de cantidades/notas y de los datos de entrega/pago) |
 | POST | `/orders/:id/confirm-deposit` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params, body: orderConfirmDeposit)` | `OrderController.confirmDeposit` → `OrderModel.confirmDeposit` (`paymentStatus → DEPOSIT_PAID`) |
 
 ### `/products` (admin) — `routes/productos.js`
@@ -525,7 +538,7 @@ Montaje en `routes/store/index.js`: **todo `/store/*` aplica `storeCors()` + `re
 
 | Método | Ruta | Middleware | Controller → Service |
 |---|---|---|---|
-| POST | `/store/orders` | `verifyStoreToken` | `OrderController.create` → `OrderModel.create` |
+| POST | `/store/orders` | `verifyStoreToken`, `markStoreOrigin`, `validate(body: orderCreate)` | `OrderController.create` → `OrderModel.create` (`origin: STORE`; el 201 incluye el deep-link `wa.me` del pedido, armado con `lib/whatsapp-link.js`) |
 | GET | `/store/orders` | `verifyStoreToken`, `validate(query)` | `OrderController.getAll` → `OrderModel.getAll` |
 | GET | `/store/orders/:id` | `verifyStoreToken`, `validate(params)` | `OrderController.getById` → `OrderModel.getUserOrderById` |
 

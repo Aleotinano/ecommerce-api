@@ -7,6 +7,7 @@ import {
   hashToken,
 } from "../lib/tokens.js";
 import { sendMail, buildVerificationEmail, isSmtpConfigured } from "../lib/mailer.js";
+import { normalizeCustomerPhone } from "../lib/phone.js";
 import { logger } from "../lib/logger.js";
 import jwt from "jsonwebtoken";
 import { DEFAULTS } from "../config.js";
@@ -110,7 +111,27 @@ export const UserModel = {
     return { user, tenant };
   },
 
-  async registerCustomer({ tenantId, username, email, password }) {
+  /**
+   * Datos de contacto guardados del cliente, para prellenar el checkout.
+   * El `tenantId` va en el where —y no solo el id— por el mismo motivo que en
+   * el resto del service: un id de otro tenant no puede devolver nada.
+   */
+  async getContactInfo({ userId, tenantId }) {
+    return prisma.user.findFirst({
+      where: { id: userId, tenantId },
+      select: { phone: true, username: true, email: true },
+    });
+  },
+
+  /**
+   * Alta de un cliente del storefront.
+   *
+   * El teléfono es OPCIONAL en el alta aunque el tenant lo tenga en "required":
+   * el momento en que se vuelve obligatorio es el checkout, que es cuando hace
+   * falta poder contactar a alguien. Exigirlo acá agrega fricción al registro
+   * —el punto más frágil del embudo— por un dato que todavía no se usa.
+   */
+  async registerCustomer({ tenantId, username, email, password, phone }) {
     const emailTaken = await prisma.user.findUnique({
       where: { tenantId_email: { tenantId, email } },
       select: { id: true },
@@ -130,6 +151,14 @@ export const UserModel = {
     const hashedPassword = await hashPassword(password);
     const autoVerify = !isSmtpConfigured();
 
+    // Un teléfono ilegible se descarta en silencio en vez de cortar el alta:
+    // acá todavía no se necesita, y el checkout lo vuelve a pedir (ahí sí con
+    // error visible). Se normaliza con los prefijos del tenant.
+    const config = await prisma.tenantConfig.findUnique({
+      where: { tenantId },
+      select: { customerPhoneCountry: true, customerPhoneArea: true },
+    });
+
     const user = await prisma.user.create({
       data: {
         tenantId,
@@ -138,6 +167,10 @@ export const UserModel = {
         password: hashedPassword,
         role: "CUSTOMER",
         emailVerified: autoVerify,
+        phone: normalizeCustomerPhone(phone, {
+          country: config?.customerPhoneCountry ?? "54",
+          area: config?.customerPhoneArea ?? null,
+        }),
       },
     });
 

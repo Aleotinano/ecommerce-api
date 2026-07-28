@@ -7,6 +7,26 @@ export const getTenantConfig = z.object({
     .positive("El ID del tenant es inválido"),
 });
 
+/**
+ * Un override de sección. Se valida la FORMA (qué ejes, qué enums) pero no los ids
+ * de tipografía, por lo mismo que en `themeFontDisplay`: el catálogo vive en
+ * @repo/shared y crece sin deploy del backend. El filtro final lo hace
+ * `normalizeSectionThemes` al renderizar.
+ *
+ * `.strict()`: una clave desconocida se rechaza en vez de guardarse como basura
+ * que después nadie lee.
+ */
+const sectionOverride = z
+  .object({
+    fontDisplay: z.string().trim().max(40).optional(),
+    fontBody: z.string().trim().max(40).optional(),
+    weightDisplay: z.enum(["400", "500", "600", "700"]).optional(),
+    weightBody: z.enum(["400", "500", "600", "700"]).optional(),
+    radius: z.enum(["duro", "sutil", "suave", "redondo"]).optional(),
+    density: z.enum(["compacto", "aireado"]).optional(),
+  })
+  .strict();
+
 const updateTenantConfigObject = z
   .object({
     storeName: z
@@ -150,6 +170,33 @@ const updateTenantConfigObject = z
       .nullable()
       .optional(),
 
+    // ── Teléfono del cliente ─────────────────────────────────────────────────
+    // OJO: esto NO es `contactPhone` (que es el teléfono DEL NEGOCIO, unos
+    // campos más arriba). Acá se configura si se le pide el número A QUIEN
+    // COMPRA, y con qué prefijos se completa lo que tipea.
+    customerPhoneMode: z
+      .enum(["off", "optional", "required"], {
+        invalid_type_error: "Modo de teléfono inválido",
+      })
+      .nullable()
+      .optional(),
+
+    // País y característica terminan concatenados a un número que se manda a
+    // wa.me, así que se exigen dígitos pelados. Hay CHECK equivalente en la DB.
+    customerPhoneCountry: z
+      .string({ invalid_type_error: "El código de país debe ser texto" })
+      .trim()
+      .regex(/^\d{1,4}$/, "El código de país debe ser de 1 a 4 dígitos")
+      .nullable()
+      .optional(),
+
+    customerPhoneArea: z
+      .string({ invalid_type_error: "La característica debe ser texto" })
+      .trim()
+      .regex(/^\d{2,5}$/, "La característica debe ser de 2 a 5 dígitos")
+      .nullable()
+      .optional(),
+
     currency: z
       .string({ invalid_type_error: "Currency debe ser texto" })
       .length(3, "Currency debe ser código ISO de 3 letras")
@@ -188,6 +235,90 @@ const updateTenantConfigObject = z
 
     productVariantsEnabled: z
       .boolean({ invalid_type_error: "productVariantsEnabled debe ser booleano" })
+      .nullable()
+      .optional(),
+
+    // ── Tema de la tienda ────────────────────────────────────────────────────
+    // null en cualquiera de estos = "volver al default" (el storefront resuelve).
+    //
+    // El accent es el único campo de forma libre del tema y termina como valor de
+    // una CSS custom property en un atributo `style`. Se exige #rrggbb exacto: sin
+    // formas de 3 dígitos, sin rgb(), sin nombres CSS. Cualquier laxitud acá abre
+    // la puerta a valores tipo `url(...)`, que en una var consumida por background
+    // sería exfiltración. Hay un CHECK equivalente en la DB.
+    themeAccent: z
+      .string({ invalid_type_error: "El color debe ser texto" })
+      .trim()
+      .toLowerCase()
+      .regex(/^#[0-9a-f]{6}$/, "El color debe ser hexadecimal #rrggbb")
+      .nullable()
+      .optional(),
+
+    themeRadius: z
+      .enum(["duro", "sutil", "suave", "redondo"], {
+        invalid_type_error: "Radio inválido",
+      })
+      .nullable()
+      .optional(),
+
+    // Los ids de fuente NO se validan contra un enum acá a propósito: el catálogo
+    // vive en @repo/shared y crece sin migración ni deploy del backend. La frontera
+    // real es `normalizeStoreTheme` en el render, que descarta cualquier id que no
+    // esté en el catálogo (y que no sirva para ese rol). Acá solo se acota el largo.
+    themeFontDisplay: z
+      .string({ invalid_type_error: "La tipografía debe ser texto" })
+      .trim()
+      .max(40, "Identificador de tipografía demasiado largo")
+      .nullable()
+      .optional(),
+
+    themeFontBody: z
+      .string({ invalid_type_error: "La tipografía debe ser texto" })
+      .trim()
+      .max(40, "Identificador de tipografía demasiado largo")
+      .nullable()
+      .optional(),
+
+    // Peso por rol. Enum cerrado y estable, con CHECK equivalente en la DB. Que la
+    // fuente elegida SOPORTE ese peso (Bebas trae uno solo) no se valida acá: eso
+    // depende del catálogo, que vive en @repo/shared y crece sin deploy del
+    // backend. Lo clampea `normalizeStoreTheme` al renderizar.
+    themeWeightDisplay: z
+      .enum(["400", "500", "600", "700"], {
+        invalid_type_error: "Peso inválido",
+      })
+      .nullable()
+      .optional(),
+
+    themeWeightBody: z
+      .enum(["400", "500", "600", "700"], {
+        invalid_type_error: "Peso inválido",
+      })
+      .nullable()
+      .optional(),
+
+    themeDensity: z
+      .enum(["compacto", "aireado"], { invalid_type_error: "Densidad inválida" })
+      .nullable()
+      .optional(),
+
+    // Overrides por sección. Se valida la FORMA (qué secciones, qué ejes, qué
+    // enums) pero no los ids de tipografía, por lo mismo que en themeFontDisplay:
+    // el catálogo vive en @repo/shared y crece sin deploy del backend. El filtro
+    // final lo hace `normalizeSectionThemes` al renderizar.
+    // `.strict()` en el override: una clave desconocida se rechaza en vez de
+    // guardarse como basura que después nadie lee.
+    // Objeto con secciones opcionales y no `z.record(z.enum(...))`: en Zod 4 un
+    // record con clave enum exige que estén TODAS las claves, así que guardar solo
+    // el nav fallaba pidiendo hero/catalog/footer.
+    themeSections: z
+      .object({
+        nav: sectionOverride.optional(),
+        hero: sectionOverride.optional(),
+        catalog: sectionOverride.optional(),
+        footer: sectionOverride.optional(),
+      })
+      .strict()
       .nullable()
       .optional(),
   });

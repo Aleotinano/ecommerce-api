@@ -62,18 +62,23 @@ describe("OrderModel.create — fulfillment y payment method", () => {
 
   it("PICKUP + MIXED sin dirección → se persiste igual, con paymentNote", async () => {
     await addToCart();
+    // MIXED exige que el desglose cierre contra el total, que se calcula
+    // server-side desde el carrito: lo miramos primero para partirlo.
+    const total = acmeVariant.price;
     const order = await OrderModel.create({
       tenantId: acme.id,
       userId: acmeCustomer.id,
       fulfillmentMethod: "PICKUP",
       paymentMethod: "MIXED",
-      paymentNote: "transfiere 5000, resto efectivo",
+      cashAmount: total / 2,
+      transferAmount: total / 2,
+      paymentNote: "transfiere la mitad, resto efectivo",
     });
 
     expect(order.fulfillmentMethod).toBe("PICKUP");
     expect(order.addressText).toBeNull();
     expect(order.paymentMethod).toBe("MIXED");
-    expect(order.paymentNote).toBe("transfiere 5000, resto efectivo");
+    expect(order.paymentNote).toBe("transfiere la mitad, resto efectivo");
   });
 });
 

@@ -31,6 +31,7 @@ model Tenant {
   promos                 Promo[]
   promoTiers             PromoTier[]
   promoProducts          PromoProduct[]
+  userAddresses          UserAddress[]
 }
 
 model TenantConfig {
@@ -67,6 +68,40 @@ model TenantConfig {
   shippingPolicy String?
   returnsPolicy  String?
   privacyPolicy  String?
+
+  // Tema de la tienda (lo edita el tenant desde el admin). null en un campo = el
+  // storefront usa su default para ESE campo. Se guardan como texto libre a
+  // propósito: el catálogo de fuentes y los enums de forma/densidad viven en
+  // @repo/shared y así evolucionan sin migración. La validación de entrada está
+  // en tenant-config.schema.js, y el storefront vuelve a normalizar al renderizar
+  // (normalizeStoreTheme) porque estos valores terminan en un atributo `style`.
+  themeAccent      String?
+  themeRadius      String?
+  themeFontDisplay String?
+  themeFontBody    String?
+  // Peso por rol ("400".."700"). Lo hereda todo el texto que no fija el suyo.
+  themeWeightDisplay String?
+  themeWeightBody    String?
+  themeDensity     String?
+
+  // Overrides de estilo por sección (nav/hero/catalog/footer). JSON y no columnas
+  // porque son 4 secciones x 6 ejes: 24 columnas nullables para algo que casi
+  // siempre está vacío. La forma la valida Zod al escribir y `normalizeSectionThemes`
+  // al renderizar — el contrato vive en @repo/shared y crece sin migración.
+  themeSections Json?
+
+  // Teléfono DEL CLIENTE (no confundir con `contactPhone`, que es el DEL NEGOCIO).
+  // El rubro cambia la respuesta: una tienda con delivery lo necesita sí o sí,
+  // una de productos digitales vive bien solo con el email.
+  //   customerPhoneMode    off | optional | required (CHECK en la migración)
+  //   customerPhoneCountry código de país, solo dígitos
+  //   customerPhoneArea    característica por defecto (ej. "264"). Sirve para
+  //                        COMPLETAR números locales cortos, NO para rechazar los
+  //                        de otras provincias: la zona de reparto la define la
+  //                        dirección, no el teléfono de quien paga.
+  customerPhoneMode    String? @default("required")
+  customerPhoneCountry String? @default("54")
+  customerPhoneArea    String?
 
   // Configuración de tienda
   currency       String? @default("ARS")
@@ -107,17 +142,66 @@ model User {
   password String
   role     Role   @default(CUSTOMER)
 
+  // Teléfono de contacto, en dígitos E.164 (ej. "5492644123456"). Nullable: las
+  // cuentas creadas antes de que se pidiera no lo tienen, y el modo del tenant
+  // puede ser "off". Se normaliza en lib/phone.js antes de guardar — acá nunca
+  // entra texto libre. NO es una credencial: no se loguea con esto ni tiene
+  // unique, dos personas de la misma casa pueden compartir número.
+  phone    String?
+
   emailVerified              Boolean   @default(false)
   emailVerificationTokenHash String?
   emailVerificationExpiresAt DateTime?
 
-  cart   Cart?
-  orders Order[]
-  tenant Tenant  @relation(fields: [tenantId], references: [id])
+  cart      Cart?
+  orders    Order[]
+  addresses UserAddress[]
+  tenant    Tenant        @relation(fields: [tenantId], references: [id])
 
   @@unique([tenantId, username])
   @@unique([tenantId, email])
   @@index([tenantId])
+}
+
+// Libreta de direcciones del cliente del storefront ("mi casa", "casa de mi mamá"):
+// evita retipear la dirección en cada pedido. NO es la dirección de la orden: al
+// hacer checkout se copian estos campos a las columnas planas de Order, que es el
+// snapshot histórico. Order NO tiene FK acá a propósito — borrar una dirección
+// jamás puede alterar un pedido ya cerrado, así que el borrado es físico.
+model UserAddress {
+  id       Int    @id @default(autoincrement())
+  tenantId Int
+  userId   Int
+
+  label String // como lo llama el cliente: "mi casa", "casa de mi mamá"
+
+  // Mismos campos y límites que el bloque `fulfillmentFields` de
+  // schemas/order.schema.js: esta tabla es la FUENTE de las columnas addressX
+  // de Order. Hace falta addressText y/o addressMapsUrl (CHECK en la migración).
+  addressText    String?
+  addressLat     Float?
+  addressLng     Float?
+  addressDetails String?
+  addressMapsUrl String?
+
+  // Dirección preseleccionada en el checkout. "A lo sumo una por usuario" lo
+  // garantiza un índice único PARCIAL que vive SOLO en la migración
+  // `prisma/migrations/20260727120000_add_user_address/migration.sql` — mismo
+  // motivo que `ProductVariant.isDefault`: no declararlo acá para no generar
+  // drift en `migrate diff`.
+  isDefault Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  // userId alcanza como scope del unique: un User pertenece a un solo tenant
+  // (mismo razonamiento que `Cart.userId @unique`).
+  @@unique([userId, label])
+  @@index([tenantId])
+  @@index([userId])
 }
 
 model Categories {
@@ -443,6 +527,13 @@ model Order {
   // quien revisa el pago manualmente.
   paymentNote   String?
 
+  // Desglose del pago mixto: cuánto va en efectivo y cuánto por transferencia.
+  // Solo se llenan si paymentMethod = MIXED, y su suma debe igualar `total`.
+  // La suma se valida en el service (services/orders.js), no en Zod: el total
+  // se calcula server-side desde el carrito, el cliente nunca lo fija.
+  cashAmount     Float?
+  transferAmount Float?
+
   // Transferencia: la confirma un asistente humano tras revisarla a mano —
   // no hay verificación automática. Solo aplica si paymentMethod ∈
   // {TRANSFER, MIXED}. Independiente de paymentStatus (MercadoPago).
@@ -456,8 +547,14 @@ model Order {
   addressLat        Float?
   addressLng        Float?
   addressDetails    String? // ej. "rejas grises", referencia para el repartidor
+  // Link de Google Maps pegado por el cliente (el que comparte desde su
+  // teléfono). Alternativa o complemento de addressText: si fulfillmentMethod
+  // es DELIVERY hace falta al menos uno de los dos. No hay geocoding
+  // server-side: el link se guarda tal cual y solo se valida el host.
+  addressMapsUrl    String?
 
-  // Procedencia + revisión (órdenes creadas por el bot nacen sin revisar).
+  // Procedencia + revisión (solo las órdenes ADMIN nacen ya validadas: las de
+  // BOT y STORE las carga el cliente y necesitan el OK de un humano).
   origin       OrderOrigin @default(ADMIN)
   contactPhone String? // wa_id del cliente de WhatsApp (órdenes BOT)
   contactName  String?
@@ -625,6 +722,7 @@ enum PaymentStatus {
 enum OrderOrigin {
   ADMIN
   BOT
+  STORE
 }
 
 enum FulfillmentMethod {

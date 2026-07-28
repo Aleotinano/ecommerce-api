@@ -1,4 +1,46 @@
 import { OrderModel } from "../services/orders.js";
+import { buildOrderWhatsappLink } from "../lib/whatsapp-link.js";
+import { logger } from "../lib/logger.js";
+
+const log = logger.child({ module: "orders-controller" });
+
+// Cómo se entrega y cómo se paga: el mismo bloque va en casi todas las
+// respuestas de orden, así que se arma en un solo lugar.
+function fulfillmentOf(order) {
+  return {
+    fulfillmentMethod: order.fulfillmentMethod,
+    addressText: order.addressText,
+    addressLat: order.addressLat,
+    addressLng: order.addressLng,
+    addressDetails: order.addressDetails,
+    addressMapsUrl: order.addressMapsUrl,
+    paymentMethod: order.paymentMethod,
+    paymentNote: order.paymentNote,
+    cashAmount: order.cashAmount,
+    transferAmount: order.transferAmount,
+    // Contacto de quien recibe. Va acá —y no solo en el listado— para que la
+    // respuesta del review traiga el teléfono recién cargado y el panel lo
+    // muestre sin recargar.
+    contactPhone: order.contactPhone,
+    contactName: order.contactName,
+  };
+}
+
+// Deep-link de WhatsApp con el pedido redactado (lib/whatsapp-link.js).
+// Best-effort, igual que el email de cambio de estado: la orden ya está creada
+// y confirmada en DB, así que un problema armando el link no puede tumbar la
+// respuesta. Devuelve null si el tenant no tiene un teléfono usable.
+function buildWhatsappBlock(order) {
+  try {
+    return buildOrderWhatsappLink({ order, config: order.tenant?.config ?? {} });
+  } catch (error) {
+    log.error(
+      { err: error, orderId: order.id },
+      "no se pudo armar el link de WhatsApp del pedido"
+    );
+    return null;
+  }
+}
 
 // Composición de un combo (childItems, ver services/orders.js) para exponer en
 // las respuestas de orden — null si la línea no es un combo.
@@ -24,20 +66,33 @@ export class OrderController {
         addressLat,
         addressLng,
         addressDetails,
+        addressMapsUrl,
         paymentMethod,
         paymentNote,
+        cashAmount,
+        transferAmount,
+        contactPhone,
+        contactName,
       } = req.body;
 
       const order = await OrderModel.create({
         tenantId: req.tenantId,
         userId: id,
+        // Lo setea la ruta del storefront (routes/store/orders.js); una orden
+        // cargada por un admin desde el panel queda como ADMIN.
+        origin: req.orderOrigin ?? "ADMIN",
         fulfillmentMethod,
         addressText,
         addressLat,
         addressLng,
         addressDetails,
+        addressMapsUrl,
         paymentMethod,
         paymentNote,
+        cashAmount,
+        transferAmount,
+        contactPhone,
+        contactName,
       });
 
       return res.status(201).json({
@@ -45,15 +100,10 @@ export class OrderController {
         order: {
           id: order.id,
           user: username,
+          origin: order.origin,
           status: order.status,
           paymentStatus: order.paymentStatus,
-          fulfillmentMethod: order.fulfillmentMethod,
-          addressText: order.addressText,
-          addressLat: order.addressLat,
-          addressLng: order.addressLng,
-          addressDetails: order.addressDetails,
-          paymentMethod: order.paymentMethod,
-          paymentNote: order.paymentNote,
+          ...fulfillmentOf(order),
           total: order.total,
           createdAt: order.createdAt,
           productos: order.orderItems.map((item) => ({
@@ -69,6 +119,11 @@ export class OrderController {
             combo: comboOf(item),
           })),
         },
+        // Deep-link para que el cliente mande el pedido por WhatsApp. Es la
+        // continuación natural del checkout, pero NO es parte del pedido: si
+        // el tenant no tiene número cargado o el armado falla, la orden ya
+        // está creada y se devuelve igual con whatsapp: null.
+        whatsapp: buildWhatsappBlock(order),
       });
     } catch (error) {
       next(error);
@@ -140,13 +195,7 @@ export class OrderController {
         depositAmount: order.depositAmount,
         status: order.status,
         paymentStatus: order.paymentStatus,
-        fulfillmentMethod: order.fulfillmentMethod,
-        addressText: order.addressText,
-        addressLat: order.addressLat,
-        addressLng: order.addressLng,
-        addressDetails: order.addressDetails,
-        paymentMethod: order.paymentMethod,
-        paymentNote: order.paymentNote,
+        ...fulfillmentOf(order),
         transferConfirmedAt: order.transferConfirmedAt,
         total: order.total,
         createdAt: order.createdAt,
@@ -190,13 +239,7 @@ export class OrderController {
           id: order.id,
           status: order.status,
           paymentStatus: order.paymentStatus,
-          fulfillmentMethod: order.fulfillmentMethod,
-          addressText: order.addressText,
-          addressLat: order.addressLat,
-          addressLng: order.addressLng,
-          addressDetails: order.addressDetails,
-          paymentMethod: order.paymentMethod,
-          paymentNote: order.paymentNote,
+          ...fulfillmentOf(order),
           transferConfirmedAt: order.transferConfirmedAt,
           total: order.total,
           createdAt: order.createdAt,
@@ -272,8 +315,13 @@ export class OrderController {
         addressLat,
         addressLng,
         addressDetails,
+        addressMapsUrl,
         paymentMethod,
         paymentNote,
+        cashAmount,
+        transferAmount,
+        contactPhone,
+        contactName,
       } = req.body ?? {};
 
       const order = await OrderModel.reviewOrder({
@@ -287,8 +335,13 @@ export class OrderController {
           addressLat,
           addressLng,
           addressDetails,
+          addressMapsUrl,
           paymentMethod,
           paymentNote,
+          cashAmount,
+          transferAmount,
+          contactPhone,
+          contactName,
         },
       });
 
@@ -298,13 +351,7 @@ export class OrderController {
           id: order.id,
           status: order.status,
           paymentStatus: order.paymentStatus,
-          fulfillmentMethod: order.fulfillmentMethod,
-          addressText: order.addressText,
-          addressLat: order.addressLat,
-          addressLng: order.addressLng,
-          addressDetails: order.addressDetails,
-          paymentMethod: order.paymentMethod,
-          paymentNote: order.paymentNote,
+          ...fulfillmentOf(order),
           total: order.total,
           requiresDeposit: order.requiresDeposit,
           depositAmount: order.depositAmount,
