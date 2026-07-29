@@ -33,6 +33,9 @@ model Tenant {
   promoProducts          PromoProduct[]
   userAddresses          UserAddress[]
   orderPayments          OrderPayment[]
+  cashCategories         CashCategory[]
+  cashSessions           CashRegisterSession[]
+  cashMovements          CashMovement[]
 }
 
 model TenantConfig {
@@ -135,6 +138,15 @@ model TenantConfig {
   // depósito (depositPercentage % del total) antes de pasar a producción.
   depositEnabled    Boolean @default(false)
   depositPercentage Int     @default(50)
+
+  // Módulo de caja (services/cash-register.js). Opt-in por tenant: con el flag en
+  // false NADA cambia — los endpoints devuelven 404 y los cobros de órdenes no
+  // exigen turno abierto. Prendido, confirmar un cobro sin caja abierta FALLA, y
+  // por eso también es de solo lectura para el tenant: apagarlo o prenderlo cambia
+  // si se puede cobrar. No es parte de un perfil (services/tenant-profiles.js) a
+  // propósito — reaplicar un perfil apagaría la caja de quien la tenga prendida.
+  // Se setea con `node prisma/set-cash-register.js <slug> on|off`.
+  cashRegisterEnabled Boolean @default(false)
 
   // WhatsApp Business: el `phone_number_id` del numero de la marca (Meta Graph
   // API). Identifica al tenant cuando llega un mensaje por el webhook de WhatsApp.
@@ -674,6 +686,128 @@ model OrderItem {
   @@index([parentItemId])
 }
 
+// ---------------------------------------------------------------------------
+// Caja registradora (services/cash-register.js)
+// ---------------------------------------------------------------------------
+
+// Catálogo de etiquetas de movimiento del tenant. Mismo patrón que
+// `TenantAttribute`: el tenant define su propia taxonomía ("Sueldos", "Insumos",
+// "Proveedores") y cada movimiento manual apunta a una. Es lo que hace que se
+// pueda responder "cuánto gasté en insumos este mes" sin leer notas a ojo.
+//
+// No se borra una etiqueta con movimientos (FK Restrict + chequeo explícito): se
+// desactiva. Un movimiento de hace tres meses tiene que seguir diciendo qué era.
+model CashCategory {
+  id       Int    @id @default(autoincrement())
+  tenantId Int
+  key      String // slug estable: "sueldos", "insumos"
+  label    String // display: "Sueldos", "Insumos"
+  // A qué dirección aplica: "Sueldos" no es un ingreso jamás. Se valida al crear
+  // el movimiento (CASH_CATEGORY_KIND_MISMATCH).
+  applies  CashCategoryApplies @default(EXPENSE)
+  position Int                 @default(0)
+  isActive Boolean             @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  movements CashMovement[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+}
+
+// Turno de caja física. NO es un día calendario: es un turno explícito
+// (apertura -> cierre), lo que evita por completo el problema de zona horaria que
+// tiene Estadísticas para definir "hoy".
+//
+// El software sigue sin gestionar dinero: no verifica que la plata exista, igual
+// que las confirmaciones de cobro de una orden. Lleva la cuenta de lo que un
+// humano declaró y muestra la diferencia.
+model CashRegisterSession {
+  id       Int               @id @default(autoincrement())
+  tenantId Int
+  status   CashSessionStatus @default(OPEN)
+
+  openingAmount Float // efectivo declarado al abrir
+  openedById    Int
+  openedAt      DateTime @default(now())
+  openingNote   String?
+
+  // Todo lo del cierre es null mientras status = OPEN (CHECK en la migración).
+  closedById  Int?
+  closedAt    DateTime?
+  closingNote String?
+
+  // Snapshots calculados AL CERRAR, no se recalculan nunca (mismo criterio que
+  // `Order.depositAmount` y el precio de `OrderItem`): si mañana se corrige un
+  // movimiento viejo, el arqueo de ayer tiene que seguir diciendo lo que dijo.
+  countedCashAmount  Float? // lo que la persona contó a mano
+  expectedCashAmount Float? // openingAmount + Σ movimientos CASH con signo
+  cashDifference     Float? // contado − esperado (negativo = falta plata)
+  transferTotal      Float? // Σ movimientos TRANSFER — informativo, NO entra al arqueo
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  movements CashMovement[]
+  tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Una sola sesión OPEN por tenant: índice único PARCIAL, declarado solo en la
+  // migración (Prisma no soporta parciales y generaría drift en `migrate diff`),
+  // mismo motivo que "UserAddress_user_default_key".
+  @@index([tenantId])
+  @@index([tenantId, status])
+}
+
+// Un movimiento de plata del turno. Los ORDER_* los crea SOLO el servicio de
+// órdenes (uno por fila del libro de cobros que no sea GATEWAY); INCOME/EXPENSE
+// son los manuales del local: sueldos, insumos, retiros, aportes de cambio.
+model CashMovement {
+  id        Int              @id @default(autoincrement())
+  tenantId  Int
+  sessionId Int
+  type      CashMovementType
+  // Se reusa `PaymentChannel` en vez de un enum propio para que copiar una fila
+  // del libro de cobros sea directo. GATEWAY está prohibido por CHECK: esa plata
+  // no pasa por el cajón y contarla rompería el arqueo.
+  channel   PaymentChannel
+  // SIEMPRE positivo (CHECK en la migración); el signo lo aporta `type` vía
+  // CASH_MOVEMENT_SIGN (services/cash-register-math.js).
+  amount    Float
+
+  // Etiqueta del movimiento: obligatoria en los manuales (lo exige Zod), null en
+  // los ORDER_*, que ya se explican por su `type` y su `orderId`.
+  categoryId Int?
+  // A quién se le pagó / de quién entró: "Juan", "Panadería López". Texto libre a
+  // propósito — el repartidor al que se le paga el día no es un User del sistema.
+  payee      String?
+
+  // Presentes solo en movimientos derivados de una orden. Sin FK a propósito,
+  // mismo criterio que UserAddress↔Order: el movimiento es un hecho histórico de
+  // caja y no puede depender de que la orden siga existiendo.
+  orderId Int?
+  // La fila del libro que originó este movimiento. UNIQUE = idempotencia
+  // estructural del enganche: ni dos requests concurrentes pueden anotar el mismo
+  // cobro dos veces. Postgres admite varios NULL en un índice único, así que los
+  // movimientos manuales no se estorban entre sí.
+  orderPaymentId Int? @unique
+
+  note        String?
+  createdById Int?
+  createdAt   DateTime @default(now())
+
+  session  CashRegisterSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  tenant   Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category CashCategory?       @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId])
+  @@index([sessionId])
+  @@index([orderId])
+  @@index([categoryId])
+}
+
 model ContentSuggestion {
   id        Int              @id @default(autoincrement())
   tenantId  Int
@@ -830,6 +964,34 @@ enum OrderPaymentKind {
   DEPOSIT // seña
   PAYMENT // cobro (parcial o total)
   REFUND  // devolución al cliente
+}
+
+enum CashSessionStatus {
+  OPEN
+  CLOSED
+}
+
+// Tipo de movimiento de caja. El signo NO se guarda: lo deriva
+// CASH_MOVEMENT_SIGN (services/cash-register-math.js) a partir de este enum, y
+// `amount` es SIEMPRE positivo. Guardar montos con signo invita a que un caller
+// escriba -50 en un ingreso y nadie se entere hasta el arqueo.
+//
+// No se reusa `OrderPaymentKind` (una columna no puede tener dos enums) porque la
+// caja necesita además sus dos tipos propios, los manuales.
+enum CashMovementType {
+  ORDER_DEPOSIT // seña cobrada de una orden                       → +
+  ORDER_PAYMENT // cobro de una orden                              → +
+  ORDER_REFUND  // devolución al cliente                           → −
+  INCOME        // ingreso manual (aporte de cambio, venta suelta) → +
+  EXPENSE       // egreso manual (sueldos, insumos, retiro)        → −
+}
+
+// Dirección a la que aplica una etiqueta de caja. BOTH existe para las que van en
+// los dos sentidos ("Ajuste", "Otro").
+enum CashCategoryApplies {
+  INCOME
+  EXPENSE
+  BOTH
 }
 
 enum Role {

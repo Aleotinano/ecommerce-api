@@ -333,7 +333,7 @@ export const updateTenantConfig = updateTenantConfigObject
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: [field],
-          message: `${field} no se configura desde el panel: es parte del flujo de venta del tenant`,
+          message: `${field} no se configura desde el panel: es parte del flujo de venta del tenant y lo configuramos nosotros`,
         });
       }
     }
@@ -365,13 +365,19 @@ export const UPDATABLE_TENANT_CONFIG_FIELDS = Object.keys(
  *
  * Van igual en la proyección pública (ver `TENANT_CONFIG_PUBLIC_SELECT` en
  * services/tenant-config.js, que mergea las dos listas): el storefront necesita
- * `paymentMethodsEnabled` para pintar solo los métodos que el tenant acepta.
+ * `paymentMethodsEnabled` para pintar solo los métodos que el tenant acepta, y el
+ * panel necesita `cashRegisterEnabled` para saber si mostrar el módulo de caja.
  */
 export const READONLY_TENANT_CONFIG_FIELDS = [
   "paymentMethodsEnabled",
   "fulfillmentMethodsEnabled",
   "depositEnabled",
   "depositPercentage",
+  // La caja no es un perfil de venta, pero es de la misma clase: prendida, cobrar
+  // sin turno abierto FALLA. Si el tenant pudiera apagarla, un cobro dejaría de
+  // impactar en el arqueo sin que nadie se enterara. Se setea con
+  // `prisma/set-cash-register.js`.
+  "cashRegisterEnabled",
 ];
 
 export const updateTenantConfigLogo = z.object({

@@ -103,6 +103,12 @@ export async function seedTenants() {
   // ContentSuggestion referencia Product con FK RESTRICT: hay que limpiarla antes
   // de borrar productos o el reseed falla.
   await prisma.contentSuggestion.deleteMany();
+  // Caja antes que Tenant: `deleteMany` no dispara el ON DELETE CASCADE de la FK
+  // (mismo motivo que UserAddress más abajo), y los movimientos además referencian
+  // etiquetas con FK Restrict, que ni con cascade se irían.
+  await prisma.cashMovement.deleteMany();
+  await prisma.cashRegisterSession.deleteMany();
+  await prisma.cashCategory.deleteMany();
   await prisma.cartItem.deleteMany();
   await prisma.cart.deleteMany();
   await prisma.orderItem.deleteMany();

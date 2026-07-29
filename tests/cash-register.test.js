@@ -1,0 +1,602 @@
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import request from "supertest";
+
+const prisma = (await import("../lib/prisma.js")).default;
+const { app } = await import("../app.js");
+const { CashRegisterModel, DEFAULT_CASH_CATEGORIES } = await import(
+  "../services/cash-register.js"
+);
+const { seedTenants, seedTenantConfig, cookieFor } = await import("./helpers.js");
+
+// Fase 1: la caja sola, sin enganche con órdenes. El enganche se prueba en
+// tests/cash-register-orders.test.js.
+
+let acme;
+let shopco;
+let acmeCookie;
+let shopcoCookie;
+let acmeStaffCookie;
+let categorias;
+
+const sueldos = () => categorias.find((c) => c.key === "sueldos");
+const insumos = () => categorias.find((c) => c.key === "insumos");
+const aporte = () => categorias.find((c) => c.key === "aporte-cambio");
+
+/** Deja el tenant sin turnos ni movimientos, para que cada bloque parta limpio. */
+async function resetSessions(tenantId) {
+  await prisma.cashMovement.deleteMany({ where: { tenantId } });
+  await prisma.cashRegisterSession.deleteMany({ where: { tenantId } });
+}
+
+beforeAll(async () => {
+  ({ acme, shopco } = await seedTenants());
+
+  // acme: caja habilitada. shopco: apagada (el default de todos los tenants hoy).
+  await seedTenantConfig(acme.id, { cashRegisterEnabled: true });
+  await seedTenantConfig(shopco.id, { storeName: "ShopCo" });
+
+  await CashRegisterModel.ensureDefaultCategories({ tenantId: acme.id });
+  categorias = await prisma.cashCategory.findMany({ where: { tenantId: acme.id } });
+
+  const acmeAdmin = acme.users.find((u) => u.role === "ADMIN");
+  acmeCookie = cookieFor(acmeAdmin);
+  shopcoCookie = cookieFor(shopco.users.find((u) => u.role === "ADMIN"));
+
+  // STAFF opera la caja pero no configura las etiquetas.
+  const staff = await prisma.user.create({
+    data: {
+      tenantId: acme.id,
+      username: "staff_caja",
+      email: "staff.caja@acme.com",
+      password: acmeAdmin.password,
+      role: "STAFF",
+      emailVerified: true,
+    },
+  });
+  acmeStaffCookie = cookieFor(staff);
+});
+
+afterAll(async () => {
+  await prisma.$disconnect();
+});
+
+describe("flag cashRegisterEnabled", () => {
+  it("tenant sin caja: 404 CASH_REGISTER_DISABLED en vez de un 403", async () => {
+    // Para ese tenant el módulo no existe; no es que le falten permisos.
+    const res = await request(app).get("/cash-register/current").set("Cookie", shopcoCookie);
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe("CASH_REGISTER_DISABLED");
+  });
+
+  it("tenant sin caja: tampoco puede abrir", async () => {
+    const res = await request(app)
+      .post("/cash-register/open")
+      .set("Cookie", shopcoCookie)
+      .send({ openingAmount: 1000 });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe("CASH_REGISTER_DISABLED");
+  });
+
+  it("sin token: 401", async () => {
+    const res = await request(app).get("/cash-register/current");
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("apertura y cierre", () => {
+  beforeAll(async () => {
+    await resetSessions(acme.id);
+  });
+
+  it("sin caja abierta, /current devuelve session null con 200", async () => {
+    // "No hay caja abierta" es un estado normal que el panel tiene que pintar.
+    const res = await request(app).get("/cash-register/current").set("Cookie", acmeCookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.session).toBeNull();
+  });
+
+  it("cerrar sin caja abierta → 409", async () => {
+    const res = await request(app)
+      .post("/cash-register/close")
+      .set("Cookie", acmeCookie)
+      .send({ countedCashAmount: 0 });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe("CASH_SESSION_NOT_OPEN");
+  });
+
+  it("abre con el efectivo declarado", async () => {
+    const res = await request(app)
+      .post("/cash-register/open")
+      .set("Cookie", acmeCookie)
+      .send({ openingAmount: 5000, note: "arranca el turno" });
+
+    expect(res.status).toBe(201);
+    expect(res.body.session.status).toBe("OPEN");
+    expect(res.body.session.openingAmount).toBe(5000);
+    expect(res.body.session.openingNote).toBe("arranca el turno");
+  });
+
+  it("abrir con una ya abierta → 409 y NO crea una segunda fila", async () => {
+    const res = await request(app)
+      .post("/cash-register/open")
+      .set("Cookie", acmeCookie)
+      .send({ openingAmount: 999 });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe("CASH_SESSION_ALREADY_OPEN");
+
+    const abiertas = await prisma.cashRegisterSession.count({
+      where: { tenantId: acme.id, status: "OPEN" },
+    });
+    expect(abiertas).toBe(1);
+  });
+
+  it("monto de apertura negativo → 400 de validación", async () => {
+    await resetSessions(acme.id);
+
+    const res = await request(app)
+      .post("/cash-register/open")
+      .set("Cookie", acmeCookie)
+      .send({ openingAmount: -1 });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("arqueo completo: apertura 5000, +1000, −2000, contado 3900 → diferencia −100", async () => {
+    await resetSessions(acme.id);
+
+    await request(app)
+      .post("/cash-register/open")
+      .set("Cookie", acmeCookie)
+      .send({ openingAmount: 5000 })
+      .expect(201);
+
+    await request(app)
+      .post("/cash-register/movements")
+      .set("Cookie", acmeCookie)
+      .send({ type: "INCOME", channel: "CASH", amount: 1000, categoryId: aporte().id })
+      .expect(201);
+
+    await request(app)
+      .post("/cash-register/movements")
+      .set("Cookie", acmeCookie)
+      .send({
+        type: "EXPENSE",
+        channel: "CASH",
+        amount: 2000,
+        categoryId: sueldos().id,
+        payee: "Juan",
+      })
+      .expect(201);
+
+    const current = await request(app)
+      .get("/cash-register/current")
+      .set("Cookie", acmeCookie);
+
+    expect(current.body.session.totals.expectedCashAmount).toBe(4000);
+    expect(current.body.session.totals.cashDifference).toBeNull();
+    expect(current.body.session.movements).toHaveLength(2);
+
+    const cerrada = await request(app)
+      .post("/cash-register/close")
+      .set("Cookie", acmeCookie)
+      .send({ countedCashAmount: 3900, note: "faltan 100" });
+
+    expect(cerrada.status).toBe(200);
+    expect(cerrada.body.session.status).toBe("CLOSED");
+    expect(cerrada.body.session.expectedCashAmount).toBe(4000);
+    expect(cerrada.body.session.countedCashAmount).toBe(3900);
+    expect(cerrada.body.session.cashDifference).toBe(-100);
+  });
+
+  it("un turno cerrado no acepta movimientos nuevos", async () => {
+    // No hay caja abierta después del cierre anterior: el movimiento no tiene dónde
+    // caer, y no se puede backdatear a la sesión ya arqueada.
+    const res = await request(app)
+      .post("/cash-register/movements")
+      .set("Cookie", acmeCookie)
+      .send({ type: "EXPENSE", channel: "CASH", amount: 50, categoryId: insumos().id });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe("CASH_SESSION_NOT_OPEN");
+  });
+
+  it("el arqueo guardado es un snapshot: un movimiento posterior no lo recalcula", async () => {
+    const cerrada = await prisma.cashRegisterSession.findFirst({
+      where: { tenantId: acme.id, status: "CLOSED" },
+      orderBy: { id: "desc" },
+    });
+
+    // Se fuerza una fila en la sesión cerrada (por HTTP es imposible, ver test de
+    // arriba) para confirmar que el detalle sigue devolviendo lo que se firmó.
+    await prisma.cashMovement.create({
+      data: {
+        tenantId: acme.id,
+        sessionId: cerrada.id,
+        type: "EXPENSE",
+        channel: "CASH",
+        amount: 500,
+        categoryId: insumos().id,
+      },
+    });
+
+    const res = await request(app)
+      .get(`/cash-register/${cerrada.id}`)
+      .set("Cookie", acmeCookie);
+
+    expect(res.body.session.totals.expectedCashAmount).toBe(4000);
+    expect(res.body.session.totals.cashDifference).toBe(-100);
+  });
+});
+
+describe("movimientos", () => {
+  beforeAll(async () => {
+    await resetSessions(acme.id);
+    await request(app)
+      .post("/cash-register/open")
+      .set("Cookie", acmeCookie)
+      .send({ openingAmount: 0 })
+      .expect(201);
+  });
+
+  it("registra un sueldo con destinatario y etiqueta", async () => {
+    const res = await request(app)
+      .post("/cash-register/movements")
+      .set("Cookie", acmeCookie)
+      .send({
+        type: "EXPENSE",
+        channel: "CASH",
+        amount: 20000,
+        categoryId: sueldos().id,
+        payee: "Juan Pérez",
+        note: "quincena de julio",
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.movement.amount).toBe(20000);
+    expect(res.body.movement.payee).toBe("Juan Pérez");
+    expect(res.body.movement.category.key).toBe("sueldos");
+    expect(res.body.movement.orderId).toBeNull();
+  });
+
+  it("STAFF puede registrar movimientos", async () => {
+    const res = await request(app)
+      .post("/cash-register/movements")
+      .set("Cookie", acmeStaffCookie)
+      .send({ type: "EXPENSE", channel: "CASH", amount: 300, categoryId: insumos().id });
+
+    expect(res.status).toBe(201);
+  });
+
+  it("un tipo ORDER_* por HTTP → 400: esos los escribe solo el sistema", async () => {
+    const res = await request(app)
+      .post("/cash-register/movements")
+      .set("Cookie", acmeCookie)
+      .send({
+        type: "ORDER_PAYMENT",
+        channel: "CASH",
+        amount: 1000,
+        categoryId: sueldos().id,
+      });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("GATEWAY no es una vía de caja → 400", async () => {
+    const res = await request(app)
+      .post("/cash-register/movements")
+      .set("Cookie", acmeCookie)
+      .send({ type: "INCOME", channel: "GATEWAY", amount: 10, categoryId: aporte().id });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("monto 0 o negativo → 400", async () => {
+    for (const amount of [0, -50]) {
+      const res = await request(app)
+        .post("/cash-register/movements")
+        .set("Cookie", acmeCookie)
+        .send({ type: "EXPENSE", channel: "CASH", amount, categoryId: insumos().id });
+
+      expect(res.status, `amount ${amount}`).toBe(400);
+    }
+  });
+
+  it("sin etiqueta → 400: un egreso sin etiquetar no se puede reportar", async () => {
+    const res = await request(app)
+      .post("/cash-register/movements")
+      .set("Cookie", acmeCookie)
+      .send({ type: "EXPENSE", channel: "CASH", amount: 100 });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("etiqueta de otra dirección → 400 CASH_CATEGORY_KIND_MISMATCH", async () => {
+    // "Sueldos" aplica a EXPENSE: un ingreso archivado ahí ensucia el reporte de
+    // fin de mes, que es lo único que justifica que el catálogo exista.
+    const res = await request(app)
+      .post("/cash-register/movements")
+      .set("Cookie", acmeCookie)
+      .send({ type: "INCOME", channel: "CASH", amount: 100, categoryId: sueldos().id });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("CASH_CATEGORY_KIND_MISMATCH");
+  });
+
+  it("etiqueta de otro tenant → 404", async () => {
+    const ajena = await prisma.cashCategory.create({
+      data: { tenantId: shopco.id, key: "insumos", label: "Insumos" },
+    });
+
+    const res = await request(app)
+      .post("/cash-register/movements")
+      .set("Cookie", acmeCookie)
+      .send({ type: "EXPENSE", channel: "CASH", amount: 100, categoryId: ajena.id });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe("CASH_CATEGORY_NOT_FOUND");
+
+    await prisma.cashCategory.delete({ where: { id: ajena.id } });
+  });
+
+  it("etiqueta desactivada → 409", async () => {
+    const desactivada = await prisma.cashCategory.create({
+      data: { tenantId: acme.id, key: "vieja", label: "Vieja", isActive: false },
+    });
+
+    const res = await request(app)
+      .post("/cash-register/movements")
+      .set("Cookie", acmeCookie)
+      .send({ type: "EXPENSE", channel: "CASH", amount: 100, categoryId: desactivada.id });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe("CASH_CATEGORY_INACTIVE");
+
+    await prisma.cashCategory.delete({ where: { id: desactivada.id } });
+  });
+});
+
+describe("resumen por etiqueta", () => {
+  beforeAll(async () => {
+    await resetSessions(acme.id);
+    await request(app)
+      .post("/cash-register/open")
+      .set("Cookie", acmeCookie)
+      .send({ openingAmount: 1000 })
+      .expect(201);
+
+    const cargar = (body) =>
+      request(app).post("/cash-register/movements").set("Cookie", acmeCookie).send(body).expect(201);
+
+    await cargar({ type: "EXPENSE", channel: "CASH", amount: 20000, categoryId: sueldos().id });
+    await cargar({ type: "EXPENSE", channel: "TRANSFER", amount: 5000, categoryId: sueldos().id });
+    await cargar({ type: "EXPENSE", channel: "CASH", amount: 3000, categoryId: insumos().id });
+    await cargar({ type: "INCOME", channel: "CASH", amount: 2000, categoryId: aporte().id });
+  });
+
+  it("separa sueldos de insumos, con signo y cantidad", async () => {
+    const res = await request(app).get("/cash-register/summary").set("Cookie", acmeCookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.byCategory.sueldos).toMatchObject({ total: -25000, count: 2 });
+    expect(res.body.byCategory.insumos).toMatchObject({ total: -3000, count: 1 });
+    expect(res.body.byCategory["aporte-cambio"]).toMatchObject({ total: 2000, count: 1 });
+  });
+
+  it("agrupa por tipo y por vía", async () => {
+    const res = await request(app).get("/cash-register/summary").set("Cookie", acmeCookie);
+
+    expect(res.body.byType.EXPENSE).toBe(-28000);
+    expect(res.body.byType.INCOME).toBe(2000);
+    // El efectivo del cajón y lo que se pagó por transferencia se leen aparte.
+    expect(res.body.byChannel.CASH).toBe(-21000);
+    expect(res.body.byChannel.TRANSFER).toBe(-5000);
+  });
+
+  it("un rango que no incluye los movimientos devuelve vacío", async () => {
+    const res = await request(app)
+      .get("/cash-register/summary?from=2020-01-01&to=2020-01-31")
+      .set("Cookie", acmeCookie);
+
+    expect(res.body.byCategory).toEqual({});
+  });
+});
+
+describe("catálogo de etiquetas", () => {
+  it("el tenant arranca con las etiquetas por defecto sembradas", async () => {
+    const res = await request(app).get("/cash-register/categories").set("Cookie", acmeCookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.categories.map((c) => c.key)).toEqual(
+      DEFAULT_CASH_CATEGORIES.map((c) => c.key)
+    );
+  });
+
+  it("ensureDefaultCategories es idempotente", async () => {
+    const antes = await prisma.cashCategory.count({ where: { tenantId: acme.id } });
+    const result = await CashRegisterModel.ensureDefaultCategories({ tenantId: acme.id });
+    const despues = await prisma.cashCategory.count({ where: { tenantId: acme.id } });
+
+    expect(result.created).toBe(0);
+    expect(despues).toBe(antes);
+  });
+
+  it("ADMIN crea una etiqueta propia", async () => {
+    const res = await request(app)
+      .post("/cash-register/categories")
+      .set("Cookie", acmeCookie)
+      .send({ key: "delivery", label: "Pago a repartidores", applies: "EXPENSE" });
+
+    expect(res.status).toBe(201);
+    expect(res.body.category.key).toBe("delivery");
+  });
+
+  it("clave repetida → 409", async () => {
+    const res = await request(app)
+      .post("/cash-register/categories")
+      .set("Cookie", acmeCookie)
+      .send({ key: "delivery", label: "Otra vez" });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe("CASH_CATEGORY_DUPLICATE");
+  });
+
+  it("clave con formato inválido → 400", async () => {
+    const res = await request(app)
+      .post("/cash-register/categories")
+      .set("Cookie", acmeCookie)
+      .send({ key: "Pago Sueldos", label: "Sueldos" });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("STAFF no configura el catálogo", async () => {
+    const res = await request(app)
+      .post("/cash-register/categories")
+      .set("Cookie", acmeStaffCookie)
+      .send({ key: "otra", label: "Otra" });
+
+    expect(res.status).toBe(403);
+  });
+
+  it("renombra la etiqueta sin tocar la clave", async () => {
+    const categoria = await prisma.cashCategory.findFirst({
+      where: { tenantId: acme.id, key: "delivery" },
+    });
+
+    const res = await request(app)
+      .patch(`/cash-register/categories/${categoria.id}`)
+      .set("Cookie", acmeCookie)
+      .send({ label: "Repartidores", key: "otra-clave" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.category.label).toBe("Repartidores");
+    // `key` no está en el schema de update: es el slug estable.
+    expect(res.body.category.key).toBe("delivery");
+  });
+
+  it("borra una etiqueta sin uso", async () => {
+    const categoria = await prisma.cashCategory.findFirst({
+      where: { tenantId: acme.id, key: "delivery" },
+    });
+
+    const res = await request(app)
+      .delete(`/cash-register/categories/${categoria.id}`)
+      .set("Cookie", acmeCookie);
+
+    expect(res.status).toBe(200);
+    expect(
+      await prisma.cashCategory.findUnique({ where: { id: categoria.id } })
+    ).toBeNull();
+  });
+
+  it("una etiqueta con movimientos NO se borra: se desactiva", async () => {
+    const res = await request(app)
+      .delete(`/cash-register/categories/${sueldos().id}`)
+      .set("Cookie", acmeCookie);
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe("CASH_CATEGORY_IN_USE");
+
+    const desactivada = await request(app)
+      .patch(`/cash-register/categories/${sueldos().id}`)
+      .set("Cookie", acmeCookie)
+      .send({ isActive: false });
+
+    expect(desactivada.status).toBe(200);
+    expect(desactivada.body.category.isActive).toBe(false);
+
+    // Y sigue apareciendo en el historial, que es el motivo de no borrarla.
+    const listado = await request(app)
+      .get("/cash-register/categories?includeInactive=true")
+      .set("Cookie", acmeCookie);
+
+    expect(listado.body.categories.map((c) => c.key)).toContain("sueldos");
+
+    const activas = await request(app)
+      .get("/cash-register/categories")
+      .set("Cookie", acmeCookie);
+
+    expect(activas.body.categories.map((c) => c.key)).not.toContain("sueldos");
+
+    await prisma.cashCategory.update({
+      where: { id: sueldos().id },
+      data: { isActive: true },
+    });
+  });
+});
+
+describe("aislamiento entre tenants", () => {
+  it("la caja abierta de acme no se ve ni se cierra desde shopco", async () => {
+    await seedTenantConfig(shopco.id, { cashRegisterEnabled: true });
+
+    const propia = await request(app)
+      .get("/cash-register/current")
+      .set("Cookie", shopcoCookie);
+
+    expect(propia.status).toBe(200);
+    expect(propia.body.session).toBeNull();
+
+    const cierre = await request(app)
+      .post("/cash-register/close")
+      .set("Cookie", shopcoCookie)
+      .send({ countedCashAmount: 0 });
+
+    expect(cierre.status).toBe(409);
+
+    const abierta = await prisma.cashRegisterSession.findFirst({
+      where: { tenantId: acme.id, status: "OPEN" },
+    });
+    expect(abierta).not.toBeNull();
+  });
+
+  it("el detalle de un turno de otro tenant → 404", async () => {
+    const deAcme = await prisma.cashRegisterSession.findFirst({
+      where: { tenantId: acme.id },
+    });
+
+    const res = await request(app)
+      .get(`/cash-register/${deAcme.id}`)
+      .set("Cookie", shopcoCookie);
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe("CASH_SESSION_NOT_FOUND");
+  });
+
+  it("los dos tenants pueden tener su turno abierto a la vez", async () => {
+    const abrir = await request(app)
+      .post("/cash-register/open")
+      .set("Cookie", shopcoCookie)
+      .send({ openingAmount: 100 });
+
+    expect(abrir.status).toBe(201);
+
+    const abiertas = await prisma.cashRegisterSession.count({ where: { status: "OPEN" } });
+    expect(abiertas).toBe(2);
+  });
+});
+
+describe("historial", () => {
+  it("lista los turnos de más nuevo a más viejo con la cantidad de movimientos", async () => {
+    const res = await request(app).get("/cash-register").set("Cookie", acmeCookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.sessions.length).toBeGreaterThan(0);
+    expect(res.body.sessions[0]._count.movements).toBeGreaterThanOrEqual(0);
+
+    const fechas = res.body.sessions.map((s) => new Date(s.openedAt).getTime());
+    expect(fechas).toEqual([...fechas].sort((a, b) => b - a));
+  });
+
+  it("limit arriba de 100 → 400", async () => {
+    const res = await request(app)
+      .get("/cash-register?limit=500")
+      .set("Cookie", acmeCookie);
+
+    expect(res.status).toBe(400);
+  });
+});
