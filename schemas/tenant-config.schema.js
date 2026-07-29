@@ -220,18 +220,9 @@ const updateTenantConfigObject = z
       .nullable()
       .optional(),
 
-    depositEnabled: z
-      .boolean({ invalid_type_error: "depositEnabled debe ser booleano" })
-      .nullable()
-      .optional(),
-
-    depositPercentage: z
-      .number({ invalid_type_error: "depositPercentage debe ser un número" })
-      .int("depositPercentage debe ser entero")
-      .min(0, "depositPercentage no puede ser menor a 0")
-      .max(100, "depositPercentage no puede superar 100")
-      .nullable()
-      .optional(),
+    // NO va `depositEnabled`/`depositPercentage` ni los métodos habilitados: son
+    // campos de flujo de venta y los configuramos nosotros, no el tenant. Ver
+    // READONLY_TENANT_CONFIG_FIELDS al final del archivo.
 
     productVariantsEnabled: z
       .boolean({ invalid_type_error: "productVariantsEnabled debe ser booleano" })
@@ -323,10 +314,33 @@ const updateTenantConfigObject = z
       .optional(),
   });
 
-export const updateTenantConfig = updateTenantConfigObject.refine(
-  (data) => Object.values(data).some((value) => value !== undefined),
-  { message: "No hay cambios para actualizar" }
-);
+export const updateTenantConfig = updateTenantConfigObject
+  // `.passthrough()` es lo que hace posible el chequeo de abajo: por defecto Zod
+  // DESCARTA las claves desconocidas antes de correr los refinements, así que un
+  // `depositEnabled` nunca llegaría a verse. Dejarlas pasar no abre nada: el
+  // controller arma el `data` de persistencia iterando
+  // `UPDATABLE_TENANT_CONFIG_FIELDS`, no las claves del body.
+  .passthrough()
+  // Los campos de flujo de venta se rechazan EXPLÍCITAMENTE. Sin esto, un
+  // `PATCH { storeName, depositEnabled }` guardaba el nombre y tiraba la seña a la
+  // basura con un 200 en la mano — justo el bug de "persiste pero no se refleja"
+  // que este archivo evita en otros lados. Tampoco alcanzaba con `.strict()`: eso
+  // rompería a cualquier panel que haga PATCH del payload completo del GET, que
+  // incluye `id` y `logoUrl`.
+  .superRefine((data, ctx) => {
+    for (const field of READONLY_TENANT_CONFIG_FIELDS) {
+      if (data[field] !== undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [field],
+          message: `${field} no se configura desde el panel: es parte del flujo de venta del tenant`,
+        });
+      }
+    }
+  })
+  .refine((data) => Object.values(data).some((value) => value !== undefined), {
+    message: "No hay cambios para actualizar",
+  });
 
 // Campos actualizables, derivados del schema: el controller arma el `data` de
 // persistencia a partir de esta lista, así agregar un campo nuevo al schema
@@ -334,6 +348,31 @@ export const updateTenantConfig = updateTenantConfigObject.refine(
 export const UPDATABLE_TENANT_CONFIG_FIELDS = Object.keys(
   updateTenantConfigObject.shape
 );
+
+/**
+ * Campos de la config que el tenant **lee pero no escribe**: el flujo de venta.
+ * Deciden cuándo una orden puede producirse y cuánta plata se exige antes, así que
+ * los configuramos nosotros — si el admin del tenant pudiera cambiarlos, podría
+ * trabar pedidos que ya están en curso (una orden de la semana pasada dejando de
+ * poder producirse porque alguien apagó un método de pago).
+ *
+ * El mecanismo de bloqueo es **estar afuera de `updateTenantConfigObject`**, no un
+ * chequeo de rol: `PATCH /tenant-config/:tenantId` corre con
+ * `requireRole(["ADMIN"])` y ese ADMIN es el del propio tenant, así que el rol no
+ * alcanza para distinguirlo de nosotros. Se setean con un perfil
+ * (`services/tenant-profiles.js`) al crear el tenant, y después con
+ * `prisma/set-tenant-profile.js`.
+ *
+ * Van igual en la proyección pública (ver `TENANT_CONFIG_PUBLIC_SELECT` en
+ * services/tenant-config.js, que mergea las dos listas): el storefront necesita
+ * `paymentMethodsEnabled` para pintar solo los métodos que el tenant acepta.
+ */
+export const READONLY_TENANT_CONFIG_FIELDS = [
+  "paymentMethodsEnabled",
+  "fulfillmentMethodsEnabled",
+  "depositEnabled",
+  "depositPercentage",
+];
 
 export const updateTenantConfigLogo = z.object({
   tenantId: z.coerce

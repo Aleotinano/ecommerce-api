@@ -6,6 +6,7 @@ const STATUS_META = {
   COMPLETED: { label: "Completadas", color: "green" },
   PENDING: { label: "Pendientes", color: "amber" },
   PROCESSING: { label: "En proceso", color: "blue" },
+  READY: { label: "Listas", color: "teal" },
   CANCELLED: { label: "Canceladas", color: "red" },
 };
 

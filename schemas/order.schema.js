@@ -1,6 +1,16 @@
 import { z } from "zod";
 
-const ORDER_STATUSES = ["PENDING", "PROCESSING", "COMPLETED", "CANCELLED"];
+// READY = "listo para retirar/enviar". Es un paso opcional entre PROCESSING y
+// COMPLETED (ver services/order-state.js): un panel viejo que no lo ofrezca
+// sigue funcionando igual.
+const ORDER_STATUSES = [
+  "PENDING",
+  "PROCESSING",
+  "READY",
+  "COMPLETED",
+  "CANCELLED",
+];
+const ORDER_STATUS_LIST = ORDER_STATUSES.join(", ");
 const FULFILLMENT_METHODS = ["DELIVERY", "PICKUP"];
 const ORDER_PAYMENT_METHODS = ["CASH", "TRANSFER", "MIXED"];
 
@@ -181,7 +191,7 @@ export const orderCreate = z
 export const orderStatus = z.object({
   status: z.enum(ORDER_STATUSES, {
     errorMap: () => ({
-      message: "El status debe ser PENDING, PROCESSING, COMPLETED o CANCELLED",
+      message: `El status debe ser uno de: ${ORDER_STATUS_LIST}`,
     }),
   }),
   note: z.string().max(500, "La nota no puede superar 500 caracteres").optional(),
@@ -234,22 +244,64 @@ export const orderReview = z
   })
   .superRefine(checkFulfillmentConsistency);
 
+// Vía por la que entra la plata en una fila del libro de cobros. `GATEWAY`
+// (MercadoPago) no se acepta por HTTP: esas filas las escribe el webhook, nadie
+// las carga a mano.
+const MANUAL_CHANNELS = ["CASH", "TRANSFER"];
+
+const paymentChannel = z.enum(MANUAL_CHANNELS, {
+  errorMap: () => ({ message: "channel debe ser CASH o TRANSFER" }),
+});
+
+const paymentNote = z
+  .string()
+  .max(500, "La nota no puede superar 500 caracteres")
+  .optional();
+
+// `channel` es opcional porque casi siempre se deriva del método de pago de la
+// orden; hace falta cuando la orden es MIXED o todavía no tiene método definido
+// (el service responde PAYMENT_CHANNEL_REQUIRED si no puede derivarlo).
 export const orderConfirmDeposit = z.object({
-  note: z.string().max(500, "La nota no puede superar 500 caracteres").optional(),
+  note: paymentNote,
+  channel: paymentChannel.optional(),
 });
 
 // Confirmación manual de que la transferencia llegó (la revisa un asistente,
-// no hay verificación automática). Mismo shape que orderConfirmDeposit.
+// no hay verificación automática). `amount` permite declarar cuánto entró
+// realmente; sin él se asume lo que la orden todavía debe por transferencia.
 export const orderConfirmTransfer = z.object({
-  note: z.string().max(500, "La nota no puede superar 500 caracteres").optional(),
+  note: paymentNote,
+  amount: z.coerce
+    .number({ invalid_type_error: "amount debe ser un número" })
+    .positive("amount debe ser mayor a 0")
+    .optional(),
+});
+
+// Cobro total dado por bueno a mano (mueve paymentStatus a PAID_IN_FULL). Es la
+// contraparte manual del webhook de MercadoPago para efectivo/transferencia.
+export const orderConfirmPayment = z.object({
+  note: paymentNote,
+  channel: paymentChannel.optional(),
+});
+
+// Alta directa en el libro de cobros: `POST /orders/:id/payments`. Acá `channel`
+// SÍ es obligatorio — es un registro manual, no hay nada de dónde derivarlo.
+export const orderPaymentCreate = z.object({
+  kind: z.enum(["DEPOSIT", "PAYMENT", "REFUND"], {
+    errorMap: () => ({ message: "kind debe ser DEPOSIT, PAYMENT o REFUND" }),
+  }),
+  channel: paymentChannel,
+  amount: z.coerce
+    .number({ invalid_type_error: "amount debe ser un número" })
+    .positive("amount debe ser mayor a 0"),
+  note: paymentNote,
 });
 
 export const orderQuery = z.object({
   status: z
     .enum(ORDER_STATUSES, {
       errorMap: () => ({
-        message:
-          "El status debe ser PENDING, PROCESSING, COMPLETED o CANCELLED",
+        message: `El status debe ser uno de: ${ORDER_STATUS_LIST}`,
       }),
     })
     .optional(),

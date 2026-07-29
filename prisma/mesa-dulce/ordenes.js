@@ -1,8 +1,11 @@
-// Órdenes de demo del customer de mesa-dulce, cubriendo el ciclo de vida de
-// la seña (TenantConfig.depositEnabled=true, ver seed-tenant-config.js).
-// requiresDeposit + depositPaid le dicen a seedOrdersForUser qué estado de
-// pago armar; el resto (PENDING/CANCELLED sin seña pagada) usa el
-// PAYMENT_BY_STATUS de siempre.
+// Órdenes de demo del customer de mesa-dulce, cubriendo el ciclo de vida del
+// pedido (pendiente → en producción → listo → completado, más una cancelada) y
+// los TRES métodos de pago que usa el negocio.
+//
+// Sin seña: el tenant tiene depositEnabled=false (ver seed-tenant-config.js). El
+// dinero de cada orden queda registrado en el libro de cobros (`OrderPayment`), y
+// `paymentStatus` se deriva de ahí — igual que en runtime, ver
+// `buildPaymentPlan` en seed-helpers.
 //   node prisma/mesa-dulce/ordenes.js
 //
 // No es estrictamente idempotente (una orden no tiene una clave de negocio
@@ -17,16 +20,63 @@ import { seedOrdersForUser } from "../lib/seed-helpers.js";
 const TENANT_SLUG = "mesa-dulce";
 
 const ORDERS = [
-  // Recién creada: todavía espera que el cliente pague la seña.
-  { status: "PENDING", daysAgo: 1, requiresDeposit: true, depositPaid: false, items: [{ sku: "COR-KIN", quantity: 2 }, { sku: "BRW-CLS", quantity: 1 }] },
-  // Seña confirmada, ya en producción.
-  { status: "PROCESSING", daysAgo: 3, requiresDeposit: true, depositPaid: true, items: [{ sku: "COR-FRA", quantity: 3 }, { sku: "COC-CHI", quantity: 6 }] },
-  // Seña confirmada y saldo completado.
-  { status: "COMPLETED", daysAgo: 10, requiresDeposit: true, depositPaid: true, items: [{ sku: "BRW-ORE", quantity: 4 }, { sku: "COC-RVL", quantity: 6 }] },
-  // Se canceló antes de que el cliente llegara a pagar la seña.
-  { status: "CANCELLED", daysAgo: 6, requiresDeposit: true, depositPaid: false, items: [{ sku: "COR-LIM", quantity: 2 }] },
-  // Caso de contraste: orden vieja, creada antes de habilitar depositEnabled.
-  { status: "COMPLETED", daysAgo: 20, requiresDeposit: false, items: [{ sku: "COC-ORE", quantity: 10 }] },
+  // Recién entrada, retira y paga en el local: no hay nada cobrado todavía.
+  {
+    status: "PENDING",
+    daysAgo: 1,
+    paymentMethod: "CASH",
+    fulfillmentMethod: "PICKUP",
+    items: [{ sku: "COR-KIN", quantity: 2 }, { sku: "BRW-CLS", quantity: 1 }],
+  },
+  // En producción porque la transferencia YA entró: es la condición que la
+  // destraba cuando el tenant no cobra seña.
+  {
+    status: "PROCESSING",
+    daysAgo: 3,
+    paymentMethod: "TRANSFER",
+    fulfillmentMethod: "DELIVERY",
+    addressText: "Av. Libertador San Martín 1250, San Juan",
+    addressDetails: "Portón negro, tocar timbre",
+    items: [{ sku: "COR-FRA", quantity: 3 }, { sku: "COC-CHI", quantity: 6 }],
+  },
+  // Lista para entregar, pago mixto: la parte transferida entró (por eso se
+  // produjo); el efectivo se cobra cuando el repartidor la deja.
+  {
+    status: "READY",
+    daysAgo: 2,
+    paymentMethod: "MIXED",
+    transferShare: 0.5,
+    fulfillmentMethod: "DELIVERY",
+    addressText: "Rivadavia 480, Rivadavia, San Juan",
+    items: [{ sku: "COR-LIM", quantity: 1 }, { sku: "COC-ORE", quantity: 12 }],
+  },
+  // Entregada y cobrada en el mostrador, todo en efectivo.
+  {
+    status: "COMPLETED",
+    daysAgo: 10,
+    paymentMethod: "CASH",
+    fulfillmentMethod: "PICKUP",
+    items: [{ sku: "BRW-ORE", quantity: 4 }, { sku: "COC-RVL", quantity: 6 }],
+  },
+  // Cancelada antes de que entrara la plata: queda sin cobros. Si se cancela una
+  // ya cobrada, la devolución se carga a mano (`kind: REFUND`).
+  {
+    status: "CANCELLED",
+    daysAgo: 6,
+    paymentMethod: "TRANSFER",
+    fulfillmentMethod: "PICKUP",
+    items: [{ sku: "COR-LIM", quantity: 2 }],
+  },
+  // Mixta ya cerrada: dos filas en el libro que suman el total.
+  {
+    status: "COMPLETED",
+    daysAgo: 20,
+    paymentMethod: "MIXED",
+    transferShare: 0.4,
+    fulfillmentMethod: "DELIVERY",
+    addressText: "Sarmiento 95 sur, Capital, San Juan",
+    items: [{ sku: "COC-ORE", quantity: 10 }],
+  },
 ];
 
 export async function seedMesaDulceOrdenes() {
@@ -52,6 +102,11 @@ export async function seedMesaDulceOrdenes() {
   });
   if (alreadySeeded) {
     console.log("  -> el customer ya tiene órdenes de demo cargadas, se omite (evita duplicar)");
+    console.log(
+      '     Para regenerarlas con los datos nuevos, borrá primero las viejas:\n' +
+        '     DELETE FROM "Order" WHERE "paymentId" LIKE \'seed-order-%\' AND "tenantId" = ' +
+        `${tenant.id};`
+    );
     return 0;
   }
 

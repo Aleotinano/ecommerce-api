@@ -9,6 +9,8 @@ import {
   orderReview,
   orderConfirmDeposit,
   orderConfirmTransfer,
+  orderConfirmPayment,
+  orderPaymentCreate,
   orderCreate,
 } from "../schemas/order.schema.js";
 import { validateId } from "../schemas/id.schema.js";
@@ -24,6 +26,8 @@ const validation = {
   review: validate({ body: orderReview }),
   confirmDeposit: validate({ body: orderConfirmDeposit }),
   confirmTransfer: validate({ body: orderConfirmTransfer }),
+  confirmPayment: validate({ body: orderConfirmPayment }),
+  payment: validate({ body: orderPaymentCreate }),
   query: validate({ query: orderQuery }),
 };
 
@@ -83,4 +87,33 @@ ordersRouter.post(
   validation.id,
   validation.confirmTransfer,
   OrderController.confirmTransfer
+);
+
+// Dar por cobrado el total de la orden → paymentStatus = PAID_IN_FULL
+ordersRouter.post(
+  "/:id/confirm-payment",
+  verifyToken,
+  requireRole(roleRequired),
+  validation.id,
+  validation.confirmPayment,
+  OrderController.confirmPayment
+);
+
+// Libro de cobros de la orden: una fila por cobro, con vía y monto. Los tres
+// confirm-* de arriba son atajos que escriben en este mismo libro.
+ordersRouter.post(
+  "/:id/payments",
+  verifyToken,
+  requireRole(roleRequired),
+  validation.id,
+  validation.payment,
+  OrderController.registerPayment
+);
+
+ordersRouter.get(
+  "/:id/payments",
+  verifyToken,
+  requireRole(roleRequired),
+  validation.id,
+  OrderController.getPayments
 );

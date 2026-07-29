@@ -8,6 +8,10 @@ import {
 } from "../lib/tokens.js";
 import { sendMail, buildVerificationEmail, isSmtpConfigured } from "../lib/mailer.js";
 import { normalizeCustomerPhone } from "../lib/phone.js";
+import {
+  DEFAULT_TENANT_PROFILE,
+  resolveProfile,
+} from "./tenant-profiles.js";
 import { logger } from "../lib/logger.js";
 import jwt from "jsonwebtoken";
 import { DEFAULTS } from "../config.js";
@@ -56,7 +60,23 @@ async function dispatchVerificationEmail({ user, tenantName, audience = "admin" 
 }
 
 export const UserModel = {
-  async register({ username, password, email, tenantName }) {
+  /**
+   * Alta de tenant + su primer ADMIN.
+   *
+   * @param {string} [p.profile] perfil de flujo de venta a aplicar a la config del
+   *   tenant (ver `services/tenant-profiles.js`). **No está en `registerSchema` a
+   *   propósito**: es un parámetro de service, no un campo que pueda mandar un
+   *   cliente HTTP — quién vende con seña y quién solo contra entrega lo decidimos
+   *   nosotros, no quien se registra. Por defecto, `estandar` (todo habilitado,
+   *   sin seña), que es el comportamiento de siempre.
+   */
+  async register({
+    username,
+    password,
+    email,
+    tenantName,
+    profile = DEFAULT_TENANT_PROFILE,
+  }) {
     const slug = slugify(tenantName);
     // El alta solo pide el nombre de la tienda; el admin recibe un username
     // genérico. Es el primer usuario del tenant, así que "admin" siempre queda
@@ -70,6 +90,10 @@ export const UserModel = {
         suggestions,
       });
     }
+
+    // Antes de la transacción: un nombre de perfil inválido tiene que fallar sin
+    // haber creado el tenant a medias.
+    const profileValues = resolveProfile(profile);
 
     const hashedPassword = await hashPassword(password);
     // En dev (sin SMTP) no se puede enviar el correo, así que auto-verificamos
@@ -93,11 +117,15 @@ export const UserModel = {
       });
 
       // Inicializa la configuración del tenant para que la pantalla de config
-      // tenga un row (sino GET /tenant-config/:id devuelve 404).
+      // tenga un row (sino GET /tenant-config/:id devuelve 404). Los valores del
+      // perfil se MATERIALIZAN acá: de ahí en adelante la fuente de verdad son
+      // estas columnas, no el perfil — editar un perfil no puede cambiarle las
+      // reglas de plata a un tenant que ya está vendiendo.
       await tx.tenantConfig.create({
         data: {
           tenantId: tenant.id,
           storeName: tenantName,
+          ...profileValues,
         },
       });
 

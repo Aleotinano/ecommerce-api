@@ -12,6 +12,16 @@ import { logger } from "../lib/logger.js";
 import { validateComboSelection } from "./combos.js";
 import { getPromoTiersByProduct, pickPromoTier, applyPromoDiscount } from "./promos.js";
 import { invalidateProductsCache } from "./productos.js";
+import {
+  applyAutoAdvance,
+  assertCanProduce,
+  assertTransition,
+  derivePaymentStatus,
+  MONEY_EPS,
+  paymentSummary,
+  pendingByChannel,
+  PRODUCTION_STATUSES,
+} from "./order-state.js";
 
 const log = logger.child({ module: "orders" });
 
@@ -33,6 +43,11 @@ const orderItemsInclude = {
         },
       },
     },
+    // El libro de cobros viaja con la orden en todas partes: es lo que le permite
+    // al motor (services/order-state.js) responder con montos reales en vez de
+    // estimar desde los sellos. Son pocas filas por orden — el costo es marginal
+    // al lado de tener que recordar incluirlo en cada query.
+    payments: { orderBy: { confirmedAt: "asc" } },
   },
 };
 
@@ -261,6 +276,196 @@ async function decrementLineStock(tx, line) {
 }
 
 /**
+ * Aviso al cliente de que su pedido cambió de estado. Best-effort: la orden ya
+ * quedó confirmada en DB, así que un problema mandando el mail no puede tumbar
+ * la operación. Se llama SIEMPRE fuera de la transacción.
+ */
+async function sendStatusEmail({ orderId, status, email, tenantName }) {
+  if (!email) return;
+
+  try {
+    const { subject, text, html } = buildOrderStatusEmail({
+      orderId,
+      status,
+      tenantName,
+    });
+    await sendMail({ to: email, subject, text, html });
+  } catch (error) {
+    log.error(
+      { err: error, orderId, status },
+      "no se pudo enviar el email de cambio de estado"
+    );
+  }
+}
+
+/**
+ * Notifica un avance AUTOMÁTICO (ver `applyAutoAdvance`). Las acciones que lo
+ * disparan —revisión, confirmación de cobro— no cargan al usuario ni al tenant,
+ * así que se traen acá y solo cuando la orden efectivamente avanzó: para el
+ * cliente es el mismo mail de siempre, no importa quién movió el estado.
+ */
+async function notifyAutoAdvance(orderId, status) {
+  const info = await prisma.order.findFirst({
+    where: { id: orderId },
+    select: {
+      user: { select: { email: true } },
+      tenant: { select: { name: true } },
+    },
+  });
+
+  await sendStatusEmail({
+    orderId,
+    status,
+    email: info?.user?.email,
+    tenantName: info?.tenant?.name,
+  });
+}
+
+/**
+ * Corazón del cobro: anota filas en el libro (`OrderPayment`), deja la orden
+ * consistente y la avanza si corresponde. **Todo en una sola transacción**, que es
+ * lo que hace que no exista el estado intermedio "cobré pero no lo registré".
+ *
+ * Los tres pasos van juntos a propósito:
+ *   1. las filas del cobro,
+ *   2. `paymentStatus` recalculado DESDE esas filas (la columna es un cache, ver
+ *      `derivePaymentStatus`) más los sellos que traiga el caller,
+ *   3. el avance automático, si el cobro era lo último que faltaba.
+ *
+ * @param {Array}  p.entries  filas a crear `[{ kind, channel, amount, note? }]`.
+ *                            Puede venir vacío: confirmar algo ya cobrado no crea
+ *                            una fila duplicada, pero igual sella y reevalúa.
+ * @param {object} [p.extraData] campos de la orden a sellar en el mismo update
+ */
+async function applyPayments({ tenantId, order, entries = [], actorId, extraData = {} }) {
+  const orderId = order.id;
+
+  const { order: result, advancedTo } = await prisma.$transaction(async (tx) => {
+    if (entries.length) {
+      await tx.orderPayment.createMany({
+        data: entries.map((entry) => ({
+          tenantId,
+          orderId,
+          kind: entry.kind,
+          channel: entry.channel,
+          amount: roundMoney(Number(entry.amount)),
+          note: entry.note ?? null,
+          confirmedById: actorId ?? null,
+        })),
+      });
+    }
+
+    const payments = await tx.orderPayment.findMany({ where: { orderId } });
+
+    const updated = await tx.order.update({
+      where: { id: orderId },
+      data: { ...extraData, paymentStatus: derivePaymentStatus(order, payments) },
+      ...orderItemsInclude,
+    });
+
+    return applyAutoAdvance(tx, updated, { actorId });
+  });
+
+  if (advancedTo) await notifyAutoAdvance(orderId, advancedTo);
+
+  return result;
+}
+
+/**
+ * Valida que el método pedido esté HABILITADO para el tenant.
+ *
+ * Los enums de `schemas/order.schema.js` son los valores posibles del sistema;
+ * estas listas son los que este tenant acepta (`TenantConfig`, seteado desde un
+ * perfil — ver `services/tenant-profiles.js`). La validación no puede vivir en Zod
+ * porque Zod no conoce el tenant, así que vive acá, al lado del otro invariante de
+ * pago (`PAYMENT_AMOUNTS_MISMATCH`).
+ *
+ * Una lista vacía o ausente se trata como "todo habilitado": es lo que había antes
+ * de que estas columnas existieran, y evita que una config a medio migrar deje al
+ * tenant sin poder vender.
+ *
+ * @param {string[]|null|undefined} enabled
+ * @param {string} requested
+ * @param {"PAYMENT"|"FULFILLMENT"} kind
+ */
+function assertMethodEnabled(enabled, requested, kind) {
+  if (!Array.isArray(enabled) || enabled.length === 0) return;
+  if (enabled.includes(requested)) return;
+
+  const config = {
+    PAYMENT: {
+      code: "PAYMENT_METHOD_NOT_ENABLED",
+      message: "El método de pago no está habilitado para esta tienda",
+    },
+    FULFILLMENT: {
+      code: "FULFILLMENT_METHOD_NOT_ENABLED",
+      message: "La forma de entrega no está habilitada para esta tienda",
+    },
+  }[kind];
+
+  const error = createError(config.message, config.code, 400);
+  // El panel (y el storefront) necesitan poder decir qué SÍ se puede, no solo que
+  // esto no.
+  error.details = { pedido: requested, habilitados: enabled };
+  throw error;
+}
+
+/**
+ * Por qué vía entró la plata. Se deriva del método pactado cuando no hay
+ * ambigüedad; con `MIXED` —o con una orden que todavía no tiene método definido,
+ * el estado normal de un pedido del bot sin revisar— hay que decirlo.
+ *
+ * Adivinar acá es lo que después hace que un arqueo no cierre y nadie sepa por
+ * qué, así que se prefiere un 400 explícito antes que un canal inventado.
+ */
+function resolvePaymentChannel(order, explicit) {
+  if (explicit) return explicit;
+  if (order.paymentMethod === "CASH") return "CASH";
+  if (order.paymentMethod === "TRANSFER") return "TRANSFER";
+
+  throw createError(
+    "Falta indicar por qué vía entró la plata (efectivo o transferencia)",
+    "PAYMENT_CHANNEL_REQUIRED",
+    400
+  );
+}
+
+/**
+ * Filas necesarias para dar por saldada una orden: **lo que falta**, repartido por
+ * vía. Devuelve `[]` si ya estaba cobrada (confirmar de nuevo no duplica el cobro).
+ *
+ * Con `MIXED` sale una fila por cada vía que todavía deba plata. Si el desglose no
+ * alcanza a cubrir el remanente —montos viejos que no cierran contra el total— se
+ * cae al canal indicado explícitamente, y si no vino, al 400 de
+ * `resolvePaymentChannel`. Nunca se inventa la vía.
+ */
+function buildSettlementEntries(order, channel) {
+  const { pending } = paymentSummary(order);
+  if (pending <= 0) return [];
+
+  if (order.paymentMethod === "MIXED") {
+    const falta = pendingByChannel(order);
+    const entries = [];
+
+    if (falta.CASH > 0) {
+      entries.push({ kind: "PAYMENT", channel: "CASH", amount: falta.CASH });
+    }
+    if (falta.TRANSFER > 0) {
+      entries.push({ kind: "PAYMENT", channel: "TRANSFER", amount: falta.TRANSFER });
+    }
+    if (entries.length) return entries;
+  }
+
+  return [
+    {
+      kind: "PAYMENT",
+      channel: resolvePaymentChannel(order, channel),
+      amount: pending,
+    },
+  ];
+}
+
+/**
  * Resuelve con qué teléfono se guarda una orden.
  *
  * Precedencia: lo que se tipeó en este checkout gana sobre lo que el cliente
@@ -271,7 +476,7 @@ async function decrementLineStock(tx, line) {
  *   el cliente no tenía teléfono y este hay que dejárselo guardado, para que la
  *   próxima vez el checkout venga prellenado.
  */
-function resolveContactPhone({ typed, stored, config, enforce }) {
+function resolveContactPhone({ typed, stored, config, enforce, require: alwaysRequire }) {
   const policy = {
     country: config?.customerPhoneCountry ?? "54",
     area: config?.customerPhoneArea ?? null,
@@ -281,7 +486,17 @@ function resolveContactPhone({ typed, stored, config, enforce }) {
   // carga tiene al cliente al teléfono en ese mismo momento, y el panel todavía
   // no tiene el campo. Bloquearlas sería frenar el trabajo por un dato que esa
   // pantalla no puede dar. El número se completa después, en la revisión.
-  const mode = enforce ? (config?.customerPhoneMode ?? "required") : "optional";
+  //
+  // `require` pisa la política del tenant y es para el checkout de invitado: sin
+  // cuenta, el teléfono es el ÚNICO dato de contacto que queda. Un tenant con
+  // `customerPhoneMode: "off"` puede permitírselo porque tiene el mail y el
+  // historial de la cuenta; con un invitado, un pedido sin teléfono es un pedido
+  // que nadie puede confirmar.
+  const mode = alwaysRequire
+    ? "required"
+    : enforce
+      ? (config?.customerPhoneMode ?? "required")
+      : "optional";
 
   if (mode === "off") return { phone: null, saveToUser: false };
 
@@ -323,15 +538,24 @@ export const OrderModel = {
    * cómo lo paga.
    *
    * @param {object} p
+   * @param {number|null} [p.userId] atajo para el caso logueado; equivale a
+   *   `cartOwner: { userId, guestId: null }`. Lo usan la ruta de admin y los tests.
+   * @param {{ userId: number|null, guestId: string|null }} [p.cartOwner] dueño del
+   *   carrito a convertir. Con `userId` es un cliente logueado; con `guestId` es
+   *   un invitado (cookie httpOnly, mismo par que usa el carrito). La orden que
+   *   sale de un carrito de invitado queda con `userId: null` — la columna lo
+   *   admite desde siempre, igual que los drafts del bot.
    * @param {string} [p.origin="ADMIN"] procedencia de la orden. Las que llegan
    *   por `/store/orders` son "STORE" y quedan sujetas al guard de revisión
    *   (ver updateOrderStatus); las que carga un admin a mano son "ADMIN".
    * @param {string|null} [p.contactPhone] tal cual lo tipeó la persona; se
-   *   normaliza acá contra la característica del tenant.
+   *   normaliza acá contra la característica del tenant. Obligatorio si es un
+   *   invitado, igual que `contactName`.
    */
   async create({
     tenantId,
     userId,
+    cartOwner,
     origin = "ADMIN",
     fulfillmentMethod,
     addressText,
@@ -346,10 +570,28 @@ export const OrderModel = {
     contactPhone,
     contactName,
   }) {
-    const cart = await prisma.cart.findFirst({
-      where: { userId, tenantId },
-      include: { items: true },
-    });
+    // `cartOwner` gana; `userId` suelto queda como atajo retrocompatible.
+    const owner = cartOwner ?? { userId: userId ?? null, guestId: null };
+    const ownerId = owner.userId ?? null;
+    const guestId = owner.guestId ?? null;
+    const isGuest = ownerId == null;
+
+    // Mismo par de dueños que resuelve el carrito (middleware/guestCart.js): con
+    // sesión se busca por userId, sin sesión por el guestId de la cookie.
+    //
+    // El corte por `guestId` vacío NO es defensivo de más: los carritos de los
+    // usuarios logueados tienen `guestId: null`, así que un `where: { guestId: null }`
+    // matchearía el carrito de cualquier otro cliente. `resolveCartOwner` siempre
+    // emite la cookie, pero esto no puede depender de que el middleware corra.
+    const cart =
+      isGuest && !guestId
+        ? null
+        : await prisma.cart.findFirst({
+            where: isGuest
+              ? { guestId, tenantId }
+              : { userId: ownerId, tenantId },
+            include: { items: true },
+          });
 
     if (!cart || cart.items.length === 0) {
       throw createError("El carrito está vacío", "EMPTY_CART", 400);
@@ -364,12 +606,22 @@ export const OrderModel = {
           customerPhoneMode: true,
           customerPhoneCountry: true,
           customerPhoneArea: true,
+          // Flujo de venta del tenant: qué métodos acepta y si cobra seña. Viaja
+          // en este mismo round-trip, que ya existía para el teléfono.
+          paymentMethodsEnabled: true,
+          fulfillmentMethodsEnabled: true,
+          depositEnabled: true,
+          depositPercentage: true,
         },
       }),
-      prisma.user.findUnique({
-        where: { id: userId },
-        select: { phone: true, username: true },
-      }),
+      // Sin usuario no hay a quién buscar: `findUnique({ where: { id: undefined } })`
+      // revienta en Prisma.
+      isGuest
+        ? null
+        : prisma.user.findUnique({
+            where: { id: ownerId },
+            select: { phone: true, username: true },
+          }),
     ]);
 
     const { phone: resolvedPhone, saveToUser } = resolveContactPhone({
@@ -377,12 +629,39 @@ export const OrderModel = {
       stored: user?.phone ?? null,
       config,
       enforce: origin === "STORE",
+      require: isGuest,
     });
 
     const resolvedName =
       (typeof contactName === "string" && contactName.trim()) ||
       user?.username ||
       null;
+
+    // El logueado tiene el username de respaldo; el invitado no tiene nada, y una
+    // orden sin nombre no se puede ni buscar ni entregar.
+    if (isGuest && !resolvedName) {
+      throw createError(
+        "Hace falta un nombre para confirmar el pedido",
+        "CONTACT_NAME_REQUIRED",
+        400
+      );
+    }
+
+    // Antes de la transacción a propósito: un método no habilitado tiene que
+    // cortar el checkout sin haber tocado stock ni vaciado el carrito.
+    assertMethodEnabled(config?.paymentMethodsEnabled, paymentMethod, "PAYMENT");
+    assertMethodEnabled(
+      config?.fulfillmentMethodsEnabled,
+      fulfillmentMethod,
+      "FULFILLMENT"
+    );
+
+    // La seña del tenant se respeta también en el checkout web. Antes solo la
+    // resolvían `createDraft` (bot) y `reviewOrder`, así que una orden creada por
+    // `/store/orders` salía con `requiresDeposit: false` aunque el tenant cobrara
+    // seña, y esquivaba el guard `DEPOSIT_NOT_CONFIRMED` del motor.
+    const requiresDeposit = config?.depositEnabled ?? false;
+    const depositPercentage = config?.depositPercentage ?? 50;
 
     return prisma.$transaction(async (tx) => {
       const { pricedItems, total } = await priceItems(
@@ -415,7 +694,7 @@ export const OrderModel = {
       const order = await tx.order.create({
         data: {
           tenantId,
-          userId,
+          userId: ownerId,
           total,
           status: "PENDING",
           origin,
@@ -434,15 +713,23 @@ export const OrderModel = {
           // cuando la hizo.
           contactPhone: resolvedPhone,
           contactName: resolvedName,
+          // Snapshot pactado, igual que en `createDraft`: no se recalcula después
+          // desde TenantConfig, así que cambiar el porcentaje no altera órdenes ya
+          // tomadas.
+          requiresDeposit,
+          depositAmount: requiresDeposit
+            ? roundMoney((total * depositPercentage) / 100)
+            : null,
         },
       });
 
       // Se le guarda al cliente el teléfono que acaba de dar, para que el
       // próximo checkout venga prellenado. Solo si no tenía: el número por
-      // pedido no pisa el de la cuenta.
-      if (saveToUser && resolvedPhone) {
+      // pedido no pisa el de la cuenta. El invitado no tiene cuenta donde
+      // guardarlo (y `saveToUser` le da true, porque nunca tuvo un `stored`).
+      if (!isGuest && saveToUser && resolvedPhone) {
         await tx.user.update({
-          where: { id: userId },
+          where: { id: ownerId },
           data: { phone: resolvedPhone },
         });
       }
@@ -455,7 +742,9 @@ export const OrderModel = {
           fromStatus: null,
           toStatus: "PENDING",
           note: "Pedido creado",
-          changedById: userId,
+          // null si lo hizo un invitado: la columna lo admite y el "quién" ya
+          // queda en contactName/contactPhone de la orden.
+          changedById: ownerId,
         },
       });
 
@@ -570,6 +859,16 @@ export const OrderModel = {
     });
   },
 
+  /**
+   * Cambio de estado PEDIDO A MANO (o por el webhook de MercadoPago). Las
+   * precondiciones ya no viven acá: las resuelve `services/order-state.js`, que
+   * es el mismo módulo que usa el avance automático. Esta función solo valida la
+   * transición, aplica los efectos (stock, cache, mail) y registra el historial.
+   *
+   * @param {string} [p.trigger="MANUAL"] quién lo pidió, para el historial:
+   *   MANUAL (una persona) o GATEWAY (el webhook de MercadoPago). El avance
+   *   automático no pasa por acá, escribe AUTO desde `applyAutoAdvance`.
+   */
   async updateOrderStatus({
     tenantId,
     orderId,
@@ -577,6 +876,7 @@ export const OrderModel = {
     extraData = {},
     changedById = null,
     note = null,
+    trigger = "MANUAL",
   }) {
     const order = await prisma.order.findFirst({
       where: { id: orderId, tenantId },
@@ -591,89 +891,20 @@ export const OrderModel = {
       throw createError("Orden no encontrada", "ORDER_NOT_FOUND", 404);
     }
 
-    if (order.status === "COMPLETED") {
-      throw createError(
-        "No se puede modificar una orden completada",
-        "ORDER_ALREADY_COMPLETED",
-        409
-      );
-    }
-
-    if (order.status === "CANCELLED") {
-      throw createError(
-        "No se puede modificar una orden cancelada",
-        "ORDER_ALREADY_CANCELLED",
-        409
-      );
-    }
-
+    // Pedir el estado que la orden ya tiene no es un error: es un doble click.
+    // Se responde la orden sin registrar nada, igual que siempre.
     if (order.status === status) {
       return order;
     }
 
-    if (!["PROCESSING", "COMPLETED", "CANCELLED"].includes(status)) {
-      throw createError(
-        "Transición de estado no permitida",
-        "INVALID_STATUS_TRANSITION",
-        400
-      );
-    }
+    assertTransition(order, status);
 
-    // Guard de "bueno para producir": al pasar a producción/completar exigimos
-    // que toda orden cargada por el cliente (bot o storefront) esté revisada por
-    // un humano y, si lleva seña, que la seña esté confirmada. CANCELLED queda
-    // libre (siempre se puede cancelar). Si el tenant no usa seña y la orden es
-    // ADMIN —la cargó un humano, ya está validada de origen—, nada de esto aplica.
-    if (status === "PROCESSING" || status === "COMPLETED") {
-      if (order.origin !== "ADMIN" && order.reviewedById == null) {
-        throw createError(
-          "La orden debe ser revisada por un administrador antes de producir",
-          "ORDER_NOT_REVIEWED",
-          409
-        );
-      }
-      if (
-        order.requiresDeposit &&
-        !["DEPOSIT_PAID", "PAID_IN_FULL", "APPROVED"].includes(
-          order.paymentStatus
-        )
-      ) {
-        throw createError(
-          "La seña debe estar confirmada antes de producir",
-          "DEPOSIT_NOT_CONFIRMED",
-          409
-        );
-      }
-      if (!order.fulfillmentMethod || !order.paymentMethod) {
-        throw createError(
-          "Falta completar método de entrega y/o de pago antes de producir",
-          "FULFILLMENT_INCOMPLETE",
-          409
-        );
-      }
-      // Alcanza con una de las dos: hay clientes que solo mandan el link de
-      // Maps que comparten desde el teléfono, sin escribir la calle.
-      if (
-        order.fulfillmentMethod === "DELIVERY" &&
-        !order.addressText &&
-        !order.addressMapsUrl
-      ) {
-        throw createError(
-          "Falta la dirección de entrega",
-          "ADDRESS_MISSING",
-          409
-        );
-      }
-      if (
-        ["TRANSFER", "MIXED"].includes(order.paymentMethod) &&
-        !order.transferConfirmedAt
-      ) {
-        throw createError(
-          "La transferencia debe estar confirmada antes de producir",
-          "TRANSFER_NOT_CONFIRMED",
-          409
-        );
-      }
+    // Guard de "bueno para producir". CANCELLED queda libre: siempre se puede
+    // cancelar. El detalle de qué se exige está en `services/order-state.js`,
+    // que es la misma fuente que consulta el panel para saber qué falta ANTES de
+    // apretar el botón.
+    if (PRODUCTION_STATUSES.includes(status)) {
+      assertCanProduce(order);
     }
 
     const recordHistory = (tx) =>
@@ -684,6 +915,7 @@ export const OrderModel = {
           toStatus: status,
           note,
           changedById,
+          trigger,
         },
       });
 
@@ -694,13 +926,25 @@ export const OrderModel = {
       item.childItems?.length ? item.childItems : [item]
     );
 
-    const updated = await prisma.$transaction(async (tx) => {
-      const result = await tx.order.update({
-        where: { id: orderId },
-        data: { status, ...extraData },
-        ...orderItemsInclude,
-      });
+    // Entregar es cobrar: una orden que se completa sin nada pendiente en el libro
+    // dejaba la plata sin registrar (típico del efectivo, donde no hay ninguna
+    // confirmación previa que la anote) y esa plata no iba a aparecer en el arqueo
+    // de Caja. `buildSettlementEntries` devuelve lo que FALTA, repartido por vía,
+    // y `[]` si ya estaba saldada — así una orden cobrada antes no se cobra dos
+    // veces, y las de MercadoPago no se tocan.
+    //
+    // No hace falta pasarle un canal: `assertCanProduce` ya corrió recién y
+    // `FULFILLMENT_INCOMPLETE` bloquea cualquier orden sin `paymentMethod`, así que
+    // acá el canal siempre es derivable.
+    const settlement =
+      status === "COMPLETED"
+        ? buildSettlementEntries(order).map((entry) => ({
+            ...entry,
+            note: "Cobro registrado al completar la orden",
+          }))
+        : [];
 
+    const updated = await prisma.$transaction(async (tx) => {
       // El decremento es condicional (ver `decrementLineStock`): valida y baja el
       // stock en un solo UPDATE atómico. Si alguna línea no alcanza, lanza y toda
       // la transacción —incluido el cambio de status— hace rollback.
@@ -709,6 +953,40 @@ export const OrderModel = {
           await decrementLineStock(tx, line);
         }
       }
+
+      if (settlement.length) {
+        await tx.orderPayment.createMany({
+          data: settlement.map((entry) => ({
+            tenantId,
+            orderId,
+            kind: entry.kind,
+            channel: entry.channel,
+            amount: roundMoney(Number(entry.amount)),
+            note: entry.note,
+            confirmedById: changedById,
+          })),
+        });
+      }
+
+      // Se relee el libro (en vez de razonar sobre `settlement`) por el mismo
+      // motivo que en `applyPayments`: `paymentStatus` es un cache de lo que hay
+      // escrito, no de lo que este caller creía que iba a escribir.
+      const payments = settlement.length
+        ? await tx.orderPayment.findMany({ where: { orderId } })
+        : order.payments;
+
+      const result = await tx.order.update({
+        where: { id: orderId },
+        data: {
+          ...extraData,
+          status,
+          paymentStatus: derivePaymentStatus(order, payments),
+          ...(settlement.length
+            ? { paymentConfirmedById: changedById, paymentConfirmedAt: new Date() }
+            : {}),
+        },
+        ...orderItemsInclude,
+      });
 
       await recordHistory(tx);
 
@@ -723,22 +1001,12 @@ export const OrderModel = {
       await invalidateProductsCache(tenantId);
     }
 
-    // Notificación al cliente (best-effort, no debe romper la actualización).
-    if (order.user?.email) {
-      try {
-        const { subject, text, html } = buildOrderStatusEmail({
-          orderId,
-          status,
-          tenantName: order.tenant?.name,
-        });
-        await sendMail({ to: order.user.email, subject, text, html });
-      } catch (error) {
-        log.error(
-          { err: error, orderId, status },
-          "no se pudo enviar el email de cambio de estado"
-        );
-      }
-    }
+    await sendStatusEmail({
+      orderId,
+      status,
+      email: order.user?.email,
+      tenantName: order.tenant?.name,
+    });
 
     return updated;
   },
@@ -792,16 +1060,23 @@ export const OrderModel = {
 
     const hasEdits = Array.isArray(items) && items.length > 0;
 
-    // Para normalizar un teléfono cargado a mano hace falta la característica
-    // del tenant, igual que en el checkout.
-    const config = fulfillment?.contactPhone
-      ? await prisma.tenantConfig.findUnique({
-          where: { tenantId },
-          select: { customerPhoneCountry: true, customerPhoneArea: true },
-        })
-      : null;
+    // Config del tenant, en una sola lectura: la característica telefónica (para
+    // normalizar un número cargado a mano, igual que en el checkout), los métodos
+    // habilitados y el porcentaje de seña. Antes eran dos queries condicionales
+    // dentro y fuera de la transacción; el review siempre necesita al menos los
+    // métodos, así que se trae una vez y se usa en los tres lugares.
+    const flowConfig = await prisma.tenantConfig.findUnique({
+      where: { tenantId },
+      select: {
+        customerPhoneCountry: true,
+        customerPhoneArea: true,
+        paymentMethodsEnabled: true,
+        fulfillmentMethodsEnabled: true,
+        depositPercentage: true,
+      },
+    });
 
-    return prisma.$transaction(async (tx) => {
+    const { order: reviewed, advancedTo } = await prisma.$transaction(async (tx) => {
       const data = { reviewedById, reviewedAt: new Date() };
 
       if (fulfillment) {
@@ -831,8 +1106,8 @@ export const OrderModel = {
             data.contactPhone = null;
           } else {
             const normalized = normalizeCustomerPhone(fulfillment.contactPhone, {
-              country: config?.customerPhoneCountry ?? "54",
-              area: config?.customerPhoneArea ?? null,
+              country: flowConfig?.customerPhoneCountry ?? "54",
+              area: flowConfig?.customerPhoneArea ?? null,
             });
             if (!normalized) {
               throw createError(
@@ -916,11 +1191,7 @@ export const OrderModel = {
         data.total = total;
 
         if (order.requiresDeposit) {
-          const config = await tx.tenantConfig.findUnique({
-            where: { tenantId },
-            select: { depositPercentage: true },
-          });
-          const pct = config?.depositPercentage ?? 50;
+          const pct = flowConfig?.depositPercentage ?? 50;
           data.depositAmount = roundMoney((total * pct) / 100);
         }
       }
@@ -929,6 +1200,26 @@ export const OrderModel = {
       // puede haber cambiado el método de pago, los montos y/o el total (si
       // corrigió cantidades), y las tres cosas tienen que cerrar entre sí.
       const finalPaymentMethod = data.paymentMethod ?? order.paymentMethod;
+      const finalFulfillmentMethod =
+        data.fulfillmentMethod ?? order.fulfillmentMethod;
+
+      // El review es la otra puerta por la que se elige método (típico en las
+      // órdenes del bot, que nacen sin ninguno), así que necesita el mismo guard
+      // que el checkout.
+      if (finalPaymentMethod) {
+        assertMethodEnabled(
+          flowConfig?.paymentMethodsEnabled,
+          finalPaymentMethod,
+          "PAYMENT"
+        );
+      }
+      if (finalFulfillmentMethod) {
+        assertMethodEnabled(
+          flowConfig?.fulfillmentMethodsEnabled,
+          finalFulfillmentMethod,
+          "FULFILLMENT"
+        );
+      }
 
       if (finalPaymentMethod === "MIXED") {
         const finalTotal = data.total ?? order.total;
@@ -960,22 +1251,35 @@ export const OrderModel = {
         if (order.transferAmount != null) data.transferAmount = null;
       }
 
-      return tx.order.update({
+      const updated = await tx.order.update({
         where: { id: orderId },
         data,
         ...orderItemsInclude,
       });
+
+      // La revisión es el destrabe más común: si con esto la orden quedó
+      // completa, entra sola a preparación en la misma transacción.
+      return applyAutoAdvance(tx, updated, { actorId: reviewedById });
     });
+
+    if (advancedTo) await notifyAutoAdvance(orderId, advancedTo);
+
+    return reviewed;
   },
 
   /**
    * Acción admin: confirma la seña (el dueño verificó la transferencia a ojo).
-   * Mueve `paymentStatus` a DEPOSIT_PAID y sella quién/cuándo. NO mueve `status`.
+   * Registra la seña en el libro de cobros y sella quién/cuándo; `paymentStatus`
+   * queda en DEPOSIT_PAID como consecuencia de esa fila, no por escritura directa.
+   * No mueve `status` por sí misma, pero puede destrabar el avance automático.
    * Es independiente de `reviewOrder` (la seña suele confirmarse días después).
    * Solo opera si la orden requiere seña y el pago sigue en PENDING, así no pisa
    * un APPROVED/PAID_IN_FULL escrito por el webhook de MercadoPago.
+   *
+   * @param {string} [p.channel] `CASH`|`TRANSFER` — obligatorio si la orden es
+   *   MIXED o todavía no tiene método de pago definido (ver `resolvePaymentChannel`).
    */
-  async confirmDeposit({ tenantId, orderId, confirmedById }) {
+  async confirmDeposit({ tenantId, orderId, confirmedById, channel }) {
     const order = await prisma.order.findFirst({
       where: { id: orderId, tenantId },
     });
@@ -1000,26 +1304,55 @@ export const OrderModel = {
       );
     }
 
-    return prisma.order.update({
-      where: { id: orderId },
-      data: {
-        paymentStatus: "DEPOSIT_PAID",
+    const monto = roundMoney(Number(order.depositAmount ?? 0));
+
+    // Una orden que exige seña sin monto pactado es un estado incoherente: antes
+    // pasaba desapercibido (se sellaba un DEPOSIT_PAID sin plata detrás), ahora
+    // no hay forma de anotarlo en el libro y se avisa.
+    if (monto <= 0) {
+      throw createError(
+        "La orden requiere seña pero no tiene monto de seña pactado",
+        "DEPOSIT_AMOUNT_MISSING",
+        409
+      );
+    }
+
+    return applyPayments({
+      tenantId,
+      order,
+      actorId: confirmedById,
+      entries: [
+        {
+          kind: "DEPOSIT",
+          channel: resolvePaymentChannel(order, channel),
+          amount: monto,
+        },
+      ],
+      extraData: {
         depositConfirmedById: confirmedById,
         depositConfirmedAt: new Date(),
       },
-      ...orderItemsInclude,
     });
   },
 
   /**
    * Acción admin: confirma que la transferencia del pago llegó (la revisa un
    * asistente a mano, no hay verificación automática — el software no
-   * gestiona el dinero). Independiente de `paymentStatus`/MercadoPago y de
-   * la seña: solo aplica al método de pago TRANSFER/MIXED de esta orden.
+   * gestiona el dinero). Solo aplica al método de pago TRANSFER/MIXED de esta
+   * orden. Como las otras dos confirmaciones, puede destrabar el avance automático.
+   *
+   * Registra en el libro **lo que falta por transferencia**, no el total: sobre una
+   * orden con seña ya cobrada anota solo el remanente. Si lo que entró fue otra
+   * cosa —el cliente transfirió una parte— se manda `amount` y manda ese número:
+   * quien confirma está mirando el extracto bancario, el software no.
+   *
+   * @param {number} [p.amount] monto realmente recibido; por defecto, lo que falte
+   *   por transferencia
    */
-  async confirmTransfer({ tenantId, orderId, confirmedById }) {
+  async confirmTransfer({ tenantId, orderId, confirmedById, amount }) {
     const order = await prisma.order.findFirst({
       where: { id: orderId, tenantId },
+      include: { payments: true },
     });
 
     if (!order) {
@@ -1042,14 +1375,160 @@ export const OrderModel = {
       );
     }
 
-    return prisma.order.update({
-      where: { id: orderId },
-      data: {
+    const monto = roundMoney(
+      Number(amount ?? pendingByChannel(order).TRANSFER)
+    );
+
+    return applyPayments({
+      tenantId,
+      order,
+      actorId: confirmedById,
+      // Monto 0 = la transferencia ya estaba cubierta (típico: la seña era por
+      // transferencia y cubría todo). Se sella igual, pero no se cobra dos veces.
+      entries:
+        monto > 0
+          ? [{ kind: "PAYMENT", channel: "TRANSFER", amount: monto }]
+          : [],
+      extraData: {
         transferConfirmedById: confirmedById,
         transferConfirmedAt: new Date(),
       },
-      ...orderItemsInclude,
     });
+  },
+
+  /**
+   * Acción admin: da por cobrado el total de la orden. Registra en el libro **lo
+   * que falte** para llegar al total, por vía, y sella quién/cuándo; `PAID_IN_FULL`
+   * sale de esas filas. No mueve `status` por sí misma; los dos ejes siguen siendo
+   * independientes, con la única conexión del avance automático cuando el cobro
+   * era lo último que faltaba.
+   *
+   * Es la contraparte manual del webhook de [[MercadoPago]] para los tenants que
+   * cobran en efectivo o por transferencia: sin esto `PAID_IN_FULL` no lo escribía
+   * ningún flujo y el estado de pago se quedaba en PENDING para siempre, incluso
+   * en órdenes ya entregadas.
+   *
+   * **Cobrar el remanente, no el total, es lo que evita cobrar dos veces**: sobre
+   * una orden con seña confirmada anota el saldo; sobre una MIXED con la
+   * transferencia ya registrada, solo la parte en efectivo.
+   *
+   * Solo desde `PENDING` o `DEPOSIT_PAID` (una orden con seña se termina de cobrar
+   * por acá), así no pisa un APPROVED/REJECTED/REFUNDED escrito por MercadoPago.
+   * Igual que `confirmDeposit`/`confirmTransfer`: el software no verifica que la
+   * plata haya entrado, solo registra que un humano la dio por cobrada.
+   *
+   * @param {string} [p.channel] obligatorio solo si la orden no tiene método de
+   *   pago definido — sin eso no hay forma de saber por qué vía entró.
+   */
+  async confirmPayment({ tenantId, orderId, confirmedById, channel }) {
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, tenantId },
+      include: { payments: true },
+    });
+
+    if (!order) {
+      throw createError("Orden no encontrada", "ORDER_NOT_FOUND", 404);
+    }
+
+    if (order.status === "CANCELLED") {
+      throw createError(
+        "No se puede cobrar una orden cancelada",
+        "ORDER_ALREADY_CANCELLED",
+        409
+      );
+    }
+
+    if (!["PENDING", "DEPOSIT_PAID"].includes(order.paymentStatus)) {
+      throw createError(
+        "El estado de pago no permite confirmar el cobro total",
+        "PAYMENT_NOT_CONFIRMABLE",
+        409
+      );
+    }
+
+    return applyPayments({
+      tenantId,
+      order,
+      actorId: confirmedById,
+      entries: buildSettlementEntries(order, channel),
+      extraData: {
+        paymentConfirmedById: confirmedById,
+        paymentConfirmedAt: new Date(),
+      },
+    });
+  },
+
+  /**
+   * Registro directo de un cobro (o de una devolución) en el libro:
+   * `POST /orders/:id/payments`. Es la vía general —los tres `confirm-*` son
+   * atajos sobre esto— y la que sirve para lo que no encaja en ellos: un pago
+   * parcial a cuenta, una devolución, un cobro por una vía distinta a la pactada.
+   *
+   * @param {string} p.kind    `DEPOSIT` | `PAYMENT` | `REFUND`
+   * @param {string} p.channel `CASH` | `TRANSFER` | `GATEWAY`
+   * @param {number} p.amount  siempre positivo; el signo lo da `kind`
+   */
+  async registerPayment({ tenantId, orderId, kind, channel, amount, note, actorId }) {
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, tenantId },
+      include: { payments: true },
+    });
+
+    if (!order) {
+      throw createError("Orden no encontrada", "ORDER_NOT_FOUND", 404);
+    }
+
+    // Sobre una orden cancelada solo tiene sentido devolver plata; cobrar, no.
+    if (order.status === "CANCELLED" && kind !== "REFUND") {
+      throw createError(
+        "No se puede cobrar una orden cancelada",
+        "ORDER_ALREADY_CANCELLED",
+        409
+      );
+    }
+
+    // Devolver más de lo que entró es un error de carga, no un caso de negocio:
+    // dejaba el libro con `paid` negativo y todos los derivados (paymentStatus,
+    // pendiente por vía, y mañana el arqueo de Caja) mintiendo en silencio.
+    if (kind === "REFUND") {
+      const { paid } = paymentSummary(order);
+      const solicitado = roundMoney(Number(amount));
+
+      if (solicitado > paid + MONEY_EPS) {
+        const error = createError(
+          "No se puede devolver más de lo que se cobró",
+          "REFUND_EXCEEDS_PAID",
+          409
+        );
+        error.details = { cobrado: paid, solicitado };
+        throw error;
+      }
+    }
+
+    return applyPayments({
+      tenantId,
+      order,
+      actorId,
+      entries: [{ kind, channel, amount, note }],
+    });
+  },
+
+  /** Libro de cobros de una orden, con el resumen de cuánto entró y cuánto falta. */
+  async getPayments({ tenantId, orderId }) {
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, tenantId },
+      include: { payments: { orderBy: { confirmedAt: "asc" } } },
+    });
+
+    if (!order) {
+      throw createError("Orden no encontrada", "ORDER_NOT_FOUND", 404);
+    }
+
+    return {
+      payments: order.payments,
+      summary: paymentSummary(order),
+      pending: pendingByChannel(order),
+    };
   },
 
   /**

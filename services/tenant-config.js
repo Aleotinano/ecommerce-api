@@ -8,7 +8,10 @@ import {
 } from "../lib/imageManager.js";
 import { wrap, del, tenantNs } from "../lib/cache.js";
 import { encryptSecret } from "../lib/crypto.js";
-import { UPDATABLE_TENANT_CONFIG_FIELDS } from "../schemas/tenant-config.schema.js";
+import {
+  READONLY_TENANT_CONFIG_FIELDS,
+  UPDATABLE_TENANT_CONFIG_FIELDS,
+} from "../schemas/tenant-config.schema.js";
 
 const TENANT_CONFIG_TTL = 600;
 
@@ -18,14 +21,16 @@ const JSON_NULLABLE_FIELDS = ["themeSections"];
 // Proyección pública de la config, derivada del schema Zod para que un campo nuevo
 // aparezca en las respuestas sin tocar cada `select` a mano (evita el bug de
 // "persiste pero no se refleja"). Se excluye `whatsappAccessToken` (secreto que
-// nunca se devuelve) y se agregan campos de solo-display no actualizables (logoUrl).
+// nunca se devuelve) y se agregan campos de solo-display no actualizables (logoUrl)
+// más los de flujo de venta, que el tenant lee pero no escribe: el storefront
+// necesita saber qué métodos de pago pintar aunque no pueda cambiarlos.
 const TENANT_CONFIG_PUBLIC_SELECT = {
   id: true,
   logoUrl: true,
   ...Object.fromEntries(
-    UPDATABLE_TENANT_CONFIG_FIELDS.filter(
-      (field) => field !== "whatsappAccessToken"
-    ).map((field) => [field, true])
+    [...UPDATABLE_TENANT_CONFIG_FIELDS, ...READONLY_TENANT_CONFIG_FIELDS]
+      .filter((field) => field !== "whatsappAccessToken")
+      .map((field) => [field, true])
   ),
 };
 

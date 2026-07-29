@@ -105,6 +105,10 @@ export const loginLimiter = rateLimit({
   keyGenerator: (req) => req.body?.email || ipKeyGenerator(req.ip),
   store: loginStore,
   handler: rateLimitHandler,
+  // Mismo motivo que en `registerLimiter`: los tests de credenciales inválidas
+  // acumulan intentos fallidos en Redis y, a la segunda corrida seguida, un test
+  // de auth empieza a recibir 429 donde espera 401.
+  skip: () => DEFAULTS.NODE_ENV === "test",
 });
 
 export const registerLimiter = rateLimit({
@@ -116,6 +120,12 @@ export const registerLimiter = rateLimit({
   keyGenerator: (req) => ipKeyGenerator(req.ip),
   store: registerStore,
   handler: rateLimitHandler,
+  // La suite completa registra más usuarios que el tope por hora, y el contador
+  // vive en Redis: sin esto, correr los tests dos veces seguidas hace fallar
+  // tests que no tienen nada que ver con rate limiting, y la única forma de
+  // seguir era borrar la clave a mano. Ningún test cubre este limiter (los 429
+  // que sí se testean son los cost-guard del LLM).
+  skip: () => DEFAULTS.NODE_ENV === "test",
 });
 
 export const webhookLimiter = rateLimit({

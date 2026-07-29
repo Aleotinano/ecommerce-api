@@ -32,6 +32,7 @@ model Tenant {
   promoTiers             PromoTier[]
   promoProducts          PromoProduct[]
   userAddresses          UserAddress[]
+  orderPayments          OrderPayment[]
 }
 
 model TenantConfig {
@@ -113,6 +114,22 @@ model TenantConfig {
   // Solo gatilla si el admin puede agregar MÁS de una variante (mostrar/ocultar
   // "Agregar variante" en el panel) — no se lee todavía del lado del backend.
   productVariantsEnabled Boolean @default(true)
+
+  // ---- Flujo de venta: LO CONFIGURAMOS NOSOTROS, no el tenant ----
+  // Estos cuatro campos deciden cuándo una orden puede producirse y cuánta plata
+  // se exige antes. No están en `updateTenantConfigObject` (ver
+  // schemas/tenant-config.schema.js): si el admin del tenant pudiera cambiarlos,
+  // podría trabar pedidos que ya están en curso. Se setean desde un perfil
+  // (services/tenant-profiles.js) al crear el tenant, y después a mano con
+  // `prisma/set-tenant-profile.js`.
+
+  // Métodos que el tenant acepta. Los enums de Zod (schemas/order.schema.js) son
+  // los valores POSIBLES; estas dos listas son los HABILITADOS para este tenant,
+  // y las valida `OrderModel.create`/`reviewOrder`. Los defaults reproducen el
+  // comportamiento anterior a que existieran (todo habilitado), así que la
+  // migración no cambia a ningún tenant existente.
+  paymentMethodsEnabled     OrderPaymentMethod[] @default([CASH, TRANSFER, MIXED])
+  fulfillmentMethodsEnabled FulfillmentMethod[]  @default([DELIVERY, PICKUP])
 
   // Seña / depósito: si depositEnabled es true, las órdenes del tenant exigen un
   // depósito (depositPercentage % del total) antes de pasar a producción.
@@ -516,6 +533,7 @@ model Order {
   tenant        Tenant               @relation(fields: [tenantId], references: [id])
   orderItems    OrderItem[]
   statusHistory OrderStatusHistory[]
+  payments      OrderPayment[]
 
   paymentStatus PaymentStatus       @default(PENDING)
   paymentMethod OrderPaymentMethod?
@@ -539,6 +557,14 @@ model Order {
   // {TRANSFER, MIXED}. Independiente de paymentStatus (MercadoPago).
   transferConfirmedById Int?
   transferConfirmedAt   DateTime?
+
+  // Cobro total confirmado a mano: cierra el eje del dinero para los tenants que
+  // no usan MercadoPago (efectivo/transferencia). Sin esto `paymentStatus` se
+  // quedaba en PENDING para siempre —incluso en órdenes entregadas— porque
+  // PAID_IN_FULL no lo escribía ningún flujo. Lo sella un humano, igual que la
+  // seña y la transferencia; el software sigue sin verificar que la plata entró.
+  paymentConfirmedById Int?
+  paymentConfirmedAt   DateTime?
 
   // Entrega: retiro en local o envío a una dirección. Los campos de
   // dirección solo son relevantes si fulfillmentMethod = DELIVERY.
@@ -574,15 +600,49 @@ model Order {
   @@index([tenantId])
 }
 
+// Libro de cobros de la orden: UNA FILA POR COBRO. Es lo que permite responder
+// "¿cuánto se cobró de esta orden y por qué vía?" — antes el dinero solo existía
+// como sellos (`depositConfirmedAt`, `transferConfirmedAt`, `paymentConfirmedAt`),
+// banderas con fecha que no dicen monto. `Order.paymentStatus` pasa a DERIVARSE de
+// estas filas (`derivePaymentStatus`, services/order-state.js) y se cachea en la
+// columna para que los listados puedan seguir filtrando por SQL.
+//
+// El software sigue sin gestionar dinero: nadie verifica que la plata entró. Esto
+// registra lo que un humano declaró cobrado, con monto y vía.
+model OrderPayment {
+  id       Int @id @default(autoincrement())
+  tenantId Int
+  orderId  Int
+
+  kind    OrderPaymentKind
+  channel PaymentChannel
+  // SIEMPRE positivo (CHECK en la migración); el signo lo aporta `kind` vía
+  // PAYMENT_SIGN. Guardar montos con signo invita a que alguien escriba -50 en un
+  // cobro y nadie se entere hasta que no cierran las cuentas.
+  amount  Float
+
+  note          String?
+  confirmedById Int? // null en los cobros que registra el webhook de MercadoPago
+  confirmedAt   DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  order  Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([orderId])
+  @@index([tenantId])
+}
+
 model OrderStatusHistory {
-  id          Int          @id @default(autoincrement())
+  id          Int           @id @default(autoincrement())
   orderId     Int
   fromStatus  OrderStatus?
   toStatus    OrderStatus
   note        String?
   changedById Int?
-  createdAt   DateTime     @default(now())
-  order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  trigger     StatusTrigger @default(MANUAL)
+  createdAt   DateTime      @default(now())
+  order       Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
 }
@@ -702,11 +762,27 @@ enum SuggestionSource {
   MANUAL
 }
 
+// Eje de producción. READY es opcional en el camino (PROCESSING -> COMPLETED sigue
+// siendo válido): es el momento en que el pedido está terminado y se le avisa al
+// cliente, que hasta ahora quedaba tapado dentro de PROCESSING. El stock se sigue
+// descontando SOLO en COMPLETED. Transiciones válidas: services/order-state.js.
 enum OrderStatus {
   PENDING
   PROCESSING
+  READY
   COMPLETED
   CANCELLED
+}
+
+// Quién movió el estado: una persona (MANUAL), el motor al cumplirse las
+// condiciones de la orden (AUTO, ver `applyAutoAdvance`) o el webhook de
+// MercadoPago (GATEWAY). Sin esto, el timeline no distingue un avance automático
+// de uno que alguien apretó, que es justo lo que hay que poder auditar cuando el
+// cliente pregunta "¿quién puso esto en producción?".
+enum StatusTrigger {
+  MANUAL
+  AUTO
+  GATEWAY
 }
 
 enum PaymentStatus {
@@ -730,10 +806,30 @@ enum FulfillmentMethod {
   PICKUP
 }
 
+// Forma de pago ACORDADA para la orden entera. No confundir con `PaymentChannel`,
+// que es la vía por la que entró CADA cobro: una orden MIXED genera dos filas de
+// `OrderPayment`, una CASH y una TRANSFER.
 enum OrderPaymentMethod {
   CASH
   TRANSFER
   MIXED
+}
+
+// Vía por la que se movió la plata de un cobro concreto. `GATEWAY` es MercadoPago:
+// esa plata nunca pasa por el mostrador, así que un módulo de caja física debe
+// ignorarla (ver [[Caja]]).
+enum PaymentChannel {
+  CASH
+  TRANSFER
+  GATEWAY
+}
+
+// Qué representa la fila del libro. `REFUND` es el único con signo negativo, y lo
+// aporta `PAYMENT_SIGN` (services/order-state.js), no el número guardado.
+enum OrderPaymentKind {
+  DEPOSIT // seña
+  PAYMENT // cobro (parcial o total)
+  REFUND  // devolución al cliente
 }
 
 enum Role {

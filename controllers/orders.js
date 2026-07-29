@@ -1,8 +1,18 @@
 import { OrderModel } from "../services/orders.js";
+import { evaluateOrder } from "../services/order-state.js";
 import { buildOrderWhatsappLink } from "../lib/whatsapp-link.js";
 import { logger } from "../lib/logger.js";
 
 const log = logger.child({ module: "orders-controller" });
+
+// Estado de la orden según el motor (services/order-state.js): qué le falta para
+// producirse y cómo viene el dinero. Va en las respuestas del backoffice para que
+// el panel pueda deshabilitar el botón CON EL MOTIVO en vez de dejar que la
+// persona apriete y se coma un 409.
+function stateOf(order) {
+  const { payment, blockers, canProduce } = evaluateOrder(order);
+  return { payment, blockers, canProduce };
+}
 
 // Cómo se entrega y cómo se paga: el mismo bloque va en casi todas las
 // respuestas de orden, así que se arma en un solo lugar.
@@ -59,7 +69,12 @@ function comboOf(item) {
 export class OrderController {
   static async create(req, res, next) {
     try {
-      const { id, username } = req.user;
+      // `req.user` es null en el checkout de invitado (la ruta del storefront usa
+      // optionalStoreAuth): el dueño del carrito lo resuelve `resolveCartOwner`,
+      // que deja el guestId de la cookie en `req.cartOwner`. Las rutas de admin no
+      // pasan por ese middleware, así que ahí se arma desde el usuario del token.
+      const { id = null, username = null } = req.user ?? {};
+      const cartOwner = req.cartOwner ?? { userId: id, guestId: null };
       const {
         fulfillmentMethod,
         addressText,
@@ -77,7 +92,7 @@ export class OrderController {
 
       const order = await OrderModel.create({
         tenantId: req.tenantId,
-        userId: id,
+        cartOwner,
         // Lo setea la ruta del storefront (routes/store/orders.js); una orden
         // cargada por un admin desde el panel queda como ADMIN.
         origin: req.orderOrigin ?? "ADMIN",
@@ -99,7 +114,9 @@ export class OrderController {
         message: "Orden creada exitosamente",
         order: {
           id: order.id,
-          user: username,
+          // Sin cuenta no hay username: el pedido se identifica con el nombre que
+          // dio la persona, que es justamente lo que el invitado tiene que cargar.
+          user: username ?? order.contactName ?? null,
           origin: order.origin,
           status: order.status,
           paymentStatus: order.paymentStatus,
@@ -193,12 +210,20 @@ export class OrderController {
         reviewedAt: order.reviewedAt,
         requiresDeposit: order.requiresDeposit,
         depositAmount: order.depositAmount,
+        // Sin esto el panel no puede distinguir una seña confirmada de una
+        // pendiente: la respuesta de confirm-deposit sí lo trae, así que la
+        // orden se mostraba bien hasta el siguiente fetch y ahí "se
+        // desconfirmaba" sola.
+        depositConfirmedAt: order.depositConfirmedAt,
         status: order.status,
         paymentStatus: order.paymentStatus,
         ...fulfillmentOf(order),
+        ...stateOf(order),
         transferConfirmedAt: order.transferConfirmedAt,
+        paymentConfirmedAt: order.paymentConfirmedAt,
         total: order.total,
         createdAt: order.createdAt,
+        updatedAt: order.updatedAt,
         productos: order.orderItems.map((item) => ({
           id: item.id,
           productId: item.productId,
@@ -206,6 +231,11 @@ export class OrderController {
           nombre: item.product?.name ?? item.variant?.sku,
           cantidad: item.quantity,
           precio: item.price,
+          // Mismo detalle de línea que el endpoint de detalle: el panel del admin
+          // trabaja sobre esta lista, y sin imagen ni subtotal no puede mostrar
+          // la ficha del producto al revisar el pedido.
+          subtotal: item.price * item.quantity,
+          image: item.variant?.img ?? item.product?.img ?? null,
           attributes: item.variant?.attributes ?? {},
           note: item.note,
           combo: comboOf(item),
@@ -223,16 +253,17 @@ export class OrderController {
       const { id: userId, role } = req.user;
       const { id: orderId } = req.params;
 
+      const isStaff = role === "ADMIN" || role === "STAFF";
+
       // ADMIN/STAFF pueden ver cualquier orden del tenant (incluidas las BOT,
       // que nacen con userId null); el resto solo su propia orden.
-      const order =
-        role === "ADMIN" || role === "STAFF"
-          ? await OrderModel.getOrderById({ tenantId: req.tenantId, orderId })
-          : await OrderModel.getUserOrderById({
-              tenantId: req.tenantId,
-              userId,
-              orderId,
-            });
+      const order = isStaff
+        ? await OrderModel.getOrderById({ tenantId: req.tenantId, orderId })
+        : await OrderModel.getUserOrderById({
+            tenantId: req.tenantId,
+            userId,
+            orderId,
+          });
 
       return res.json({
         order: {
@@ -241,6 +272,15 @@ export class OrderController {
           paymentStatus: order.paymentStatus,
           ...fulfillmentOf(order),
           transferConfirmedAt: order.transferConfirmedAt,
+          // La seña completa: sin los tres campos, un consumidor del detalle no
+          // tiene forma de saber que la orden la lleva ni si está confirmada.
+          requiresDeposit: order.requiresDeposit,
+          depositAmount: order.depositAmount,
+          depositConfirmedAt: order.depositConfirmedAt,
+          paymentConfirmedAt: order.paymentConfirmedAt,
+          // Solo para el backoffice: al cliente no le sirve —ni le corresponde—
+          // saber que su pedido está esperando que alguien lo revise.
+          ...(isStaff ? stateOf(order) : {}),
           total: order.total,
           createdAt: order.createdAt,
           updatedAt: order.updatedAt,
@@ -262,6 +302,9 @@ export class OrderController {
             estado: entry.toStatus,
             nota: entry.note,
             fecha: entry.createdAt,
+            // Campo agregado, no cambiado: distingue el avance que hizo el motor
+            // al cumplirse las condiciones del que apretó una persona.
+            automatico: entry.trigger === "AUTO",
           })),
         },
       });
@@ -285,6 +328,7 @@ export class OrderController {
 
       const statusMessages = {
         PROCESSING: "en preparación",
+        READY: "marcada como lista",
         COMPLETED: "completada",
         CANCELLED: "cancelada",
         PENDING: "actualizada",
@@ -297,6 +341,7 @@ export class OrderController {
           status: order.status,
           paymentStatus: order.paymentStatus,
           total: order.total,
+          ...stateOf(order),
           updatedAt: order.updatedAt,
         },
       });
@@ -349,9 +394,14 @@ export class OrderController {
         message: "Orden revisada exitosamente",
         order: {
           id: order.id,
+          // Ojo: la revisión puede haber destrabado la orden y dejarla ya en
+          // PROCESSING (avance automático, ver services/order-state.js). El
+          // panel tiene que pintar lo que viene acá, no asumir que sigue en
+          // PENDING.
           status: order.status,
           paymentStatus: order.paymentStatus,
           ...fulfillmentOf(order),
+          ...stateOf(order),
           total: order.total,
           requiresDeposit: order.requiresDeposit,
           depositAmount: order.depositAmount,
@@ -384,6 +434,7 @@ export class OrderController {
         tenantId: req.tenantId,
         orderId,
         confirmedById: req.user.id,
+        channel: req.body.channel,
       });
 
       return res.json({
@@ -395,6 +446,7 @@ export class OrderController {
           total: order.total,
           depositAmount: order.depositAmount,
           depositConfirmedAt: order.depositConfirmedAt,
+          ...stateOf(order),
           updatedAt: order.updatedAt,
         },
       });
@@ -411,6 +463,7 @@ export class OrderController {
         tenantId: req.tenantId,
         orderId,
         confirmedById: req.user.id,
+        amount: req.body.amount,
       });
 
       return res.json({
@@ -419,9 +472,109 @@ export class OrderController {
           id: order.id,
           status: order.status,
           paymentMethod: order.paymentMethod,
+          // Desde el libro de cobros, confirmar una transferencia SÍ mueve el
+          // estado de pago (antes solo sellaba la fecha), así que la respuesta
+          // tiene que traerlo o el panel se queda con el valor viejo.
+          paymentStatus: order.paymentStatus,
+          total: order.total,
           transferConfirmedAt: order.transferConfirmedAt,
+          ...stateOf(order),
           updatedAt: order.updatedAt,
         },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async confirmPayment(req, res, next) {
+    try {
+      const { id: orderId } = req.params;
+
+      const order = await OrderModel.confirmPayment({
+        tenantId: req.tenantId,
+        orderId,
+        confirmedById: req.user.id,
+        channel: req.body.channel,
+      });
+
+      return res.json({
+        message: "Pago confirmado exitosamente",
+        order: {
+          id: order.id,
+          status: order.status,
+          paymentStatus: order.paymentStatus,
+          total: order.total,
+          paymentConfirmedAt: order.paymentConfirmedAt,
+          ...stateOf(order),
+          updatedAt: order.updatedAt,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Alta directa en el libro de cobros. Es la vía general —los tres confirm-*
+  // son atajos— y la única forma de registrar un pago parcial a cuenta o una
+  // devolución.
+  static async registerPayment(req, res, next) {
+    try {
+      const { id: orderId } = req.params;
+      const { kind, channel, amount, note } = req.body;
+
+      const order = await OrderModel.registerPayment({
+        tenantId: req.tenantId,
+        orderId,
+        kind,
+        channel,
+        amount,
+        note,
+        actorId: req.user.id,
+      });
+
+      return res.status(201).json({
+        message:
+          kind === "REFUND"
+            ? "Devolución registrada exitosamente"
+            : "Cobro registrado exitosamente",
+        order: {
+          id: order.id,
+          status: order.status,
+          paymentStatus: order.paymentStatus,
+          total: order.total,
+          ...stateOf(order),
+          updatedAt: order.updatedAt,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getPayments(req, res, next) {
+    try {
+      const { id: orderId } = req.params;
+
+      const { payments, summary, pending } = await OrderModel.getPayments({
+        tenantId: req.tenantId,
+        orderId,
+      });
+
+      return res.json({
+        payments: payments.map((entry) => ({
+          id: entry.id,
+          kind: entry.kind,
+          channel: entry.channel,
+          monto: entry.amount,
+          note: entry.note,
+          confirmedById: entry.confirmedById,
+          confirmedAt: entry.confirmedAt,
+        })),
+        payment: summary,
+        // Cuánto falta por cada vía. Es lo que el panel necesita para proponer un
+        // monto al cobrar, sin que nadie lo calcule a mano.
+        pending,
       });
     } catch (error) {
       next(error);

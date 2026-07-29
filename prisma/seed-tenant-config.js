@@ -2,6 +2,10 @@ import "dotenv/config";
 import { pathToFileURL } from "node:url";
 
 import prisma from "../lib/prisma.js";
+import {
+  DEFAULT_TENANT_PROFILE,
+  resolveProfile,
+} from "../services/tenant-profiles.js";
 
 export const tenantConfigSeeds = {
   acme: {
@@ -61,12 +65,27 @@ export const tenantConfigSeeds = {
     showOutOfStock: true,
     allowCartGuest: false,
   },
-  // Sin branding todavía (el catálogo real se carga aparte, ver seed.js). Solo
-  // habilitamos seña para poder testear el flujo de depósito de mesa-dulce.
-  "mesa-dulce": {
-    depositEnabled: true,
-    depositPercentage: 50,
-  },
+  // Sin branding todavía (el catálogo real se carga aparte, ver seed.js).
+  // Mesa Dulce cobra el total de una: no trabaja con seña, y el reembolso de una
+  // orden cancelada lo hace el admin por fuera del sistema. Eso es exactamente el
+  // perfil `estandar`, así que no declara nada de flujo — no hace falta un perfil
+  // a medida para el primer cliente.
+  "mesa-dulce": {},
+};
+
+/**
+ * Perfil de flujo de venta por tenant sembrado. Los tres van con `estandar` (todo
+ * habilitado, sin seña), que es lo que estos tenants hacían antes de que los
+ * perfiles existieran. Se declara igual, y no se deja implícito, para que agregar
+ * un tenant de demo con otro flujo sea cambiar una línea.
+ *
+ * Vive separado de `tenantConfigSeeds` porque no es branding: son los campos que
+ * el tenant NO edita (ver READONLY_TENANT_CONFIG_FIELDS).
+ */
+export const tenantProfileSeeds = {
+  acme: "estandar",
+  shopco: "estandar",
+  "mesa-dulce": "estandar",
 };
 
 export async function seedTenantConfigs() {
@@ -81,15 +100,20 @@ export async function seedTenantConfigs() {
       continue;
     }
 
+    // El perfil primero y el branding después: si algún día un seed quisiera
+    // pisar un campo de flujo a mano, gana el seed y se ve en el diff.
+    const profileName = tenantProfileSeeds[slug] ?? DEFAULT_TENANT_PROFILE;
+    const values = { ...resolveProfile(profileName), ...data };
+
     const config = await prisma.tenantConfig.upsert({
       where: { tenantId: tenant.id },
-      update: data,
-      create: { tenantId: tenant.id, ...data },
+      update: values,
+      create: { tenantId: tenant.id, ...values },
       select: { id: true, storeName: true },
     });
 
     console.log(
-      `✓ ${tenant.name} (slug: ${slug}, tenantId: ${tenant.id}) → config #${config.id} "${config.storeName}"`
+      `✓ ${tenant.name} (slug: ${slug}, tenantId: ${tenant.id}) → config #${config.id} "${config.storeName}" [perfil: ${profileName}]`
     );
   }
 }

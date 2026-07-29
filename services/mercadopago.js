@@ -3,7 +3,10 @@ import { preference, payment } from "../config/mercadopago.js";
 import { getBackUrls, getPaymentMethods } from "../helpers/mercadopago.js";
 import { createError } from "../helpers/error.js";
 import { DEFAULTS } from "../config.js";
+import { logger } from "../lib/logger.js";
 import { OrderModel } from "./orders.js";
+
+const log = logger.child({ module: "mercadopago" });
 
 // `attributeValues` son los valores de `variant.attributes` en el orden del catálogo
 // del tenant (la escritura los normaliza por `position`, ver TenantAttributeModel).
@@ -134,16 +137,45 @@ export const mercadopagoModel = {
       throw createError("Monto inv�lido", "AMOUNT_MISMATCH", 409);
     }
 
-    await OrderModel.updateOrderStatus({
+    // El cobro se registra SIEMPRE, pase lo que pase con el estado: la plata
+    // entró y eso es un hecho, independiente de si la orden está en condiciones
+    // de producirse.
+    await OrderModel.registerPayment({
       tenantId: order.tenantId,
       orderId,
-      status: "COMPLETED",
-      extraData: {
-        paymentStatus: "APPROVED",
-        paymentId: String(paymentInfo.id),
-      },
+      kind: "PAYMENT",
+      channel: "GATEWAY",
+      amount: Number(paymentInfo.transaction_amount),
+      note: `MercadoPago ${paymentInfo.id}`,
     });
 
-    return "COMPLETED";
+    await prisma.order.update({
+      where: { id: orderId },
+      data: { paymentId: String(paymentInfo.id) },
+    });
+
+    // Completar es lo que se intenta, no lo que se garantiza. Antes esto era un
+    // `updateOrderStatus` pelado: si la orden venía del storefront y nadie la
+    // había revisado, lanzaba ORDER_NOT_REVIEWED, el error salía como 500 y
+    // MercadoPago reintentaba el webhook para siempre — con el cobro sin
+    // registrar. Ahora el cobro ya quedó anotado y el estado avanza si puede.
+    try {
+      await OrderModel.updateOrderStatus({
+        tenantId: order.tenantId,
+        orderId,
+        status: "COMPLETED",
+        trigger: "GATEWAY",
+        note: "Pago aprobado por MercadoPago",
+      });
+
+      return "COMPLETED";
+    } catch (error) {
+      log.warn(
+        { err: error, orderId, code: error.code },
+        "pago registrado, pero la orden no está en condiciones de completarse"
+      );
+
+      return "PAID";
+    }
   },
 };
