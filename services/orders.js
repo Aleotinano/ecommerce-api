@@ -10,6 +10,7 @@ import { sendMail, buildOrderStatusEmail } from "../lib/mailer.js";
 import { normalizeCustomerPhone } from "../lib/phone.js";
 import { logger } from "../lib/logger.js";
 import { validateComboSelection } from "./combos.js";
+import { recordOrderPayments } from "./cash-register.js";
 import { getPromoTiersByProduct, pickPromoTier, applyPromoDiscount } from "./promos.js";
 import { invalidateProductsCache } from "./productos.js";
 import {
@@ -341,18 +342,27 @@ async function applyPayments({ tenantId, order, entries = [], actorId, extraData
   const orderId = order.id;
 
   const { order: result, advancedTo } = await prisma.$transaction(async (tx) => {
-    if (entries.length) {
-      await tx.orderPayment.createMany({
-        data: entries.map((entry) => ({
-          tenantId,
-          orderId,
-          kind: entry.kind,
-          channel: entry.channel,
-          amount: roundMoney(Number(entry.amount)),
-          note: entry.note ?? null,
-          confirmedById: actorId ?? null,
-        })),
-      });
+    // `createManyAndReturn` y no `createMany` porque la caja necesita el `id` de
+    // cada fila: es lo que hace que un cobro no pueda anotarse dos veces en el
+    // arqueo (ver `recordOrderPayments`).
+    const creadas = entries.length
+      ? await tx.orderPayment.createManyAndReturn({
+          data: entries.map((entry) => ({
+            tenantId,
+            orderId,
+            kind: entry.kind,
+            channel: entry.channel,
+            amount: roundMoney(Number(entry.amount)),
+            note: entry.note ?? null,
+            confirmedById: actorId ?? null,
+          })),
+        })
+      : [];
+
+    // Adentro de esta transacción a propósito: con la caja habilitada y sin turno
+    // abierto esto lanza, y el cobro NO queda sellado.
+    if (creadas.length) {
+      await recordOrderPayments(tx, { tenantId, orderId, payments: creadas, actorId });
     }
 
     const payments = await tx.orderPayment.findMany({ where: { orderId } });
@@ -955,7 +965,11 @@ export const OrderModel = {
       }
 
       if (settlement.length) {
-        await tx.orderPayment.createMany({
+        // Ver `applyPayments`: se devuelven las filas creadas para que la caja
+        // pueda anotar un movimiento por cada una. Este es el segundo (y último)
+        // camino que escribe en el libro, y el que hace que el efectivo del
+        // mostrador llegue al arqueo.
+        const creadas = await tx.orderPayment.createManyAndReturn({
           data: settlement.map((entry) => ({
             tenantId,
             orderId,
@@ -965,6 +979,13 @@ export const OrderModel = {
             note: entry.note,
             confirmedById: changedById,
           })),
+        });
+
+        await recordOrderPayments(tx, {
+          tenantId,
+          orderId,
+          payments: creadas,
+          actorId: changedById,
         });
       }
 
