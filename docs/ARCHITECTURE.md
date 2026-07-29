@@ -49,8 +49,16 @@
 | `test:watch` | `vitest` | Tests en watch |
 | `seed` | `node prisma/seed.js` | Seed base |
 | `seed:stats` | `node prisma/seed-stats.js` | Seed de datos para stats |
-| `seed:config` | `node prisma/seed-tenant-config.js` | Seed de `TenantConfig` |
+| `seed:config` | `node prisma/seed-tenant-config.js` | Seed de `TenantConfig` (perfil de flujo + branding) |
+| — | `node prisma/set-tenant-profile.js <slug> <perfil>` | Aplica un perfil de flujo de venta a un tenant. Sin argumentos lista perfiles y el estado de cada tenant. **No** es un script de npm: es operación manual, no parte de ningún seed |
 | `seed:catalog` | `node prisma/seed-catalog.js` | Seed de catálogo |
+| `seed:mesa-dulce` | `node prisma/mesa-dulce/index.js` | Seed completo del primer tenant real (categorías + productos + órdenes) |
+| `seed:mesa-dulce:categorias` | `node prisma/mesa-dulce/categorias.js` | Solo categorías de ese tenant |
+| `seed:mesa-dulce:productos` | `node prisma/mesa-dulce/productos.js` | Solo productos/combos de ese tenant |
+| `seed:mesa-dulce:ordenes` | `node prisma/mesa-dulce/ordenes.js` | Solo órdenes de ejemplo de ese tenant |
+
+> ⚠️ `pnpm seed` hace un **TRUNCATE completo** antes de sembrar. No correrlo contra una base con
+> datos reales cargados.
 
 ### Infraestructura local
 - `docker-compose.yml` levanta **solo Redis** (`redis:7-alpine`, puerto `6379`, AOF
@@ -121,7 +129,7 @@ e-commerce-express-1/
 ├── docker-compose.yml      # Solo Redis
 ├── vitest.config.js
 ├── routes/                 # Definición de endpoints (Router de Express) por feature
-│   ├── store/              # Sub-API "storefront" (auth, products, categories, cart, orders, config, mercadopago, chat, page)
+│   ├── store/              # Sub-API "storefront" (auth, products, categories, cart, orders, addresses, config, mercadopago, chat, page)
 │   └── webhooks/           # whatsapp.js — webhook de WhatsApp Business, montado FUERA de /store
 ├── controllers/            # Handlers HTTP: parsean req, llaman al service, arman respuesta
 │   ├── store/              # Controllers de la storefront
@@ -131,19 +139,21 @@ e-commerce-express-1/
 │   ├── content-suggestions/# index.js (fachada) + selection.js, angles.js, queries.js, cost-guard.js
 │   ├── whatsapp/           # Bot de WhatsApp: index.js, signature.js, history.js, rate-limit.js, graph-api.js, dedup.js, tenant-resolver.js
 │   ├── chat/               # Agente de chat de tienda: index.js, tools.js, prompt.js, cost-guard.js
-│   └── combos.js           # Archivo único (no carpeta): validateComboSelection, compartido por cart.js y orders.js
-├── lib/                    # Infra/integraciones: prisma, redis, cache, logger, mailer, cloudinary, tokens, slug, imageManager, crypto (AES-256-GCM), whatsapp-link (deep-link wa.me del pedido — módulo puro, NO es el bot)
+│   ├── combos.js           # Archivo único (no carpeta): validateComboSelection, compartido por cart.js y orders.js
+│   └── order-state.js      # Motor de estados de órdenes (puro): transiciones, blockers y avance automático
+├── lib/                    # Infra/integraciones: prisma, redis, cache, logger, mailer, cloudinary, tokens, slug, imageManager, crypto (AES-256-GCM), phone (normalización E.164), whatsapp-link (deep-link wa.me del pedido — módulo puro, NO es el bot)
 │   └── llm/                # Cliente LLM: index.js, prompt.js, parse.js, fallback.js
 │       ├── providers/      # anthropic.js, gemini.js (fetch directo, sin SDK)
 │       └── tools/          # schema.js — specs de tools del agente (TOOL_DEFINITIONS, AUTHENTICATED_TOOLS, CHANNEL_ORDER_TOOLS)
-├── middleware/             # auth, role, tenant, cors, rateLimit, validate, upload, errorHandler, httpLogger
+├── middleware/             # auth, role, tenant, cors, rateLimit, validate, upload, errorHandler, httpLogger, guestCart (cookie de invitado), storeCache (Cache-Control/Vary de /store)
 ├── schemas/                # Schemas zod (env, auth, product, order, combo, chat, page-spec, stats, content-suggestion, etc.)
 ├── helpers/                # error.js (createError), password.js (argon2), price.js (getProductPrice/resolveProductStock), etc.
 ├── utils/                  # Utilidades varias
 ├── prisma/
 │   ├── schema.prisma       # Modelo de datos
-│   ├── migrations/         # 26 migraciones SQL
-│   └── seed*.js            # Seeds (base, stats, tenant-config, catalog)
+│   ├── migrations/         # 42 migraciones SQL
+│   ├── mesa-dulce/         # Seed del primer tenant real (categorias.js, productos.js, ordenes.js, index.js)
+│   └── seed*.js            # Seeds (base, stats, tenant-config, catalog) + scripts de migración de datos
 ├── generated/prisma/       # Cliente Prisma generado (output custom, fuera de node_modules)
 ├── tests/                  # Tests (vitest + supertest)
 ├── front-md-guia/          # GUÍAS markdown de integración para un frontend externo (no es código)
@@ -174,19 +184,26 @@ Generador con `output = "../generated/prisma"`.
 
 | Modelo | Campos clave (tipo) | Relaciones | `tenantId` |
 |---|---|---|---|
-| **Tenant** | `id`, `slug @unique`, `name`, `isActive=true`, `createdAt`, `updatedAt` | 1-N: users, categories, products, variants, carts, orders, contentSuggestions, comboAllowedProducts, suggestionImages; 1-1: config, pageSpec | N/A (es el tenant) |
-| **TenantConfig** | branding (`logoUrl`, `storeName`, `storeTagline`…), contacto, social, SEO, políticas, `currency=ARS`, `locale=es-AR`, `showOutOfStock=false`, `allowCartGuest=true`, `productVariantsEnabled=true`, `depositEnabled=false`, `depositPercentage=50`, `whatsappPhoneNumberId? @unique`, `whatsappAccessToken?` (cifrado AES-256-GCM) | 1-1 `Tenant` (`onDelete: Cascade`) | **Sí** (`tenantId @unique`) |
-| **User** | `id`, `username`, `email`, `password`, `role: Role=CUSTOMER`, `emailVerified=false`, `emailVerificationTokenHash?`, `emailVerificationExpiresAt?` | 1-1 cart, 1-N orders, N-1 tenant | **Sí** |
+| **Tenant** | `id`, `slug @unique`, `name`, `isActive=true`, `createdAt`, `updatedAt` | 1-N: users, addresses, categories, products, variants, carts, orders, promos, contentSuggestions, comboAllowedProducts, suggestionImages; 1-1: config, pageSpec | N/A (es el tenant) |
+| **TenantConfig** | branding (`logoUrl`, `storeName`, `storeTagline`…), contacto, social, SEO, políticas; **tema** `themeAccent?`, `themeRadius?`, `themeFontDisplay?`, `themeFontBody?`, `themeWeightDisplay?`, `themeWeightBody?`, `themeDensity?` (texto libre a propósito: el catálogo de fuentes/enums vive en `@repo/shared` y evoluciona sin migración) + `themeSections: Json?` (overrides por sección nav/hero/catalog/footer); **teléfono del cliente** `customerPhoneMode?="required"` (`off`\|`optional`\|`required`, CHECK en la migración), `customerPhoneCountry?="54"`, `customerPhoneArea?`; `currency=ARS`, `locale=es-AR`, `showOutOfStock=false`, `allowCartGuest=true`, `productVariantsEnabled=true`, `whatsappPhoneNumberId? @unique`, `whatsappAccessToken?` (cifrado AES-256-GCM); **flujo de venta — lo configuramos nosotros, no el tenant** (§6): `paymentMethodsEnabled=[CASH,TRANSFER,MIXED]`, `fulfillmentMethodsEnabled=[DELIVERY,PICKUP]` (arrays de enum), `depositEnabled=false`, `depositPercentage=50` | 1-1 `Tenant` (`onDelete: Cascade`) | **Sí** (`tenantId @unique`) |
+| **User** | `id`, `username`, `email`, `password`, `phone?` (E.164 en dígitos, normalizado en `lib/phone.js`; **no** es credencial ni tiene unique), `role: Role=CUSTOMER`, `emailVerified=false`, `emailVerificationTokenHash?`, `emailVerificationExpiresAt?` | 1-1 cart, 1-N orders, 1-N addresses, N-1 tenant | **Sí** |
+| **UserAddress** | `id`, `userId`, `label` ("mi casa"), `addressText?`, `addressLat?`, `addressLng?`, `addressDetails?`, `addressMapsUrl?` (hace falta `addressText` y/o `addressMapsUrl`, CHECK en la migración), `isDefault=false`, `createdAt`, `updatedAt` — libreta de direcciones del cliente. **NO es la dirección de la orden**: el checkout copia estos campos a las columnas planas de `Order` (snapshot histórico) y `Order` no tiene FK acá, así que el borrado es físico y no altera pedidos cerrados | N-1 user (`onDelete: Cascade`), N-1 tenant | **Sí** |
 | **Categories** | `id`, `name`, `description?`, `icon?`, `imageUrl?`, `imgPublicId?`, `isActive=true`, `parentId?` (self-relation árbol), `position=0` (orden de display, agregado 2026-07-20) | self `parent`/`children`, 1-N products, N-1 tenant, N-1 ComboAllowedCategory | **Sí** |
 | **Product** | `id`, `name`, `description?`, `price: Float?` (exclusivo de `COMBO`; `null` para `PRODUCTO`, el precio real vive en la variante default), `img?`, `imgPublicId?`, `categoryId?`, `isActive=true`, `createdAt`, `type: ProductType`, `isCombo=false` (deprecado, no se lee en runtime), `comboMinItems?`, `comboMaxItems?` | 1-N variants, N-1 category, N-1 tenant, 1-N contentSuggestions, 1-N cartItems, 1-N orderItems, 1-N comboOptions/allowedInCombos (`ComboAllowedProduct`), 1-N comboCategoryOptions (`ComboAllowedCategory`) | **Sí** |
 | **ProductVariant** | `id`, `productId`, `attributes: Json={}` (pares key→valor del catálogo `TenantAttribute` del tenant, ej. `{"color":"#fff","talle":"M"}` o `{"sabor":"chocolate"}`; validados/normalizados en `services/tenant-attributes.js`), `price: Float` (NOT NULL), `stock: Int`, `sku`, `img?`, `imgPublicId?`, `isActive=true`, `isDefault=false` (marca la variante "principal" de un `PRODUCTO`; a lo sumo una `true` por producto) | N-1 product (`onDelete: Cascade`), N-1 tenant, 1-N cartItems, 1-N orderItems | **Sí** — todo `Product.type = "PRODUCTO"` tiene **siempre** al menos una fila (la default); `COMBO` no tiene ninguna |
 | **TenantAttribute** | `id`, `key` (slug estable: `color`, `talle`, `sabor`…), `label` (display), `type: AttributeType=TEXT` (`TEXT` \| `COLOR` — COLOR exige valor HEX), `position=0` (orden de display/normalización) — catálogo de atributos de variante del tenant, seteo **one-time** en el onboarding (`PUT /tenant-attributes/:tenantId` devuelve 409 si ya existe) | N-1 `Tenant` (`onDelete: Cascade`) | **Sí** (`@@unique([tenantId, key])`) |
 | **ComboAllowedProduct** | `id`, `comboProductId`, `allowedProductId`, `comboAllowedCategoryId?`, `minQty=0`, `maxQty?`, `isActive=true`, `createdAt` — con FK null: regla standalone legacy (min/max per-producto); con FK: MIEMBRO explícito de esa regla de categoría (min/max no se usan) | N-1 `Product` como `comboProduct` (`onDelete: Cascade`) y como `allowedProduct` (`onDelete: Cascade`), N-1 opcional `ComboAllowedCategory` (`onDelete: Cascade`), N-1 tenant | **Sí** |
 | **ComboAllowedCategory** | `id`, `comboProductId`, `categoryId`, `minQty=0`, `maxQty?`, `isActive=true`, `createdAt` — whitelist de categorías permitidas en un combo; `minQty`/`maxQty` son el TOTAL DEL GRUPO (suma elegida de la categoría; el admin manda min=max exacto); sin `members` = toda la categoría; no baja a subcategorías | N-1 `Product` (`onDelete: Cascade`), N-1 `Categories` (`onDelete: Cascade`), 1-N `members` (`ComboAllowedProduct`), N-1 tenant | **Sí** |
-| **Cart** | `id`, `userId @unique`, `createdAt`, `updatedAt` | 1-1 user, N-1 tenant, 1-N items | **Sí** |
+| **Promo** | `id`, `name`, `description?`, `isActive=true`, `createdAt` — promo de descuento por cantidad | 1-N tiers, 1-N products, N-1 tenant | **Sí** |
+| **PromoTier** | `id`, `promoId`, `minQty`, `discountPercentage: Float`, `createdAt` — escalón de descuento (a partir de N unidades, X %) | N-1 promo (`onDelete: Cascade`), N-1 tenant | **Sí** |
+| **PromoProduct** | `id`, `promoId`, `productId`, `createdAt` — join promo↔producto; sin `isActive` propio (el estado vive en `Promo.isActive`) | N-1 promo (`onDelete: Cascade`), N-1 product (`onDelete: Cascade`), N-1 tenant | **Sí** |
+| **Cart** | `id`, `userId? @unique` (nullable: carrito de invitado), `guestId?` (UUID de la cookie httpOnly `guest_cart_id`), `createdAt`, `updatedAt` | 1-1 user (opcional), N-1 tenant, 1-N items | **Sí** |
 | **CartItem** | `id`, `cartId`, `productId`, `variantId?` (nullable solo para líneas COMBO — un `PRODUCTO` siempre resuelve variante), `comboSelection: Json?` (selección de componentes elegida por el cliente para un combo), `quantity=1`, `createdAt` | N-1 cart, N-1 product, N-1 variant | **No** (scope vía Cart) |
-| **Order** | `id`, `userId?` (nullable — órdenes BOT nacen sin usuario), `status: OrderStatus=PENDING`, `total: Float`, `paymentStatus: PaymentStatus=PENDING`, `paymentId?`, `mercadoPagoId? @unique`, `preferenceId?`; **pago**: `paymentMethod: OrderPaymentMethod?` (`CASH`/`TRANSFER`/`MIXED`), `paymentNote?`, `cashAmount?`/`transferAmount?` (desglose del mixto, suman `total`), `transferConfirmedById?`/`transferConfirmedAt?` (confirmación manual); **entrega**: `fulfillmentMethod: FulfillmentMethod?` (`DELIVERY`/`PICKUP`), `addressText?`, `addressLat?`, `addressLng?`, `addressDetails?`, `addressMapsUrl?` (link de Google Maps, solo se valida el host); **procedencia**: `origin: OrderOrigin=ADMIN`, `contactPhone?`, `contactName?`, `reviewedById?`, `reviewedAt?`; **seña**: `requiresDeposit=false`, `depositAmount?` (snapshot), `depositConfirmedById?`, `depositConfirmedAt?`; `creationContext?`, `createdAt`, `updatedAt` | N-1 user, N-1 tenant, 1-N orderItems, 1-N statusHistory | **Sí** |
-| **OrderStatusHistory** | `id`, `orderId`, `fromStatus?`, `toStatus`, `note?`, `changedById?`, `createdAt` | N-1 order (`onDelete: Cascade`) | **No** (scope vía Order) |
+| **Order** | `id`, `userId?` (nullable — órdenes BOT nacen sin usuario), `status: OrderStatus=PENDING`, `total: Float`, `paymentStatus: PaymentStatus=PENDING`, `paymentId?`, `mercadoPagoId? @unique`, `preferenceId?`; **pago**: `paymentMethod: OrderPaymentMethod?` (`CASH`/`TRANSFER`/`MIXED`), `paymentNote?`, `cashAmount?`/`transferAmount?` (desglose del mixto, suman `total`), `transferConfirmedById?`/`transferConfirmedAt?` (confirmación manual de la transferencia),
+`paymentConfirmedById?`/`paymentConfirmedAt?` (cobro TOTAL dado por bueno a mano → `PAID_IN_FULL`,
+contraparte manual del webhook de MercadoPago para tenants que cobran en efectivo/transferencia); **entrega**: `fulfillmentMethod: FulfillmentMethod?` (`DELIVERY`/`PICKUP`), `addressText?`, `addressLat?`, `addressLng?`, `addressDetails?`, `addressMapsUrl?` (link de Google Maps, solo se valida el host); **procedencia**: `origin: OrderOrigin=ADMIN`, `contactPhone?`, `contactName?`, `reviewedById?`, `reviewedAt?`; **seña**: `requiresDeposit=false`, `depositAmount?` (snapshot), `depositConfirmedById?`, `depositConfirmedAt?`; `creationContext?`, `createdAt`, `updatedAt` | N-1 user, N-1 tenant, 1-N orderItems, 1-N statusHistory | **Sí** |
+| **OrderStatusHistory** | `id`, `orderId`, `fromStatus?`, `toStatus`, `note?`, `changedById?`, `trigger: StatusTrigger=MANUAL` (quién lo movió: persona, motor o webhook), `createdAt` | N-1 order (`onDelete: Cascade`) | **No** (scope vía Order) |
+| **OrderPayment** | `id`, `tenantId`, `orderId`, `kind: OrderPaymentKind`, `channel: PaymentChannel`, `amount: Float` (siempre > 0, CHECK en SQL), `note?`, `confirmedById?`, `confirmedAt`, `createdAt` — **libro de cobros: una fila por cobro**. `Order.paymentStatus` se deriva de estas filas (`derivePaymentStatus`, `services/order-state.js`) y la columna queda como cache para poder filtrar por SQL | N-1 order (`onDelete: Cascade`), N-1 tenant | **Sí** |
 | **OrderItem** | `id`, `orderId`, `productId` (NOT NULL), `variantId?` (nullable solo para líneas COMBO), `quantity`, `price: Float` (snapshot), `note?`, `parentItemId?` (self-relation, árbol combo, `onDelete: Cascade`) | N-1 order (`onDelete: Cascade`), N-1 product, N-1 variant, self `parentItem`/`childItems` | **No** (scope vía Order) |
 | **ContentSuggestion** | `id`, `productId`, `angle: SuggestionAngle`, `status: SuggestionStatus=SUGGESTED`, `source: SuggestionSource=AUTO`, `date @db.Date`, `copy?`, `hashtags: String[]=[]`, `model?`, `generatedAt?`, `createdAt`, `updatedAt` | N-1 tenant, N-1 product, 1-N images (`SuggestionImage`) | **Sí** |
 | **SuggestionImage** | `id`, `suggestionId`, `imageUrl`, `imagePublicId`, `options: Json={}` (`{ imagen, infoEnPantalla, precioEnPantalla }`), `model?`, `prompt`, `chosen=false`, `createdAt` | N-1 `ContentSuggestion` (`onDelete: Cascade`), N-1 tenant | **Sí** |
@@ -200,12 +217,16 @@ Generador con `output = "../generated/prisma"`.
 | TenantConfig | `tenantId @unique`, `whatsappPhoneNumberId @unique`, `@@index([tenantId])` |
 | TenantAttribute | `@@unique([tenantId, key])`, `@@index([tenantId])` |
 | User | `@@unique([tenantId, username])`, `@@unique([tenantId, email])`, `@@index([tenantId])` |
+| UserAddress | `@@unique([userId, label])`, `@@index([tenantId])`, `@@index([userId])` **+ índice único parcial agregado a mano en SQL** para `isDefault = true` (migración `20260727120000_add_user_address` — no declarado en el `.prisma`, ver §11) |
 | Categories | `@@unique([tenantId, name])`, `@@index([tenantId])` |
 | Product | `@@index([tenantId])` |
 | ComboAllowedProduct | `@@unique([comboProductId, allowedProductId])`, `@@index([tenantId])`, `@@index([comboProductId])`, `@@index([comboAllowedCategoryId])` |
 | ComboAllowedCategory | `@@unique([comboProductId, categoryId])`, `@@index([tenantId])`, `@@index([comboProductId])`, `@@index([categoryId])` |
 | ProductVariant | `@@unique([tenantId, sku])`, `@@index([tenantId])` **+ índice único parcial agregado a mano en SQL** para `isDefault = true` (`ProductVariant_product_default_key`, migración `20260710120000_product_types_collapse_expand` — no declarado en el `.prisma`, ver §11) |
-| Cart | `userId @unique`, `@@index([tenantId])` |
+| Promo | `@@index([tenantId])` |
+| PromoTier | `@@unique([promoId, minQty])`, `@@index([tenantId])` |
+| PromoProduct | `@@unique([promoId, productId])`, `@@index([tenantId])`, `@@index([productId])` (el hot path es "dados estos productIds, su promo activa") |
+| Cart | `userId @unique`, `@@unique([tenantId, guestId])` (el `guestId` se escopa por tenant porque el mismo browser puede navegar varios tenants; `userId` ya es único global), `@@index([tenantId])` |
 | CartItem | `@@unique([cartId, productId, variantId])` **+ índice único parcial agregado a mano en SQL** para `variantId IS NULL` (`CartItem_cart_product_null_variant_key`, migración `20260708190000_product_types_add` — no declarado en el `.prisma`, ver §11) |
 | Order | `mercadoPagoId @unique`, `@@index([tenantId])` |
 | OrderStatusHistory | `@@index([orderId])` |
@@ -231,14 +252,30 @@ Generador con `output = "../generated/prisma"`.
 - `SuggestionAngle`: `BEST_SELLER`, `NEW_ARRIVAL`, `LOW_STOCK`, `NO_RECENT_SALES`
 - `SuggestionStatus`: `SUGGESTED`, `USED`, `DISMISSED`
 - `SuggestionSource`: `AUTO`, `MANUAL`
-- `OrderStatus`: `PENDING`, `PROCESSING`, `COMPLETED`, `CANCELLED`
+- `OrderStatus`: `PENDING`, `PROCESSING`, `READY`, `COMPLETED`, `CANCELLED` (`READY` = "listo para
+  retirar/enviar", paso **opcional**: `PROCESSING → COMPLETED` sigue valiendo). Transiciones y
+  precondiciones: `services/order-state.js`
+- `StatusTrigger`: `MANUAL`, `AUTO`, `GATEWAY` — quién movió el estado en `OrderStatusHistory`:
+  una persona, el motor al cumplirse las condiciones (`applyAutoAdvance`) o el webhook de MercadoPago
 - `PaymentStatus`: `PENDING`, `APPROVED`, `REJECTED`, `IN_PROCESS`, `REFUNDED`, `DEPOSIT_PAID`,
-  `PAID_IN_FULL` (los dos últimos modelan la seña)
+  `PAID_IN_FULL`. **No se escribe a mano: lo deriva `derivePaymentStatus` desde el libro de cobros**
+  y la columna queda como cache para poder filtrar por SQL. `REFUNDED` sale de una devolución que
+  cancela todo lo cobrado (ver §11 por la devolución parcial).
+- `FulfillmentMethod`: `DELIVERY`, `PICKUP` — cómo se entrega la orden. Los campos `addressX` de
+  `Order` solo son relevantes con `DELIVERY`.
+- `OrderPaymentMethod`: `CASH`, `TRANSFER`, `MIXED` — forma de pago acordada. Con `MIXED`,
+  `cashAmount` + `transferAmount` suman `total`.
+- `PaymentChannel`: `CASH`, `TRANSFER`, `GATEWAY` — vía por la que entró **un cobro concreto**
+  (`OrderPayment.channel`). No es lo mismo que `OrderPaymentMethod`: una orden `MIXED` produce dos
+  filas, una `CASH` y una `TRANSFER`; `MIXED` no existe como canal. `GATEWAY` es MercadoPago, y esa
+  plata nunca pasa por el mostrador.
+- `OrderPaymentKind`: `DEPOSIT`, `PAYMENT`, `REFUND` — qué representa la fila. El signo no se
+  guarda: lo aporta `PAYMENT_SIGN` y `amount` es siempre positivo.
 - `Role`: `ADMIN`, `STAFF`, `CUSTOMER`
 
 ### Migraciones
 
-36 migraciones en `prisma/migrations/` (cronológicas):
+44 migraciones en `prisma/migrations/` (cronológicas):
 
 `..._initial_multi_tenant`, `..._email_global_unique`, `..._email_verification`,
 `..._add_tenant_config`, `..._add_product_price`, `..._expand_roles_storefront`,
@@ -280,7 +317,24 @@ contenía placeholders de seed), `20260723022006_add_promos` (descuento por cant
 `20260726104943_order_checkout_whatsapp` (`Order.addressMapsUrl` para el link de Google Maps,
 `cashAmount`/`transferAmount` para el desglose del pago mixto, y el valor `STORE` en el enum
 `OrderOrigin` — puramente aditiva, sin backfill: las órdenes de storefront anteriores quedan como
-`ADMIN` y no se les exige revisión retroactiva).
+`ADMIN` y no se les exige revisión retroactiva),
+`20260727120000_add_user_address` (libreta de direcciones `UserAddress` + índice único **parcial**
+para `isDefault = true`, que vive solo en el SQL de la migración; sin FK desde `Order` a propósito),
+`20260728100000_add_tenant_theme` / `20260728160000_add_tenant_theme_weights` /
+`20260728190000_add_tenant_theme_sections` (tema de la tienda editable por el tenant: acento, radio,
+fuentes, pesos por rol y overrides por sección en `TenantConfig.themeSections` JSON),
+`20260728181921_add_order_payment_confirmation` (`Order.paymentConfirmedById`/`paymentConfirmedAt`
+para el cobro total manual), `20260729120000_add_customer_phone` (`User.phone` +
+`TenantConfig.customerPhoneMode`/`Country`/`Area`, con CHECK sobre los valores del modo),
+`20260729140000_order_state_engine` (valor `READY` en `OrderStatus` —insertado `BEFORE 'COMPLETED'`
+para que el enum conserve el orden lógico del flujo— + enum `StatusTrigger` y
+`OrderStatusHistory.trigger`, que nace en `MANUAL` porque hasta acá el único camino era el PATCH),
+`20260729180000_add_order_payments` (libro de cobros `OrderPayment` + enums `PaymentChannel`/
+`OrderPaymentKind` + `CHECK amount > 0`, **con backfill**: reconstruye una fila por cada sello
+existente —seña, transferencia, cobro total, aprobación de MercadoPago— en cuatro INSERT donde cada
+uno descuenta lo que los anteriores ya registraron para esa orden. `paymentStatus` **no** se
+recalcula en la migración: las órdenes viejas conservan el valor que tenían, así el deploy no mueve
+ningún estado de pago).
 
 ---
 
@@ -316,6 +370,14 @@ Hay **dos mecanismos distintos** de resolución de tenant según la familia de r
 ---
 
 ## 5. Autenticación
+
+> [!important] En producción, hoy, casi nadie se autentica (2026-07-29)
+> Decisión de producto, no del código: el primer cliente en producción opera **sin cuentas de
+> cliente** (todo el storefront va por el camino de invitado, porque login/registro antes de comprar
+> hace abandonar pedidos) y **sin autoservicio para administradores** (las credenciales del
+> backoffice se entregan a mano, una por una). Todo lo de esta sección sigue implementado y
+> funcionando; lo que cambia es qué se usa. Ver [[Usuarios y Auth]], y el plan de integración en
+> [[Producción sin cuentas (propuesta)]].
 
 ### Emisión del JWT
 - Se firma con `DEFAULTS.SECRET_JWT_KEY`, `expiresIn: "8h"`.
@@ -355,9 +417,10 @@ Hay **dos mecanismos distintos** de resolución de tenant según la familia de r
 ## 6. API — Endpoints
 
 Prefijos de montaje (de `app.js`): `/webhooks/whatsapp` (antes del parser JSON global), `/orders`,
-`/products`, `/variants`, `/categories`, `/cart`, `/users`, `/mercadopago`, `/stats`,
+`/products`, `/variants`, `/categories`, `/promos`, `/cart`, `/users`, `/mercadopago`, `/stats`,
 `/content-suggestions`, `/page-spec`, `/auth`, `/test`, `/tenant-config`, `/tenant-attributes`,
-`/store`.
+`/store`. Más `GET /health` inline (200 `{ status: "ok" }`, sin auth — lo usa el healthcheck del
+contenedor).
 
 Convenciones de middleware citadas: `verifyToken` (cookie admin), `requireRole([...])`,
 `validate({ body|params|query })` (zod; `query` validada queda en `req.search`),
@@ -382,9 +445,23 @@ Convenciones de middleware citadas: `verifyToken` (cookie admin), `requireRole([
 | GET | `/orders` | `verifyToken`, `validate(query)` | `OrderController.getAll` → `OrderModel.getAll` |
 | GET | `/orders/all` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(query)` | `OrderController.getUserOrders` → `OrderModel.getUserOrders` |
 | GET | `/orders/:id` | `verifyToken`, `validate(params)` | `OrderController.getById` → `OrderModel.getUserOrderById` |
-| PATCH | `/orders/:id` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params,body)` | `OrderController.update` → `OrderModel.updateOrderStatus` |
-| POST | `/orders/:id/review` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params, body: orderReview)` | `OrderController.review` → `OrderModel.reviewOrder` (marca revisado un pedido BOT o STORE; corrección inline opcional de cantidades/notas y de los datos de entrega/pago) |
+| PATCH | `/orders/:id` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params,body)` | `OrderController.update` → `OrderModel.updateOrderStatus` (transiciones y precondiciones: `services/order-state.js`) |
+| POST | `/orders/:id/review` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params, body: orderReview)` | `OrderController.review` → `OrderModel.reviewOrder` (marca revisado un pedido BOT o STORE; corrección inline opcional de cantidades/notas y de los datos de entrega/pago. **Puede dejar la orden ya en `PROCESSING`**: avance automático) |
 | POST | `/orders/:id/confirm-deposit` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params, body: orderConfirmDeposit)` | `OrderController.confirmDeposit` → `OrderModel.confirmDeposit` (`paymentStatus → DEPOSIT_PAID`) |
+| POST | `/orders/:id/confirm-transfer` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params, body: orderConfirmTransfer)` | `OrderController.confirmTransfer` → `OrderModel.confirmTransfer` (sella `transferConfirmedById`/`At`) |
+| POST | `/orders/:id/confirm-payment` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params, body: orderConfirmPayment)` | `OrderController.confirmPayment` → `OrderModel.confirmPayment` (`paymentStatus → PAID_IN_FULL`; solo desde `PENDING`/`DEPOSIT_PAID`) |
+
+| POST | `/orders/:id/payments` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params, body: orderPaymentCreate)` | `OrderController.registerPayment` → `OrderModel.registerPayment` (alta en el libro de cobros: `{ kind, channel, amount, note? }`) |
+| GET | `/orders/:id/payments` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params)` | `OrderController.getPayments` → `OrderModel.getPayments` (libro + resumen + pendiente por vía) |
+
+> Las tres confirmaciones de cobro **no mueven `status` por sí mismas**, pero desde 2026-07-29 pueden
+> destrabar el avance automático a `PROCESSING` (`applyAutoAdvance`) si con ese cobro la orden queda
+> sin blockers. Todas las respuestas de órdenes del backoffice traen `blockers`, `canProduce` y
+> `payment` — ver [[Órdenes]] §Máquina de estados.
+>
+> Y las tres son **atajos sobre `/payments`**: calculan el monto (la seña, lo que falte por
+> transferencia, el saldo por vía) y escriben en el mismo libro de cobros. `paymentStatus` ya no lo
+> escribe nadie a mano — se deriva de esas filas.
 
 ### `/products` (admin) — `routes/productos.js`
 
@@ -419,6 +496,19 @@ Convenciones de middleware citadas: `verifyToken` (cookie admin), `requireRole([
 | POST | `/categories` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(body)` | `CategoryController.create` → `CategoryModel.create` |
 | PATCH | `/categories/:id` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params,body)` | `CategoryController.edit` → `CategoryModel.edit` |
 | DELETE | `/categories/:id` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params)` | `CategoryController.delete` → `CategoryModel.delete` |
+
+### `/promos` (admin) — `routes/promos.js`
+
+Descuento por cantidad (escalones `minQty` → `discountPercentage`) aplicado sobre los productos
+asociados a la promo. Se aplica al pricear el carrito/la orden.
+
+| Método | Ruta | Middleware | Controller → Service |
+|---|---|---|---|
+| GET | `/promos` | `verifyToken`, `validate(query: promoQuery)` | `PromoController.getAll` → `PromoModel.getAll` |
+| GET | `/promos/:id` | `verifyToken`, `validate(params)` | `PromoController.getById` → `PromoModel.getById` |
+| POST | `/promos` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(body: createPromo)` | `PromoController.create` → `PromoModel.create` |
+| PATCH | `/promos/:id` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params, body: updatePromo)` | `PromoController.edit` → `PromoModel.edit` |
+| DELETE | `/promos/:id` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params)` | `PromoController.delete` → `PromoModel.delete` |
 
 ### `/cart` (admin) — `routes/cart.js`
 
@@ -476,6 +566,18 @@ Todas con `verifyToken` + `requireRole(["ADMIN","STAFF"])`.
 | PATCH | `/tenant-config/:tenantId/logo` | `verifyToken`, `requireRole(["ADMIN"])`, `uploadImage`, `normalizeMultipartBody`, `validate(params)` | `TenantConfigController.uploadLogo` → `TenantConfigModel.uploadLogo` |
 | DELETE | `/tenant-config/:tenantId/logo` | `verifyToken`, `requireRole(["ADMIN"])`, `validate(params)` | `TenantConfigController.deleteLogo` → `TenantConfigModel.deleteLogo` |
 
+> [!important] El flujo de venta no se edita por esta ruta (2026-07-29)
+> `paymentMethodsEnabled`, `fulfillmentMethodsEnabled`, `depositEnabled` y `depositPercentage`
+> **se leen** en el `GET` (el storefront los necesita para pintar el checkout) pero el `PATCH` los
+> rechaza con 400. Deciden cuándo una orden puede producirse y cuánta plata se exige antes, así que
+> los configuramos nosotros: si el tenant los cambiara, podría trabar pedidos ya en curso.
+>
+> El mecanismo es que el campo **no está en `updateTenantConfigObject`**
+> (`READONLY_TENANT_CONFIG_FIELDS` en `schemas/tenant-config.schema.js`), no un chequeo de rol: el
+> `requireRole(["ADMIN"])` de esta ruta es el admin *del propio tenant*. Se setean con un perfil al
+> crear el tenant y después con `node prisma/set-tenant-profile.js <slug> <perfil>`. Ver
+> [[TenantConfig]].
+
 ### `/tenant-attributes` — `routes/tenant-attributes.js`
 
 Catálogo de atributos de variante del tenant (ver [[Variantes]] en `docs/servicios/dominio/`). El
@@ -495,7 +597,13 @@ edición posterior por API (cambiarlo rompería las `attributes` de las variante
 
 ### Storefront `/store/*`
 
-Montaje en `routes/store/index.js`: **todo `/store/*` aplica `storeCors()` + `resolveTenantFromSlug`** antes de las sub-rutas. Auth = `verifyStoreToken` (obligatoria, Bearer/cookie) u `optionalStoreAuth` (pública con user opcional).
+Montaje en `routes/store/index.js`: **todo `/store/*` aplica `storeCors()` + `storeCacheHeaders` +
+`resolveTenantFromSlug`** antes de las sub-rutas. Auth = `verifyStoreToken` (obligatoria,
+Bearer/cookie) u `optionalStoreAuth` (pública con user opcional).
+
+`storeCacheHeaders` fuerza `Cache-Control: no-store` y appendea `Vary: X-Tenant-Slug` +
+`Vary: Authorization`: el tenant viaja por header, no por URL, así que un cache compartido que
+indexe solo por URL le serviría el catálogo de un tenant a otro (`middleware/storeCache.js`).
 
 **`/store/auth`** — `routes/store/auth.js`
 
@@ -527,20 +635,50 @@ Montaje en `routes/store/index.js`: **todo `/store/*` aplica `storeCors()` + `re
 
 **`/store/cart`** — `routes/store/cart.js` (reusa `cartController`)
 
+**Sin login.** Todo el router aplica `optionalStoreAuth` + `resolveCartOwner`: con token el dueño del
+carrito es `{ userId }`, sin token es `{ guestId }` — un UUID en la cookie httpOnly `guest_cart_id`
+(`path=/store`, 30 días, `SameSite=None; Secure` en producción porque el storefront puede vivir en
+otro dominio). Al loguearse, `StoreAuthController.login` fusiona el carrito de invitado en el del
+usuario (`CartModel.mergeGuestCartIntoUser`) y borra la cookie; si el merge falla, se loguea el error
+y el login sigue adelante.
+
 | Método | Ruta | Middleware | Controller → Service |
 |---|---|---|---|
-| GET | `/store/cart` | `verifyStoreToken` | `cartController.getCart` → `CartModel.getCart` |
-| POST | `/store/cart/:variantId` | `verifyStoreToken`, `validate(params)` | `cartController.add` → `CartModel.add` |
-| PATCH | `/store/cart/:variantId` | `verifyStoreToken`, `validate(params)` | `cartController.remove` → `CartModel.remove` |
-| DELETE | `/store/cart` | `verifyStoreToken` | `cartController.clear` → `CartModel.clear` |
+| GET | `/store/cart` | `optionalStoreAuth`, `resolveCartOwner` | `cartController.getCart` → `CartModel.getCart` |
+| POST | `/store/cart/combo/:productId` | idem + `validate(params, body: comboSelectionBody)` | `cartController.addCombo` → `CartModel.addCombo` — montada **antes** del `POST /:productId` genérico |
+| POST | `/store/cart/:productId` | idem + `validate(params, body: cartItemBody)` | `cartController.add` → `CartModel.add` |
+| PATCH | `/store/cart/:productId` | idem + `validate(params, body: cartItemBody)` | `cartController.remove` → `CartModel.remove` |
+| DELETE | `/store/cart` | `optionalStoreAuth`, `resolveCartOwner` | `cartController.clear` → `CartModel.clear` |
 
 **`/store/orders`** — `routes/store/orders.js` (reusa `OrderController`)
 
+**El checkout tampoco exige cuenta**, igual que el carrito: el `POST` usa `optionalStoreAuth` +
+`resolveCartOwner`, y la orden que sale de un carrito de invitado queda con `userId: null` (la
+columna ya lo admitía por los drafts del bot). A cambio, el invitado **debe** dar `contactName` y
+`contactPhone` — sin cuenta no hay otra forma de contactarlo, así que ese requisito pisa el
+`customerPhoneMode` del tenant aunque esté en `off`. El historial, en cambio, sigue siendo de la
+cuenta: un invitado no tiene con qué probar que una orden es suya, y lo que ve al confirmar sale de
+la respuesta del `POST`.
+
 | Método | Ruta | Middleware | Controller → Service |
 |---|---|---|---|
-| POST | `/store/orders` | `verifyStoreToken`, `markStoreOrigin`, `validate(body: orderCreate)` | `OrderController.create` → `OrderModel.create` (`origin: STORE`; el 201 incluye el deep-link `wa.me` del pedido, armado con `lib/whatsapp-link.js`) |
+| POST | `/store/orders` | `optionalStoreAuth`, `resolveCartOwner`, `markStoreOrigin`, `validate(body: orderCreate)` | `OrderController.create` → `OrderModel.create` (`origin: STORE`; el 201 incluye el deep-link `wa.me` del pedido, armado con `lib/whatsapp-link.js`) |
 | GET | `/store/orders` | `verifyStoreToken`, `validate(query)` | `OrderController.getAll` → `OrderModel.getAll` |
 | GET | `/store/orders/:id` | `verifyStoreToken`, `validate(params)` | `OrderController.getById` → `OrderModel.getUserOrderById` |
+
+**`/store/addresses`** — `routes/store/addresses.js` (libreta de direcciones del cliente)
+
+Todo el router aplica `verifyStoreToken`: a diferencia del carrito, una dirección sin `User` no tiene
+dueño ni forma de recuperarse. Guardar una dirección **no** la mete en la orden — el checkout copia
+los campos a `Order` como snapshot.
+
+| Método | Ruta | Middleware | Controller → Service |
+|---|---|---|---|
+| GET | `/store/addresses` | `verifyStoreToken` | `StoreAddressesController.getAll` → `AddressModel.getAll` |
+| POST | `/store/addresses` | `validate(body: createAddress)` | `StoreAddressesController.create` → `AddressModel.create` |
+| GET | `/store/addresses/:id` | `validate(params)` | `StoreAddressesController.getById` → `AddressModel.getById` |
+| PATCH | `/store/addresses/:id` | `validate(params, body: updateAddress)` | `StoreAddressesController.edit` → `AddressModel.edit` (marcar default = `PATCH { isDefault: true }`, sin sub-action route) |
+| DELETE | `/store/addresses/:id` | `validate(params)` | `StoreAddressesController.delete` → `AddressModel.delete` (borrado físico) |
 
 **`/store/config`** — `routes/store/config.js`
 
@@ -602,11 +740,19 @@ más el `WHATSAPP_VERIFY_TOKEN` del handshake inicial.
 ### Convención
 - Cada feature simple es `services/<feature>.js` y exporta un objeto **`XModel`** con
   métodos `async` (p. ej. `UserModel`, `ProductModel`, `OrderModel`, `CategoryModel`,
-  `CartModel`, `VariantModel`, `StatsModel`, `TenantConfigModel`, `mercadopagoModel`,
-  `roleModel`).
+  `CartModel`, `VariantModel`, `StatsModel`, `TenantConfigModel`, `AddressModel`, `PromoModel`,
+  `mercadopagoModel`, `roleModel`).
 - Features grandes son **carpetas** con `index.js` (la fachada `XModel`) y submódulos
   puros: `services/stats/`, `services/content-suggestions/`, `services/whatsapp/`,
   `services/chat/`.
+- **Otra excepción a la convención `XModel`:** `services/order-state.js` es el **motor de estados de
+  las órdenes** y exporta funciones, no un modelo: `ORDER_TRANSITIONS` (mapa declarativo),
+  `evaluateOrder(order)` → `{ payment, blockers, canProduce, nextStatus }`, `assertTransition`,
+  `assertCanProduce` y `applyAutoAdvance(tx, order)`. Todo es **puro** salvo la última, que corre
+  dentro de la transacción del caller y avanza `PENDING → PROCESSING` cuando la orden queda sin
+  blockers. Lo consumen `services/orders.js` (`updateOrderStatus`, `reviewOrder`, las tres
+  confirmaciones de cobro) y `controllers/orders.js` (para exponer `blockers`/`canProduce`/`payment`
+  al panel). Ver [[Órdenes]] §Máquina de estados.
 - **Excepción a la convención `XModel`:** `services/combos.js` no exporta un modelo, sino una
   única función pura `validateComboSelection({ tx, tenantId, comboProduct, selection,
   checkStock })`, compartida por `services/cart.js` (`CartModel.addCombo`) y
@@ -863,16 +1009,34 @@ docs asumen **Next.js**) debería consumir esta API:
   `requireRole(["ADMIN"])`). Conviene revisar si debe existir en producción.
 - **`generalLimiter` se desactiva fuera de producción** (`skip: (req) => !isProd`): en
   desarrollo/test no hay rate limit general.
-- **`CartItem` y `ProductVariant` tienen índices únicos que no están en `prisma/schema.prisma`.**
+- ~~**El checkout del storefront ignora la seña del tenant.**~~ **Resuelto** (2026-07-29):
+  `OrderModel.create` lee `depositEnabled`/`depositPercentage` y resuelve
+  `requiresDeposit`/`depositAmount` igual que `createDraft`. Salió junto con los perfiles de flujo
+  de venta, que ya obligaban a leer esa config en el mismo `select`.
+- **Una devolución PARCIAL no se distingue en `PaymentStatus`.** Desde 2026-07-29 la devolución
+  total sí queda en `REFUNDED` (ver `derivePaymentStatus`), pero la parcial sigue derivando del neto
+  y se ve como `DEPOSIT_PAID`. El enum no tiene `PARTIALLY_REFUNDED` y no se agregó por no forzar una
+  migración: el dato está en `payment.refunded`, que el panel puede mostrar. Si el negocio empieza a
+  filtrar por "devueltas a medias", hay que revisarlo.
+- **`TenantConfig.allowCartGuest` no tiene efecto.** El carrito de invitado
+  (`middleware/guestCart.js`) no consulta el flag: emite la cookie y resuelve el `guestId` sin
+  importar cómo esté configurado el tenant. O se cablea o se saca del modelo.
+- **`CartItem`, `ProductVariant` y `UserAddress` tienen índices únicos que no están en `prisma/schema.prisma`.**
   El caso `CartItem.variantId IS NULL` (líneas COMBO) lo cubre un índice único parcial creado a
   mano en SQL (`CartItem_cart_product_null_variant_key`, migración
   `20260708190000_product_types_add`); el caso `ProductVariant.isDefault = true` (a lo sumo una
   por producto) lo cubre otro (`ProductVariant_product_default_key`, migración
-  `20260710120000_product_types_collapse_expand`) — ambos porque Postgres no colisiona `NULL`
-  contra `NULL` en un `@@unique` normal / porque un índice parcial no se puede declarar en el
+  `20260710120000_product_types_collapse_expand`); el caso `UserAddress.isDefault = true` (a lo sumo
+  una dirección preseleccionada por usuario) lo cubre un tercero, en la migración
+  `20260727120000_add_user_address` — todos porque Postgres no colisiona `NULL` contra `NULL` en un
+  `@@unique` normal / porque un índice parcial no se puede declarar en el
   DSL de Prisma. Es drift intencional (el propio schema trae comentarios pidiendo no
   "corregirlo"), pero cualquiera que lea solo el `.prisma` no lo va a ver.
 - **`Product.isCombo` queda deprecado sin limpiar.** Fue reemplazado por `type = "COMBO"`, no
   se lee en ningún camino de código, pero la columna se mantiene "por si hace falta re-derivar
   `type` a mano". Candidato a limpieza futura si se confirma que no hace falta.
-```
+- ~~**El webhook de MercadoPago se come los blockers de la orden.**~~ **Resuelto** (2026-07-29):
+  `getWebhook` ahora registra el cobro en el libro (`channel: GATEWAY`) y **después** intenta
+  completar la orden; si hay blockers, loguea y responde 200 con el cobro ya anotado. Antes lanzaba
+  `ORDER_NOT_REVIEWED` sobre una orden `STORE` sin revisar, salía como 500 y MercadoPago reintentaba
+  el webhook para siempre con el cobro sin registrar.
