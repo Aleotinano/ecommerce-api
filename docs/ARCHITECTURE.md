@@ -51,6 +51,7 @@
 | `seed:stats` | `node prisma/seed-stats.js` | Seed de datos para stats |
 | `seed:config` | `node prisma/seed-tenant-config.js` | Seed de `TenantConfig` (perfil de flujo + branding) |
 | — | `node prisma/set-tenant-profile.js <slug> <perfil>` | Aplica un perfil de flujo de venta a un tenant. Sin argumentos lista perfiles y el estado de cada tenant. **No** es un script de npm: es operación manual, no parte de ningún seed |
+| — | `node prisma/set-cash-register.js <slug> on\|off` | Habilita o apaga el módulo de caja de un tenant (y siembra las 7 etiquetas por defecto al prenderlo). Sin argumentos lista el estado de cada tenant. Operación manual, como el anterior — **ojo**: prendido, cobrar sin turno abierto falla |
 | `seed:catalog` | `node prisma/seed-catalog.js` | Seed de catálogo |
 | `seed:mesa-dulce` | `node prisma/mesa-dulce/index.js` | Seed completo del primer tenant real (categorías + productos + órdenes) |
 | `seed:mesa-dulce:categorias` | `node prisma/mesa-dulce/categorias.js` | Solo categorías de ese tenant |
@@ -140,7 +141,10 @@ e-commerce-express-1/
 │   ├── whatsapp/           # Bot de WhatsApp: index.js, signature.js, history.js, rate-limit.js, graph-api.js, dedup.js, tenant-resolver.js
 │   ├── chat/               # Agente de chat de tienda: index.js, tools.js, prompt.js, cost-guard.js
 │   ├── combos.js           # Archivo único (no carpeta): validateComboSelection, compartido por cart.js y orders.js
-│   └── order-state.js      # Motor de estados de órdenes (puro): transiciones, blockers y avance automático
+│   ├── order-state.js      # Motor de estados de órdenes (puro): transiciones, blockers y avance automático
+│   ├── tenant-profiles.js  # Perfiles de flujo de venta (puro): kits de arranque de la config de venta
+│   ├── cash-register.js    # Caja: turno, movimientos, etiquetas + recordOrderPayments (enganche con el libro de cobros)
+│   └── cash-register-math.js # Aritmética del arqueo (puro): signos, resumen por etiqueta, diferencia
 ├── lib/                    # Infra/integraciones: prisma, redis, cache, logger, mailer, cloudinary, tokens, slug, imageManager, crypto (AES-256-GCM), phone (normalización E.164), whatsapp-link (deep-link wa.me del pedido — módulo puro, NO es el bot)
 │   └── llm/                # Cliente LLM: index.js, prompt.js, parse.js, fallback.js
 │       ├── providers/      # anthropic.js, gemini.js (fetch directo, sin SDK)
@@ -151,7 +155,7 @@ e-commerce-express-1/
 ├── utils/                  # Utilidades varias
 ├── prisma/
 │   ├── schema.prisma       # Modelo de datos
-│   ├── migrations/         # 42 migraciones SQL
+│   ├── migrations/         # 46 migraciones SQL
 │   ├── mesa-dulce/         # Seed del primer tenant real (categorias.js, productos.js, ordenes.js, index.js)
 │   └── seed*.js            # Seeds (base, stats, tenant-config, catalog) + scripts de migración de datos
 ├── generated/prisma/       # Cliente Prisma generado (output custom, fuera de node_modules)
@@ -205,6 +209,9 @@ contraparte manual del webhook de MercadoPago para tenants que cobran en efectiv
 | **OrderStatusHistory** | `id`, `orderId`, `fromStatus?`, `toStatus`, `note?`, `changedById?`, `trigger: StatusTrigger=MANUAL` (quién lo movió: persona, motor o webhook), `createdAt` | N-1 order (`onDelete: Cascade`) | **No** (scope vía Order) |
 | **OrderPayment** | `id`, `tenantId`, `orderId`, `kind: OrderPaymentKind`, `channel: PaymentChannel`, `amount: Float` (siempre > 0, CHECK en SQL), `note?`, `confirmedById?`, `confirmedAt`, `createdAt` — **libro de cobros: una fila por cobro**. `Order.paymentStatus` se deriva de estas filas (`derivePaymentStatus`, `services/order-state.js`) y la columna queda como cache para poder filtrar por SQL | N-1 order (`onDelete: Cascade`), N-1 tenant | **Sí** |
 | **OrderItem** | `id`, `orderId`, `productId` (NOT NULL), `variantId?` (nullable solo para líneas COMBO), `quantity`, `price: Float` (snapshot), `note?`, `parentItemId?` (self-relation, árbol combo, `onDelete: Cascade`) | N-1 order (`onDelete: Cascade`), N-1 product, N-1 variant, self `parentItem`/`childItems` | **No** (scope vía Order) |
+| **CashRegisterSession** | `id`, `tenantId`, `status: CashSessionStatus=OPEN`, `openingAmount: Float` (CHECK ≥ 0), `openedById`, `openedAt`, `openingNote?`; cierre (todo null mientras `OPEN`, CHECK de completitud): `closedById?`, `closedAt?`, `closingNote?`, `countedCashAmount?`, `expectedCashAmount?`, `cashDifference?`, `transferTotal?` — **turno de caja física**, no día calendario. Los cuatro totales son un SNAPSHOT del arqueo: no se recalculan nunca | 1-N movements, N-1 tenant (`onDelete: Cascade`) | **Sí** — un solo `OPEN` por tenant, índice único **parcial** solo en la migración |
+| **CashMovement** | `id`, `tenantId`, `sessionId`, `type: CashMovementType`, `channel: PaymentChannel` (CHECK `<> GATEWAY`), `amount: Float` (CHECK > 0; el signo lo da `type`), `categoryId?` (null en los `ORDER_*`), `payee?` (texto libre: a quién se le pagó), `orderId?` (**sin FK**, hecho histórico), `orderPaymentId? @unique` (la fila del libro que lo originó → idempotencia estructural del enganche), `note?`, `createdById?`, `createdAt` | N-1 session (`onDelete: Cascade`), N-1 tenant, N-1 opcional `CashCategory` (`onDelete: Restrict`) | **Sí** |
+| **CashCategory** | `id`, `tenantId`, `key` (slug estable, no editable), `label` (display), `applies: CashCategoryApplies=EXPENSE`, `position=0`, `isActive=true`, `createdAt`, `updatedAt` — catálogo de etiquetas de movimiento **del tenant** (sueldos, insumos, proveedores…), mismo patrón que `TenantAttribute`. Se siembran 7 al habilitar la caja | 1-N movements, N-1 tenant (`onDelete: Cascade`) | **Sí** (`@@unique([tenantId, key])`) |
 | **ContentSuggestion** | `id`, `productId`, `angle: SuggestionAngle`, `status: SuggestionStatus=SUGGESTED`, `source: SuggestionSource=AUTO`, `date @db.Date`, `copy?`, `hashtags: String[]=[]`, `model?`, `generatedAt?`, `createdAt`, `updatedAt` | N-1 tenant, N-1 product, 1-N images (`SuggestionImage`) | **Sí** |
 | **SuggestionImage** | `id`, `suggestionId`, `imageUrl`, `imagePublicId`, `options: Json={}` (`{ imagen, infoEnPantalla, precioEnPantalla }`), `model?`, `prompt`, `chosen=false`, `createdAt` | N-1 `ContentSuggestion` (`onDelete: Cascade`), N-1 tenant | **Sí** |
 | **TenantPageSpec** | `id`, `tenantId @unique`, `draftSpec: Json?`, `publishedSpec: Json?`, `version=0`, `publishedAt?`, `createdAt`, `updatedAt` — spec del page builder (borrador editable + publicado que sirve el storefront) | 1-1 `Tenant` (`onDelete: Cascade`) | **Sí** (`tenantId @unique`) |
@@ -231,6 +238,9 @@ contraparte manual del webhook de MercadoPago para tenants que cobran en efectiv
 | Order | `mercadoPagoId @unique`, `@@index([tenantId])` |
 | OrderStatusHistory | `@@index([orderId])` |
 | OrderItem | **sin unique** (el viejo `@@unique([orderId, variantId])` se reemplazó por índices no únicos `@@index([orderId, variantId])`, `@@index([orderId, productId])`, `@@index([parentItemId])` en la migración `20260702214235_order_item_note` — una orden puede tener dos filas del mismo producto/variante con notas distintas) |
+| CashRegisterSession | `@@index([tenantId])`, `@@index([tenantId, status])` **+ índice único parcial agregado a mano en SQL** para `status = 'OPEN'` (`CashRegisterSession_tenant_open_key`, migración `20260729223044_add_cash_register` — no declarado en el `.prisma`, ver §11) |
+| CashMovement | `orderPaymentId @unique`, `@@index([tenantId])`, `@@index([sessionId])`, `@@index([orderId])`, `@@index([categoryId])` |
+| CashCategory | `@@unique([tenantId, key])`, `@@index([tenantId])` |
 | ContentSuggestion | `@@unique([tenantId, date, productId, angle])`, `@@index([tenantId])` |
 | SuggestionImage | `@@index([tenantId])`, `@@index([suggestionId])` |
 | TenantPageSpec | `tenantId @unique`, `@@index([tenantId])` |
@@ -271,11 +281,19 @@ contraparte manual del webhook de MercadoPago para tenants que cobran en efectiv
   plata nunca pasa por el mostrador.
 - `OrderPaymentKind`: `DEPOSIT`, `PAYMENT`, `REFUND` — qué representa la fila. El signo no se
   guarda: lo aporta `PAYMENT_SIGN` y `amount` es siempre positivo.
+- `CashSessionStatus`: `OPEN`, `CLOSED` — turno de caja. Un solo `OPEN` por tenant, garantizado por
+  índice único parcial.
+- `CashMovementType`: `ORDER_DEPOSIT`, `ORDER_PAYMENT`, `ORDER_REFUND`, `INCOME`, `EXPENSE`. Los tres
+  primeros los escribe solo el enganche con el libro de cobros (uno por fila que no sea `GATEWAY`);
+  los dos últimos son los manuales del local (sueldos, insumos, retiros). El signo lo aporta
+  `CASH_MOVEMENT_SIGN` (`services/cash-register-math.js`) y `amount` es siempre positivo.
+- `CashCategoryApplies`: `INCOME`, `EXPENSE`, `BOTH` — a qué dirección aplica una etiqueta de caja
+  ("Sueldos" no es un ingreso jamás).
 - `Role`: `ADMIN`, `STAFF`, `CUSTOMER`
 
 ### Migraciones
 
-44 migraciones en `prisma/migrations/` (cronológicas):
+46 migraciones en `prisma/migrations/` (cronológicas):
 
 `..._initial_multi_tenant`, `..._email_global_unique`, `..._email_verification`,
 `..._add_tenant_config`, `..._add_product_price`, `..._expand_roles_storefront`,
@@ -334,7 +352,16 @@ para que el enum conserve el orden lógico del flujo— + enum `StatusTrigger` y
 existente —seña, transferencia, cobro total, aprobación de MercadoPago— en cuatro INSERT donde cada
 uno descuenta lo que los anteriores ya registraron para esa orden. `paymentStatus` **no** se
 recalcula en la migración: las órdenes viejas conservan el valor que tenían, así el deploy no mueve
-ningún estado de pago).
+ningún estado de pago),
+`20260729212531_add_tenant_order_flow` (`TenantConfig.paymentMethodsEnabled`/
+`fulfillmentMethodsEnabled` como arrays de enum con `@default` — los defaults reproducen el
+comportamiento anterior, así que ningún tenant existente cambia),
+`20260729223044_add_cash_register` (módulo de caja: `CashRegisterSession`, `CashMovement`,
+`CashCategory` + enums `CashSessionStatus`/`CashMovementType`/`CashCategoryApplies` +
+`TenantConfig.cashRegisterEnabled=false`. Aditiva, sin backfill. Lo agregado **a mano** al SQL
+generado: el índice único **parcial** de un solo turno `OPEN` por tenant, y cuatro CHECK —
+`amount > 0`, `channel <> 'GATEWAY'`, `openingAmount >= 0`, y la completitud del cierre
+`status=CLOSED ⇔ closedAt & countedCashAmount`).
 
 ---
 
@@ -545,6 +572,27 @@ asociados a la promo. Se aplica al pricear el carrito/la orden.
 |---|---|---|---|
 | GET | `/stats/dashboard` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(query: StatsQuery)` | `StatsController.get` → `StatsModel.getDashboard` |
 
+### `/cash-register` (admin) — `routes/cash-register.js`
+
+Todo el router con `verifyToken`; operar el turno pide `["ADMIN","STAFF"]`, configurar el catálogo de
+etiquetas solo `["ADMIN"]`. **Si el tenant no tiene `cashRegisterEnabled`, todos responden 404
+`CASH_REGISTER_DISABLED`.** Las rutas de nombre fijo se declaran antes de `/:id` o `validateId` las
+rechaza.
+
+| Método | Ruta | Validación | Controller → Service |
+|---|---|---|---|
+| GET | `/cash-register/current` | — | `current` → `CashRegisterModel.getCurrent` (200 con `session: null` si no hay turno abierto) |
+| POST | `/cash-register/open` | `body: openCashSession` | `open` → `open` (409 `CASH_SESSION_ALREADY_OPEN`) |
+| POST | `/cash-register/close` | `body: closeCashSession` | `close` → `close` (devuelve el arqueo) |
+| POST | `/cash-register/movements` | `body: createCashMovement` | `addMovement` → `addMovement` (solo `INCOME`/`EXPENSE`; etiqueta obligatoria) |
+| GET | `/cash-register/summary` | `query: cashSummaryQuery` | `summary` → `getSummary` (totales por etiqueta/tipo/vía en un rango) |
+| GET | `/cash-register/categories` | `query: cashCategoryQuery` | `listCategories` → `listCategories` |
+| POST | `/cash-register/categories` | `body: createCashCategory` | `createCategory` (ADMIN) |
+| PATCH | `/cash-register/categories/:id` | `params: validateId`, `body: updateCashCategory` | `updateCategory` (ADMIN; `key` no editable) |
+| DELETE | `/cash-register/categories/:id` | `params: validateId` | `deleteCategory` (ADMIN; 409 `CASH_CATEGORY_IN_USE` si tiene movimientos) |
+| GET | `/cash-register` | `query: cashSessionQuery` | `getAll` → `getAll` (historial, `limit` ≤ 100) |
+| GET | `/cash-register/:id` | `params: validateId` | `getById` → `getById` |
+
 ### `/content-suggestions` (admin) — `routes/content-suggestions.js`
 
 Todas con `verifyToken` + `requireRole(["ADMIN","STAFF"])`.
@@ -753,6 +801,14 @@ más el `WHATSAPP_VERIFY_TOKEN` del handshake inicial.
   blockers. Lo consumen `services/orders.js` (`updateOrderStatus`, `reviewOrder`, las tres
   confirmaciones de cobro) y `controllers/orders.js` (para exponer `blockers`/`canProduce`/`payment`
   al panel). Ver [[Órdenes]] §Máquina de estados.
+- **Mismo patrón "modelo + módulo puro" en la caja:** `services/cash-register.js` exporta
+  `CashRegisterModel` (turno, movimientos, resumen, catálogo de etiquetas) **más** la función
+  `recordOrderPayments(tx, { tenantId, orderId, payments, actorId })`, que recibe el `tx` del caller y
+  copia a la caja cada fila del libro de cobros que no sea `GATEWAY` — la llaman `applyPayments` y la
+  liquidación de `updateOrderStatus`, los dos únicos caminos que escriben en el libro. Toda la
+  aritmética del arqueo vive aparte en `services/cash-register-math.js`, **puro** (`CASH_MOVEMENT_SIGN`,
+  `signedAmount`, `summarizeMovements`, `buildArqueo`), igual que `order-state.js`: se testea sin base.
+  Ver [[Caja]].
 - **Excepción a la convención `XModel`:** `services/combos.js` no exporta un modelo, sino una
   única función pura `validateComboSelection({ tx, tenantId, comboProduct, selection,
   checkStock })`, compartida por `services/cart.js` (`CartModel.addCombo`) y
@@ -1021,14 +1077,22 @@ docs asumen **Next.js**) debería consumir esta API:
 - **`TenantConfig.allowCartGuest` no tiene efecto.** El carrito de invitado
   (`middleware/guestCart.js`) no consulta el flag: emite la cookie y resuelve el `guestId` sin
   importar cómo esté configurado el tenant. O se cablea o se saca del modelo.
-- **`CartItem`, `ProductVariant` y `UserAddress` tienen índices únicos que no están en `prisma/schema.prisma`.**
+- **`Float` para dinero, y ahora se ve.** Todo el modelo monetario usa `Float` (`Order.total`,
+  `OrderItem.price`, `depositAmount`, `OrderPayment.amount`, y desde 2026-07-29 los montos de
+  [[Caja]]). El arqueo es el primer lugar donde el error de redondeo queda **frente al cliente**: una
+  diferencia de $0,01 en un cierre de caja genera una llamada. Mitigado con `roundMoney` en todo
+  cálculo y comparación; la mitigación real es migrar a `Decimal`, que es transversal y merece su
+  propia decisión.
+- **`CartItem`, `ProductVariant`, `UserAddress` y `CashRegisterSession` tienen índices únicos que no están en `prisma/schema.prisma`.**
   El caso `CartItem.variantId IS NULL` (líneas COMBO) lo cubre un índice único parcial creado a
   mano en SQL (`CartItem_cart_product_null_variant_key`, migración
   `20260708190000_product_types_add`); el caso `ProductVariant.isDefault = true` (a lo sumo una
   por producto) lo cubre otro (`ProductVariant_product_default_key`, migración
   `20260710120000_product_types_collapse_expand`); el caso `UserAddress.isDefault = true` (a lo sumo
   una dirección preseleccionada por usuario) lo cubre un tercero, en la migración
-  `20260727120000_add_user_address` — todos porque Postgres no colisiona `NULL` contra `NULL` en un
+  `20260727120000_add_user_address`; y el caso `CashRegisterSession.status = 'OPEN'` (un solo turno de
+  caja abierto por tenant) un cuarto, en `20260729223044_add_cash_register` — todos porque Postgres no
+  colisiona `NULL` contra `NULL` en un
   `@@unique` normal / porque un índice parcial no se puede declarar en el
   DSL de Prisma. Es drift intencional (el propio schema trae comentarios pidiendo no
   "corregirlo"), pero cualquiera que lea solo el `.prisma` no lo va a ver.
