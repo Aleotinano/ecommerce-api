@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
+import ExcelJS from "exceljs";
 
 const prisma = (await import("../lib/prisma.js")).default;
 const { app } = await import("../app.js");
@@ -528,6 +529,184 @@ describe("catálogo de etiquetas", () => {
       data: { isActive: true },
     });
   });
+});
+
+describe("exportación a Excel", () => {
+  let cerrada;
+
+  beforeAll(async () => {
+    // Turno propio: los bloques anteriores limpian las sesiones, así que este no
+    // puede depender del que cerró "apertura y cierre".
+    await resetSessions(acme.id);
+
+    await request(app)
+      .post("/cash-register/open")
+      .set("Cookie", acmeCookie)
+      .send({ openingAmount: 5000, note: "para exportar" })
+      .expect(201);
+
+    const cargar = (body) =>
+      request(app)
+        .post("/cash-register/movements")
+        .set("Cookie", acmeCookie)
+        .send(body)
+        .expect(201);
+
+    await cargar({
+      type: "EXPENSE",
+      channel: "CASH",
+      amount: 2000,
+      categoryId: sueldos().id,
+      payee: "Juan",
+    });
+    await cargar({ type: "EXPENSE", channel: "CASH", amount: 500, categoryId: insumos().id });
+    await cargar({ type: "EXPENSE", channel: "TRANSFER", amount: 1200, categoryId: insumos().id });
+
+    await request(app)
+      .post("/cash-register/close")
+      .set("Cookie", acmeCookie)
+      .send({ countedCashAmount: 2400 })
+      .expect(200);
+
+    cerrada = await prisma.cashRegisterSession.findFirst({
+      where: { tenantId: acme.id, status: "CLOSED" },
+      orderBy: { id: "desc" },
+    });
+
+    // 5000 − 2000 − 500 = 2500 esperado (la transferencia no entra), contado 2400.
+    expect(cerrada.expectedCashAmount).toBe(2500);
+    expect(cerrada.cashDifference).toBe(-100);
+    expect(cerrada.transferTotal).toBe(-1200);
+  });
+
+  it("devuelve un .xlsx con el nombre del turno", async () => {
+    const res = await request(app)
+      .get(`/cash-register/${cerrada.id}/export`)
+      .set("Cookie", acmeCookie)
+      .buffer()
+      .parse((res, cb) => {
+        const chunks = [];
+        res.on("data", (chunk) => chunks.push(chunk));
+        res.on("end", () => cb(null, Buffer.concat(chunks)));
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toContain("spreadsheetml");
+    expect(res.headers["content-disposition"]).toContain(
+      `caja-turno-${cerrada.id}-`
+    );
+    // Firma de un zip: un .xlsx es un zip, y un buffer vacío pasaría el resto.
+    expect(res.body.slice(0, 2).toString()).toBe("PK");
+  });
+
+  it("la planilla dice los mismos números que la API", async () => {
+    // Se lee de vuelta con la misma librería: si el arqueo del Excel no coincide
+    // con el de la API, la planilla es peor que no tenerla.
+    const { buffer } = await CashRegisterModel.exportSession({
+      tenantId: acme.id,
+      id: cerrada.id,
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer);
+
+    expect(workbook.worksheets.map((s) => s.name)).toEqual([
+      "Turno",
+      "Movimientos",
+      "Resumen",
+    ]);
+
+    const turno = workbook.getWorksheet("Turno");
+    const campos = new Map();
+    turno.eachRow((row) => campos.set(String(row.getCell(1).value), row.getCell(2).value));
+
+    expect(campos.get("Efectivo esperado (ARS)")).toBe(cerrada.expectedCashAmount);
+    expect(campos.get("Efectivo contado (ARS)")).toBe(cerrada.countedCashAmount);
+    expect(campos.get("Diferencia (ARS)")).toBe(cerrada.cashDifference);
+
+    const movimientos = workbook.getWorksheet("Movimientos");
+    const filas = await prisma.cashMovement.count({ where: { sessionId: cerrada.id } });
+    // +1 por el encabezado.
+    expect(movimientos.rowCount).toBe(filas + 1);
+  });
+
+  it("los egresos salen con signo negativo, no como el monto crudo", async () => {
+    const { buffer } = await CashRegisterModel.exportSession({
+      tenantId: acme.id,
+      id: cerrada.id,
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer);
+
+    const movimientos = workbook.getWorksheet("Movimientos");
+    const egresos = [];
+    movimientos.eachRow((row, i) => {
+      if (i === 1) return;
+      if (row.getCell(2).value === "Egreso") egresos.push(row.getCell(6).value);
+    });
+
+    expect(egresos.length).toBeGreaterThan(0);
+    for (const monto of egresos) expect(monto).toBeLessThan(0);
+  });
+
+  it("las fechas salen en hora local, no en UTC", async () => {
+    // Una celda de fecha de Excel es hora de pared, sin zona: escribir el Date
+    // crudo hacía que un turno abierto a las 19:44 se imprimiera "22:44".
+    const { buffer } = await CashRegisterModel.exportSession({
+      tenantId: acme.id,
+      id: cerrada.id,
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer);
+
+    const primero = await prisma.cashMovement.findFirst({
+      where: { sessionId: cerrada.id },
+      orderBy: { createdAt: "asc" },
+    });
+
+    const celda = workbook.getWorksheet("Movimientos").getRow(2).getCell(1).value;
+    const esperado = new Date(
+      primero.createdAt.getTime() - primero.createdAt.getTimezoneOffset() * 60_000
+    );
+
+    expect(celda.toISOString().slice(0, 16)).toBe(esperado.toISOString().slice(0, 16));
+    // Y si el server no está en UTC, tiene que diferir del crudo: si coincidieran,
+    // el shift no se aplicó.
+    if (primero.createdAt.getTimezoneOffset() !== 0) {
+      expect(celda.toISOString()).not.toBe(primero.createdAt.toISOString());
+    }
+  });
+
+  it("un turno abierto también se exporta, sin arqueo", async () => {
+    await resetSessions(acme.id);
+    const abierta = await request(app)
+      .post("/cash-register/open")
+      .set("Cookie", acmeCookie)
+      .send({ openingAmount: 700 })
+      .expect(201);
+
+    const { buffer } = await CashRegisterModel.exportSession({
+      tenantId: acme.id,
+      id: abierta.body.session.id,
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer);
+
+    const campos = new Map();
+    workbook
+      .getWorksheet("Turno")
+      .eachRow((row) => campos.set(String(row.getCell(1).value), row.getCell(2).value));
+
+    expect(campos.get("Cierre")).toBe("el turno sigue abierto");
+    expect(campos.get("Efectivo esperado (ARS)")).toBe(700);
+    expect(campos.has("Diferencia (ARS)")).toBe(false);
+  });
+
+  // El scoping por tenant no se re-testea acá: `exportSession` va por `getById`,
+  // que ya lo cubre en "aislamiento entre tenants".
 });
 
 describe("aislamiento entre tenants", () => {

@@ -90,6 +90,34 @@ export class CashRegisterController {
     }
   }
 
+  /**
+   * Descarga del turno en Excel. Se responde el buffer completo y no un stream:
+   * un turno son decenas de filas, no un dataset — y así un error al armar la
+   * planilla sale por el `errorHandler` normal en vez de cortar una respuesta a
+   * medio enviar.
+   */
+  static async exportSession(req, res, next) {
+    try {
+      const { buffer, filename } = await CashRegisterModel.exportSession({
+        tenantId: req.tenantId,
+        id: req.params.id,
+      });
+
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      // El nombre del archivo lo necesita el front para mostrarlo (fetch + blob no
+      // lee Content-Disposition sin exponerlo).
+      res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+
+      return res.send(Buffer.from(buffer));
+    } catch (error) {
+      next(error);
+    }
+  }
+
   // ── Etiquetas ──────────────────────────────────────────────────────────────
 
   static async listCategories(req, res, next) {

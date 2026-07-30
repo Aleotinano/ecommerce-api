@@ -35,6 +35,7 @@
 | Pagos | `mercadopago@^2.12.0` |
 | Imágenes / uploads | `cloudinary@^2.9.0`, `multer@^2.1.1` |
 | Email | `nodemailer@^6.10.1` |
+| Excel | `exceljs@4.4.0` (exportación del turno de caja; elegida sobre `xlsx`/SheetJS, cuya versión en npm está congelada y con CVEs) |
 | Dev / test | `vitest@^4.1.6`, `supertest@^7.2.2`, `eslint@9.39.2` + `standard@17.1.2`, `nodemon@3.1.11`, `typescript@5.9.3`, `tsx@4.21.0`, `dotenv@17.2.3` |
 
 > Nota: ESLint usa el preset `standard` (`eslintConfig.extends: "standard"`).
@@ -144,7 +145,8 @@ e-commerce-express-1/
 │   ├── order-state.js      # Motor de estados de órdenes (puro): transiciones, blockers y avance automático
 │   ├── tenant-profiles.js  # Perfiles de flujo de venta (puro): kits de arranque de la config de venta
 │   ├── cash-register.js    # Caja: turno, movimientos, etiquetas + recordOrderPayments (enganche con el libro de cobros)
-│   └── cash-register-math.js # Aritmética del arqueo (puro): signos, resumen por etiqueta, diferencia
+│   ├── cash-register-math.js   # Aritmética del arqueo (puro): signos, resumen por etiqueta, diferencia
+│   └── cash-register-export.js # El turno a .xlsx (exceljs); sin DB, recibe el turno y devuelve buffer
 ├── lib/                    # Infra/integraciones: prisma, redis, cache, logger, mailer, cloudinary, tokens, slug, imageManager, crypto (AES-256-GCM), phone (normalización E.164), whatsapp-link (deep-link wa.me del pedido — módulo puro, NO es el bot)
 │   └── llm/                # Cliente LLM: index.js, prompt.js, parse.js, fallback.js
 │       ├── providers/      # anthropic.js, gemini.js (fetch directo, sin SDK)
@@ -592,6 +594,7 @@ rechaza.
 | DELETE | `/cash-register/categories/:id` | `params: validateId` | `deleteCategory` (ADMIN; 409 `CASH_CATEGORY_IN_USE` si tiene movimientos) |
 | GET | `/cash-register` | `query: cashSessionQuery` | `getAll` → `getAll` (historial, `limit` ≤ 100) |
 | GET | `/cash-register/:id` | `params: validateId` | `getById` → `getById` |
+| GET | `/cash-register/:id/export` | `params: validateId` | `exportSession` → `exportSession` — responde un `.xlsx` binario (`Content-Disposition: attachment`), no JSON |
 
 ### `/content-suggestions` (admin) — `routes/content-suggestions.js`
 
@@ -808,7 +811,8 @@ más el `WHATSAPP_VERIFY_TOKEN` del handshake inicial.
   liquidación de `updateOrderStatus`, los dos únicos caminos que escriben en el libro. Toda la
   aritmética del arqueo vive aparte en `services/cash-register-math.js`, **puro** (`CASH_MOVEMENT_SIGN`,
   `signedAmount`, `summarizeMovements`, `buildArqueo`), igual que `order-state.js`: se testea sin base.
-  Ver [[Caja]].
+  Y la planilla en `services/cash-register-export.js`, que tampoco toca la base: recibe el turno
+  cargado y devuelve un buffer `.xlsx`. Ver [[Caja]].
 - **Excepción a la convención `XModel`:** `services/combos.js` no exporta un modelo, sino una
   única función pura `validateComboSelection({ tx, tenantId, comboProduct, selection,
   checkStock })`, compartida por `services/cart.js` (`CartModel.addCombo`) y

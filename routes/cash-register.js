@@ -114,3 +114,11 @@ cashRegisterRouter.get(
   validation.id,
   CashRegisterController.getById
 );
+
+// Descarga del turno en Excel (3 hojas: arqueo, movimientos, resumen).
+cashRegisterRouter.get(
+  "/:id/export",
+  requireRole(operarCaja),
+  validation.id,
+  CashRegisterController.exportSession
+);

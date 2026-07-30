@@ -7,6 +7,7 @@ import {
   buildArqueo,
   summarizeMovements,
 } from "./cash-register-math.js";
+import { buildSessionXlsx, sessionFileName } from "./cash-register-export.js";
 
 /**
  * Caja registradora: el turno de caja física del local.
@@ -288,6 +289,37 @@ export const CashRegisterModel = {
               transferTotal: session.transferTotal,
             },
     };
+  },
+
+  /**
+   * El turno como planilla de Excel (`.xlsx`): tres hojas —el arqueo, el detalle
+   * de movimientos y en qué se fue la plata—. Es el reemplazo del "resumen
+   * imprimible": un `.xlsx` se imprime igual y además se puede sumar aparte.
+   *
+   * Reusa `getById`, así que hereda el chequeo del flag y el scoping por tenant, y
+   * los números salen de la misma fuente que la API.
+   *
+   * @returns {Promise<{buffer: Buffer, filename: string}>}
+   */
+  async exportSession({ tenantId, id }) {
+    const session = await this.getById({ tenantId, id });
+
+    const [config, userNames] = await Promise.all([
+      prisma.tenantConfig.findUnique({
+        where: { tenantId },
+        select: { storeName: true, currency: true },
+      }),
+      resolveUserNames(session),
+    ]);
+
+    const buffer = await buildSessionXlsx({
+      session,
+      storeName: config?.storeName ?? null,
+      currency: config?.currency ?? "ARS",
+      userNames,
+    });
+
+    return { buffer, filename: sessionFileName(session) };
   },
 
   // ── Movimientos ──────────────────────────────────────────────────────────
@@ -599,6 +631,31 @@ export async function recordOrderPayments(
   await tx.cashMovement.createMany({ data, skipDuplicates: true });
 
   return { movements: data.length, sessionId: session.id };
+}
+
+/**
+ * Nombres de los usuarios que aparecen en un turno (quién abrió, quién cerró,
+ * quién cargó cada movimiento). Se resuelven a mano porque `openedById` y compañía
+ * son enteros sin FK —igual que `changedById` en el historial de órdenes—, y en un
+ * reporte que va a un contador un "usuario #7" no dice nada.
+ */
+async function resolveUserNames(session) {
+  const ids = new Set(
+    [
+      session.openedById,
+      session.closedById,
+      ...(session.movements ?? []).map((movement) => movement.createdById),
+    ].filter((id) => id != null)
+  );
+
+  if (ids.size === 0) return new Map();
+
+  const users = await prisma.user.findMany({
+    where: { id: { in: [...ids] } },
+    select: { id: true, username: true },
+  });
+
+  return new Map(users.map((user) => [user.id, user.username]));
 }
 
 /**
