@@ -136,6 +136,9 @@ export const webhookLimiter = rateLimit({
   keyGenerator: (req) => ipKeyGenerator(req.ip),
   store: webhookStore,
   handler: rateLimitHandler,
+  // Mismo motivo que `loginLimiter`/`registerLimiter`: el contador vive en Redis y
+  // se acumula entre corridas. Ningún test cubre este limiter.
+  skip: () => DEFAULTS.NODE_ENV === "test",
 });
 
 // Chatbot publico (POST /store/chat/message): rate limit por IP. Complementa el
@@ -149,4 +152,9 @@ export const chatLimiter = rateLimit({
   keyGenerator: (req) => ipKeyGenerator(req.ip),
   store: chatStore,
   handler: rateLimitHandler,
+  // `tests/store-chat.test.js` hace ~8 requests por corrida contra este endpoint y
+  // el contador (Redis, ventana de 60 s, clave por IP) sobrevive a la corrida: dos
+  // seguidas quedan al borde del tope de 20. Los 429 que sí se testean son los del
+  // cost-guard por tenant, que es otro mecanismo.
+  skip: () => DEFAULTS.NODE_ENV === "test",
 });

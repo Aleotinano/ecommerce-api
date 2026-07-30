@@ -1090,7 +1090,25 @@ docs asumen **Next.js**) debería consumir esta API:
   debug que solo devuelve los claims del token (protegido por `verifyToken` +
   `requireRole(["ADMIN"])`). Conviene revisar si debe existir en producción.
 - **`generalLimiter` se desactiva fuera de producción** (`skip: (req) => !isProd`): en
-  desarrollo/test no hay rate limit general.
+  desarrollo/test no hay rate limit general. `loginLimiter`, `registerLimiter`,
+  `chatLimiter` y `webhookLimiter` se saltean con `NODE_ENV === "test"` por el mismo
+  motivo en los cuatro: el contador vive en Redis, sobrevive a la corrida, y hacía
+  fallar tests que no tienen nada que ver con rate limiting.
+- **Los tests comparten instancia de Redis con el server de desarrollo.** La DB sí está
+  separada (`ecommerce` vs `ecommerce_test`), pero Redis es una sola: `.env.test` tiene
+  que fijar `REDIS_URL=redis://127.0.0.1:6379/1` para que la suite use **otra db**. Sin
+  eso, un `node app.js` levantado en paralelo se pisa con los tests en cache,
+  contadores de rate limit y cost-guards. Los `.env` no se commitean, así que en una
+  máquina nueva hay que acordarse.
+- **`pnpm test` falla ~1 de cada 3 veces sin que falle ningún test** (flake del harness,
+  no del código). El síntoma es siempre `Test Files 48 passed (49)` + `Errors 1 error` +
+  **ninguna línea `FAIL`**: es `Worker exited unexpectedly`, el fork se cae al desmontar
+  y los resultados de un archivo entero quedan sin reportar, con exit code no cero.
+  Antes de investigar, mirar si hay líneas `FAIL`; si no las hay, volver a correr.
+  Cerrar el cliente de Redis por archivo (`setupFiles` + `afterAll`) se probó y **no lo
+  arregla** — y ojo: importar `lib/redis.js` en el tope de un setup file rompe los tests
+  que stubbean variables de entorno, porque arrastra `config.js` y congela `DEFAULTS`
+  antes de que el test pueda stubbear.
 - ~~**El checkout del storefront ignora la seña del tenant.**~~ **Resuelto** (2026-07-29):
   `OrderModel.create` lee `depositEnabled`/`depositPercentage` y resuelve
   `requiresDeposit`/`depositAmount` igual que `createDraft`. Salió junto con los perfiles de flujo

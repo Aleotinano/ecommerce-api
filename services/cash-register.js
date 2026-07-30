@@ -404,8 +404,13 @@ export const CashRegisterModel = {
     return prisma.$transaction(async (tx) => {
       const session = await requireOpenSession(tenantId, tx);
 
+      // Con la etiqueta incluida: sin el include, el `summary.byCategory` de la
+      // respuesta salía con `label: null` y con el id como clave, mientras que el de
+      // `GET /:id` traía slug y nombre. Dos formas para el mismo campo obligaban al
+      // panel a ignorar este summary y volver a pedir el turno.
       const movements = await tx.cashMovement.findMany({
         where: { sessionId: session.id },
+        ...MOVEMENT_INCLUDE,
       });
 
       const arqueo = buildArqueo({

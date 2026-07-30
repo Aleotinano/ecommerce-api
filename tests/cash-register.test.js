@@ -192,6 +192,14 @@ describe("apertura y cierre", () => {
     expect(cerrada.body.session.expectedCashAmount).toBe(4000);
     expect(cerrada.body.session.countedCashAmount).toBe(3900);
     expect(cerrada.body.session.cashDifference).toBe(-100);
+
+    // El summary del cierre viene con la etiqueta resuelta, igual que el de
+    // `GET /:id`: dos formas para el mismo campo obligaban al panel a descartar este
+    // summary y volver a pedir el turno.
+    expect(cerrada.body.session.summary.byCategory.sueldos).toMatchObject({
+      label: "Sueldos",
+      total: -2000,
+    });
   });
 
   it("un turno cerrado no acepta movimientos nuevos", async () => {
