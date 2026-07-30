@@ -89,6 +89,10 @@ export function buildCashPanel({ sessions = [], cobrado = 0 }) {
   const ingresosManuales = round(byType.INCOME ?? 0);
 
   const cerrados = sessions.filter((session) => session.status === "CLOSED");
+  // Los cerrados SIN conteo no tienen arqueo (`cashDifference` es null) y por eso no
+  // suman a la diferencia. Se cuentan aparte a propósito: "todos los turnos cerraron
+  // bien" con la mitad sin contar es una mentira por omisión.
+  const sinArqueo = cerrados.filter((session) => session.closedWithoutCount);
   const diferenciaAcumulada = round(
     cerrados.reduce((total, session) => total + (session.cashDifference ?? 0), 0)
   );
@@ -110,6 +114,9 @@ export function buildCashPanel({ sessions = [], cobrado = 0 }) {
     turnosConDiferencia: cerrados.filter(
       (session) => Math.abs(session.cashDifference ?? 0) > MONEY_EPS
     ).length,
+    // Turnos que el sistema cerró por vencimiento, sin que nadie contara. Si esto
+    // crece, la diferencia acumulada dice cada vez menos.
+    turnosSinArqueo: sinArqueo.length,
 
     // Cobrado menos lo que salió del local. NO es un resultado contable: falta el
     // costo de la mercadería (el modelo no lo tiene, solo precio de venta), y la

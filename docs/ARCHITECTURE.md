@@ -146,7 +146,8 @@ e-commerce-express-1/
 │   ├── tenant-profiles.js  # Perfiles de flujo de venta (puro): kits de arranque de la config de venta
 │   ├── cash-register.js    # Caja: turno, movimientos, etiquetas + recordOrderPayments (enganche con el libro de cobros)
 │   ├── cash-register-math.js   # Aritmética del arqueo (puro): signos, resumen por etiqueta, diferencia
-│   └── cash-register-export.js # El turno a .xlsx (exceljs); sin DB, recibe el turno y devuelve buffer
+│   ├── cash-register-export.js # El turno a .xlsx (exceljs); sin DB, recibe el turno y devuelve buffer
+│   └── cash-register-schedule.js # Turnos con horario (puro): qué turno es ahora, vencimiento, gracia
 ├── lib/                    # Infra/integraciones: prisma, redis, cache, logger, mailer, cloudinary, tokens, slug, imageManager, crypto (AES-256-GCM), phone (normalización E.164), whatsapp-link (deep-link wa.me del pedido — módulo puro, NO es el bot)
 │   └── llm/                # Cliente LLM: index.js, prompt.js, parse.js, fallback.js
 │       ├── providers/      # anthropic.js, gemini.js (fetch directo, sin SDK)
@@ -157,7 +158,7 @@ e-commerce-express-1/
 ├── utils/                  # Utilidades varias
 ├── prisma/
 │   ├── schema.prisma       # Modelo de datos
-│   ├── migrations/         # 46 migraciones SQL
+│   ├── migrations/         # 48 migraciones SQL
 │   ├── mesa-dulce/         # Seed del primer tenant real (categorias.js, productos.js, ordenes.js, index.js)
 │   └── seed*.js            # Seeds (base, stats, tenant-config, catalog) + scripts de migración de datos
 ├── generated/prisma/       # Cliente Prisma generado (output custom, fuera de node_modules)
@@ -291,11 +292,14 @@ contraparte manual del webhook de MercadoPago para tenants que cobran en efectiv
   `CASH_MOVEMENT_SIGN` (`services/cash-register-math.js`) y `amount` es siempre positivo.
 - `CashCategoryApplies`: `INCOME`, `EXPENSE`, `BOTH` — a qué dirección aplica una etiqueta de caja
   ("Sueldos" no es un ingreso jamás).
+- `CashSessionTrigger`: `MANUAL`, `AUTO` — quién abrió el turno de caja (una persona o el horario del
+  tenant). "Vencido" **no** es un estado: se deriva de `expiresAt < now` sobre un turno `OPEN`, así no
+  hace falta ningún job que lo escriba.
 - `Role`: `ADMIN`, `STAFF`, `CUSTOMER`
 
 ### Migraciones
 
-46 migraciones en `prisma/migrations/` (cronológicas):
+48 migraciones en `prisma/migrations/` (cronológicas):
 
 `..._initial_multi_tenant`, `..._email_global_unique`, `..._email_verification`,
 `..._add_tenant_config`, `..._add_product_price`, `..._expand_roles_storefront`,

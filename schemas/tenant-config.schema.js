@@ -1,5 +1,15 @@
 import { z } from "zod";
 
+import {
+  MAX_SHIFTS,
+  findScheduleOverlap,
+  parseSchedule,
+} from "../services/cash-register-schedule.js";
+
+// Hora del día en 24 h. El módulo de horarios usa el mismo patrón para parsear;
+// acá se repite como regex de Zod para que el error salga por campo.
+const HHMM_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
 export const getTenantConfig = z.object({
   tenantId: z.coerce
     .number({ invalid_type_error: "El ID debe ser un número" })
@@ -310,6 +320,50 @@ const updateTenantConfigObject = z
         footer: sectionOverride.optional(),
       })
       .strict()
+      .nullable()
+      .optional(),
+
+    // Turnos de caja del tenant. `null` (o `[]`) = sin horario: la caja se abre y
+    // cierra 100% a mano. Con turnos cargados, un cobro en horario abre el turno
+    // solo y el turno queda con vencimiento — ver services/cash-register-schedule.js.
+    //
+    // Lo edita el tenant: es su horario de atención, cambia con la temporada, y un
+    // horario mal puesto no puede bloquear una venta (la apertura automática solo
+    // DESBLOQUEA cobros, nunca los impide).
+    cashSchedule: z
+      .array(
+        z
+          .object({
+            label: z
+              .string({ required_error: "El turno necesita un nombre" })
+              .min(1, "El nombre del turno no puede estar vacío")
+              .max(30, "El nombre del turno es demasiado largo")
+              .trim(),
+            from: z
+              .string({ required_error: "Falta la hora de inicio" })
+              .regex(HHMM_PATTERN, "La hora de inicio debe ser HH:MM (24 h)"),
+            to: z
+              .string({ required_error: "Falta la hora de fin" })
+              .regex(HHMM_PATTERN, "La hora de fin debe ser HH:MM (24 h)"),
+          })
+          .strict()
+      )
+      .max(MAX_SHIFTS, `No más de ${MAX_SHIFTS} turnos`)
+      // Un turno de 08:00 a 08:00 no se puede interpretar: ¿cero minutos o 24 h?
+      .refine((shifts) => shifts.every((shift) => shift.from !== shift.to), {
+        message: "Un turno no puede empezar y terminar a la misma hora",
+      })
+      // Dos turnos que se pisan hacen ambigua la pregunta "¿en qué turno estamos?".
+      // Se rechaza acá en vez de resolverlo con una regla arbitraria en runtime.
+      .superRefine((shifts, ctx) => {
+        const overlap = findScheduleOverlap(parseSchedule(shifts));
+        if (overlap) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Los turnos "${overlap.a}" y "${overlap.b}" se solapan`,
+          });
+        }
+      })
       .nullable()
       .optional(),
   });

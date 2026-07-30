@@ -8,6 +8,13 @@ import {
   summarizeMovements,
 } from "./cash-register-math.js";
 import { buildSessionXlsx, sessionFileName } from "./cash-register-export.js";
+import {
+  expiredByMinutes,
+  isExpired,
+  shiftExpiry,
+  shiftFor,
+  shouldAutoClose,
+} from "./cash-register-schedule.js";
 
 /**
  * Caja registradora: el turno de caja física del local.
@@ -118,6 +125,29 @@ function dateRange(from, to) {
   return { ...(from && { gte: from }), ...(to && { lte: to }) };
 }
 
+/** Vías que sí pasan por el cajón: `GATEWAY` (MercadoPago) no. */
+export function hasCashChannels(entries = []) {
+  return entries.some((entry) => entry.channel !== "GATEWAY");
+}
+
+/**
+ * Con cuánto abre el turno siguiente: **lo que se contó al cerrar el anterior**.
+ * El cajón arrastra, así que el fondo no se declara de nuevo cada vez.
+ *
+ * Un cierre sin conteo (`closedWithoutCount`) no sirve como base —nadie contó— y
+ * tampoco un tenant que recién empieza: en los dos casos abre en 0 y quien llega lo
+ * corrige con un ingreso manual.
+ */
+async function carryOverAmount(tenantId, client = prisma) {
+  const ultima = await client.cashRegisterSession.findFirst({
+    where: { tenantId, status: "CLOSED", countedCashAmount: { not: null } },
+    orderBy: { closedAt: "desc" },
+    select: { countedCashAmount: true },
+  });
+
+  return roundMoney(Number(ultima?.countedCashAmount ?? 0));
+}
+
 export const CashRegisterModel = {
   // ── Turno ────────────────────────────────────────────────────────────────
 
@@ -129,8 +159,12 @@ export const CashRegisterModel = {
    * hay caja abierta" es un estado normal de la operación, no un error — el panel
    * tiene que poder pintar el botón de abrir.
    */
-  async getCurrent({ tenantId }) {
+  async getCurrent({ tenantId, actorId = null }) {
     await assertEnabled(tenantId);
+
+    // Abrir el turno al pedir el tablero es parte de la apertura automática: el
+    // panel es el otro momento —además del cobro— en que alguien "toca" la caja.
+    await this.ensureScheduledSession({ tenantId, actorId });
 
     const session = await prisma.cashRegisterSession.findFirst({
       where: { tenantId, status: "OPEN" },
@@ -143,11 +177,122 @@ export const CashRegisterModel = {
 
     return {
       ...session,
+      vencido: isExpired(session),
+      vencidoHaceMinutos: expiredByMinutes(session),
       totals: buildArqueo({
         openingAmount: session.openingAmount,
         movements: session.movements,
       }),
     };
+  },
+
+  /**
+   * Abre el turno que corresponde al horario del tenant, si hace falta. Es la
+   * apertura automática, y **se resuelve en el momento** (no hay job): la llaman el
+   * enganche de cobros y `GET /current`.
+   *
+   * Tres cosas en orden:
+   *  1. si hay un turno abierto que ya venció, que pasó la gracia y cuyo turno ya no
+   *     es el actual, se cierra **sin conteo** — es lo que evita que un turno quede
+   *     colgado juntando los cobros de tres días;
+   *  2. si queda un turno abierto (en horario, o vencido dentro de la gracia), se
+   *     devuelve ese;
+   *  3. si no hay ninguno y el horario dice que estamos en turno, se abre con el
+   *     arrastre del cierre anterior.
+   *
+   * Devuelve `null` cuando no corresponde abrir nada (sin caja, sin horario, o
+   * fuera de horario): ahí el guard de "caja abierta" sigue valiendo igual.
+   */
+  async ensureScheduledSession({ tenantId, actorId = null, now = new Date() }) {
+    const config = await prisma.tenantConfig.findUnique({
+      where: { tenantId },
+      select: { cashRegisterEnabled: true, cashSchedule: true },
+    });
+
+    if (!config?.cashRegisterEnabled) return null;
+
+    const schedule = config.cashSchedule;
+    const abierta = await findOpenSession(tenantId);
+
+    if (abierta) {
+      if (!shouldAutoClose(abierta, { now, schedule })) return abierta;
+
+      await this.closeWithoutCount({
+        tenantId,
+        sessionId: abierta.id,
+        actorId,
+        note: `Cerrado por el sistema: venció el ${abierta.label ?? "turno"} y nadie lo cerró`,
+      });
+    }
+
+    const turno = shiftFor(now, schedule);
+    if (!turno) return null;
+
+    const openingAmount = await carryOverAmount(tenantId);
+
+    try {
+      return await prisma.cashRegisterSession.create({
+        data: {
+          tenantId,
+          openingAmount,
+          openedById: actorId,
+          openedAt: now,
+          trigger: "AUTO",
+          label: turno.label,
+          // Materializado: editar el horario mañana no puede mover el vencimiento de
+          // un turno que ya está corriendo.
+          expiresAt: shiftExpiry(now, turno),
+          openingNote: `Apertura automática (${turno.label}), arrastre del cierre anterior`,
+        },
+      });
+    } catch (error) {
+      // Dos cobros simultáneos entrando al mismo turno: el índice único parcial deja
+      // pasar uno solo y el otro se cuelga del que ganó.
+      if (error.code === "P2002") return findOpenSession(tenantId);
+      throw error;
+    }
+  },
+
+  /**
+   * Cierra un turno **sin arqueo**: el sistema no puede contar la plata, así que
+   * `countedCashAmount` y `cashDifference` quedan en `null` y la fila queda marcada
+   * con `closedWithoutCount`. "Nunca se contó" y "se contó y no cuadró" son cosas
+   * distintas, y un cierre en cero mentiría diciendo que cuadró.
+   *
+   * `expectedCashAmount`/`transferTotal` sí se guardan: eso el sistema lo sabe.
+   */
+  async closeWithoutCount({ tenantId, sessionId, actorId = null, note = null }) {
+    return prisma.$transaction(async (tx) => {
+      const session = await tx.cashRegisterSession.findFirst({
+        where: { id: sessionId, tenantId, status: "OPEN" },
+      });
+
+      if (!session) {
+        throw createError("No hay una caja abierta", "CASH_SESSION_NOT_OPEN", 409);
+      }
+
+      const movements = await tx.cashMovement.findMany({
+        where: { sessionId: session.id },
+      });
+
+      const arqueo = buildArqueo({
+        openingAmount: session.openingAmount,
+        movements,
+      });
+
+      return tx.cashRegisterSession.update({
+        where: { id: session.id },
+        data: {
+          status: "CLOSED",
+          closedById: actorId,
+          closedAt: new Date(),
+          closingNote: note,
+          closedWithoutCount: true,
+          expectedCashAmount: arqueo.expectedCashAmount,
+          transferTotal: arqueo.transferTotal,
+        },
+      });
+    });
   },
 
   /**

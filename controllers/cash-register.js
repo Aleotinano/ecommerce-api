@@ -8,7 +8,10 @@ export class CashRegisterController {
    */
   static async current(req, res, next) {
     try {
-      const session = await CashRegisterModel.getCurrent({ tenantId: req.tenantId });
+      const session = await CashRegisterModel.getCurrent({
+        tenantId: req.tenantId,
+        actorId: req.user.id,
+      });
       return res.json({ session });
     } catch (error) {
       next(error);

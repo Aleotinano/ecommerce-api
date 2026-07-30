@@ -148,6 +148,17 @@ model TenantConfig {
   // Se setea con `node prisma/set-cash-register.js <slug> on|off`.
   cashRegisterEnabled Boolean @default(false)
 
+  // Turnos con horario del tenant: `[{ label, from: "HH:MM", to: "HH:MM" }]`, ej.
+  // mañana 08–14, tarde 14–20, noche 20–02 (`to < from` = cruza la medianoche).
+  // Con esto cargado, un cobro en horario ABRE el turno solo si no hay ninguno
+  // abierto (ver `ensureScheduledSession`), y el turno queda con fecha de
+  // vencimiento. JSON y no tabla por el mismo motivo que `themeSections`: son 1 a 4
+  // filas de tres campos, y la forma la valida Zod.
+  //
+  // Sí lo edita el tenant: un horario mal puesto no bloquea cobros —la apertura
+  // automática solo DESBLOQUEA— así que no es una regla de plata.
+  cashSchedule Json?
+
   // WhatsApp Business: el `phone_number_id` del numero de la marca (Meta Graph
   // API). Identifica al tenant cuando llega un mensaje por el webhook de WhatsApp.
   whatsappPhoneNumberId String? @unique
@@ -731,14 +742,34 @@ model CashRegisterSession {
   status   CashSessionStatus @default(OPEN)
 
   openingAmount Float // efectivo declarado al abrir
-  openedById    Int
+  // Nullable por la apertura automática: cuando la abre el horario no hay persona
+  // detrás. En una apertura manual siempre está.
+  openedById    Int?
   openedAt      DateTime @default(now())
   openingNote   String?
+
+  // Quién lo abrió: una persona o el horario del tenant (`cashSchedule`). Mismo
+  // criterio que `StatusTrigger` en el historial de órdenes: nadie tiene que
+  // adivinar si esto lo hizo un humano.
+  trigger CashSessionTrigger @default(MANUAL)
+
+  // Nombre y fin del turno del horario que lo abrió, MATERIALIZADOS al abrir (como
+  // los perfiles de venta): editar el horario no puede mover retroactivamente el
+  // vencimiento de un turno que ya está corriendo. Null en los turnos manuales sin
+  // horario configurado.
+  label     String?
+  expiresAt DateTime?
 
   // Todo lo del cierre es null mientras status = OPEN (CHECK en la migración).
   closedById  Int?
   closedAt    DateTime?
   closingNote String?
+
+  // Turno cerrado SIN que nadie contara la plata: lo cierra el sistema cuando venció
+  // y ya arrancó el siguiente. `countedCashAmount`/`cashDifference` quedan en null a
+  // propósito —"nunca se contó" y "contó y no cuadró" son cosas distintas— y el
+  // CHECK de completitud del cierre lo admite solo en este caso.
+  closedWithoutCount Boolean @default(false)
 
   // Snapshots calculados AL CERRAR, no se recalculan nunca (mismo criterio que
   // `Order.depositAmount` y el precio de `OrderItem`): si mañana se corrige un
@@ -969,6 +1000,13 @@ enum OrderPaymentKind {
 enum CashSessionStatus {
   OPEN
   CLOSED
+}
+
+// Quién abrió el turno. "Vencido" NO es un estado: se deriva de `expiresAt < now`
+// sobre un turno OPEN, así no hace falta un job que lo escriba.
+enum CashSessionTrigger {
+  MANUAL
+  AUTO
 }
 
 // Tipo de movimiento de caja. El signo NO se guarda: lo deriva

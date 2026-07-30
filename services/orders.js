@@ -10,7 +10,11 @@ import { sendMail, buildOrderStatusEmail } from "../lib/mailer.js";
 import { normalizeCustomerPhone } from "../lib/phone.js";
 import { logger } from "../lib/logger.js";
 import { validateComboSelection } from "./combos.js";
-import { recordOrderPayments } from "./cash-register.js";
+import {
+  CashRegisterModel,
+  hasCashChannels,
+  recordOrderPayments,
+} from "./cash-register.js";
 import { getPromoTiersByProduct, pickPromoTier, applyPromoDiscount } from "./promos.js";
 import { invalidateProductsCache } from "./productos.js";
 import {
@@ -340,6 +344,15 @@ async function notifyAutoAdvance(orderId, status) {
  */
 async function applyPayments({ tenantId, order, entries = [], actorId, extraData = {} }) {
   const orderId = order.id;
+
+  // Apertura automática ANTES de la transacción, no adentro: si dos cobros
+  // simultáneos intentaran abrir el turno, el índice único parcial haría fallar a
+  // uno, y en Postgres un error dentro de la transacción la aborta entera. Acá el
+  // choque se resuelve leyendo el turno que ganó (ver `ensureScheduledSession`) y el
+  // cobro sigue su camino.
+  if (hasCashChannels(entries)) {
+    await CashRegisterModel.ensureScheduledSession({ tenantId, actorId });
+  }
 
   const { order: result, advancedTo } = await prisma.$transaction(async (tx) => {
     // `createManyAndReturn` y no `createMany` porque la caja necesita el `id` de
@@ -953,6 +966,11 @@ export const OrderModel = {
             note: "Cobro registrado al completar la orden",
           }))
         : [];
+
+    // Mismo motivo que en `applyPayments`: el turno se abre antes de la transacción.
+    if (hasCashChannels(settlement)) {
+      await CashRegisterModel.ensureScheduledSession({ tenantId, actorId: changedById });
+    }
 
     const updated = await prisma.$transaction(async (tx) => {
       // El decremento es condicional (ver `decrementLineStock`): valida y baja el

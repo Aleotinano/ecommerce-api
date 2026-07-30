@@ -92,10 +92,17 @@ export async function buildSessionWorkbook({
 
   const titulo = turno.addRow([storeName ? `Caja — ${storeName}` : "Caja"]);
   titulo.font = { bold: true, size: 14 };
-  turno.addRow([`Turno #${session.id}`, abierto ? "ABIERTO" : "CERRADO"]);
+  turno.addRow([
+    `Turno #${session.id}${session.label ? ` — ${session.label}` : ""}`,
+    abierto ? "ABIERTO" : "CERRADO",
+  ]);
   turno.addRow([]);
 
-  addField(turno, "Abrió", quien(session.openedById));
+  addField(
+    turno,
+    "Abrió",
+    session.trigger === "AUTO" ? "automático (horario)" : quien(session.openedById)
+  );
   addField(turno, "Fecha de apertura", session.openedAt, { date: true });
   addField(turno, `Efectivo de apertura (${currency})`, session.openingAmount, { money: true });
   addField(turno, "Nota de apertura", session.openingNote);
@@ -108,6 +115,18 @@ export async function buildSessionWorkbook({
       money: true,
     });
     addField(turno, `Transferencias (${currency})`, session.totals?.transferTotal, { money: true });
+  } else if (session.closedWithoutCount) {
+    // Turno que el sistema cerró porque venció y nadie lo cerró: hay esperado pero
+    // NO hay arqueo. Decir "diferencia 0" acá sería mentir diciendo que cuadró.
+    addField(turno, "Cerró", "el sistema (turno vencido)");
+    addField(turno, "Fecha de cierre", session.closedAt, { date: true });
+    addField(turno, `Efectivo esperado (${currency})`, session.expectedCashAmount, { money: true });
+
+    const aviso = addField(turno, "Arqueo", "SIN CONTEO — nadie contó el efectivo");
+    aviso.getCell(2).font = { bold: true, color: { argb: "FFC00000" } };
+
+    addField(turno, `Transferencias (${currency})`, session.transferTotal, { money: true });
+    addField(turno, "Nota de cierre", session.closingNote);
   } else {
     addField(turno, "Cerró", quien(session.closedById));
     addField(turno, "Fecha de cierre", session.closedAt, { date: true });
