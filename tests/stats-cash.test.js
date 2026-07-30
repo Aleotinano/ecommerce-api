@@ -186,10 +186,24 @@ describe("panel de caja", () => {
 
     const { caja, cobranzas } = (await dashboard()).body.dashboard;
 
-    expect(caja.egresos).toBe(-2450);
-    expect(caja.egresosPorEtiqueta[0]).toMatchObject({ key: "sueldos", total: -2000 });
-    expect(caja.egresosPorEtiqueta[1]).toMatchObject({ key: "insumos", total: -450, count: 2 });
-    expect(caja.resultadoAproximado).toBe(Number((cobranzas.cobrado - 2450).toFixed(2)));
+    // Por clave y no por índice: la lista está ordenada por peso y las devoluciones
+    // de los tests de arriba también son egresos etiquetados.
+    const porClave = new Map(caja.egresosPorEtiqueta.map((e) => [e.key, e]));
+
+    expect(porClave.get("sueldos")).toMatchObject({ total: -2000, count: 1 });
+    expect(porClave.get("insumos")).toMatchObject({ total: -450, count: 2 });
+    // El primero de la lista es en qué se va MÁS plata.
+    expect(caja.egresosPorEtiqueta[0].key).toBe("sueldos");
+    // Y en esta lista no hay ingresos, aunque ahora las ventas tengan etiqueta.
+    for (const bucket of caja.egresosPorEtiqueta) {
+      expect(bucket.total, bucket.key).toBeLessThan(0);
+    }
+
+    // `porEtiqueta` sí cubre todo, ventas incluidas.
+    const todas = new Map(caja.porEtiqueta.map((e) => [e.key, e]));
+    expect(todas.get("venta").total).toBeGreaterThan(0);
+
+    expect(caja.resultadoAproximado).toBeCloseTo(cobranzas.cobrado + caja.egresos, 2);
   });
 
   it("acumula las diferencias de arqueo y cuenta los turnos del día", async () => {

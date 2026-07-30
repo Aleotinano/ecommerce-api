@@ -73,6 +73,14 @@ cashRegisterRouter.get(
   CashRegisterController.summary
 );
 
+// El período entero en una planilla ("el Excel de julio"). Antes de `/:id`.
+cashRegisterRouter.get(
+  "/export",
+  requireRole(operarCaja),
+  validation.summaryQuery,
+  CashRegisterController.exportPeriod
+);
+
 cashRegisterRouter.get(
   "/categories",
   requireRole(operarCaja),

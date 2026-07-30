@@ -104,9 +104,20 @@ export function buildCashPanel({ sessions = [], cobrado = 0 }) {
 
     ingresosManuales,
     egresos,
-    // De mayor egreso a menor: la primera fila es en qué se va la plata.
+
+    // Desde que los movimientos de orden llevan etiqueta reservada ("Venta",
+    // "Devolución"), este eje cubre el 100% de la plata del turno y su suma coincide
+    // con el neto. De mayor egreso a mayor ingreso.
+    porEtiqueta: Object.entries(byCategory)
+      .map(([key, bucket]) => ({ key, ...bucket }))
+      .sort((a, b) => a.total - b.total),
+
+    // Solo lo que SALE. Se mantiene aparte de `porEtiqueta` justamente porque ahora
+    // ahí también están las ventas, y "en qué se va la plata" no puede empezar con
+    // una fila gigante de ingresos.
     egresosPorEtiqueta: Object.entries(byCategory)
       .map(([key, bucket]) => ({ key, ...bucket }))
+      .filter((bucket) => bucket.total < 0)
       .sort((a, b) => a.total - b.total),
 
     // La respuesta a "¿este turno cierra siempre corto?". Negativo = falta plata.
@@ -118,10 +129,19 @@ export function buildCashPanel({ sessions = [], cobrado = 0 }) {
     // crece, la diferencia acumulada dice cada vez menos.
     turnosSinArqueo: sinArqueo.length,
 
-    // Cobrado menos lo que salió del local. NO es un resultado contable: falta el
-    // costo de la mercadería (el modelo no lo tiene, solo precio de venta), y la
-    // ventana de los cobros es por fecha mientras la de los egresos es por turno.
-    // Sirve para "¿me quedó plata este mes?", no para un balance.
+    // Cobrado menos lo que salió del local. Es un resultado **de caja**: la
+    // mercadería está incluida si se carga como egreso (etiquetas "Insumos" /
+    // "Proveedores"), así que la pregunta "¿me quedó plata este mes?" la contesta
+    // bien.
+    //
+    // Lo que NO es, y por qué no alcanza para "¿gano dinero?":
+    //  - **momento**: la mercadería pesa el día que se COMPRÓ, no el día que se
+    //    vendió. Una compra grande hunde el resultado de esa ventana y regala las
+    //    siguientes; en un mes cerrado se compensa, en un turno no;
+    //  - **atribución**: el egreso no está pegado a ningún producto, así que de acá
+    //    no sale margen por producto ni por combo. Eso pide un costo por variante
+    //    (ver [[Caja]] → Fuera de alcance), no una etiqueta más.
+    //  - y las dos ventanas no son la misma (cobros por fecha, turnos por apertura).
     resultadoAproximado: round(cobrado + egresos + ingresosManuales),
   };
 }

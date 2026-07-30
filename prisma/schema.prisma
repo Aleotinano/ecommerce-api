@@ -719,6 +719,17 @@ model CashCategory {
   position Int                 @default(0)
   isActive Boolean             @default(true)
 
+  // Etiqueta RESERVADA del sistema ("venta", "devolucion"): la usa el enganche con
+  // el libro de cobros para que los movimientos de orden también queden etiquetados
+  // y el resumen por etiqueta cubra el 100% de la plata.
+  //
+  // No se borra, no se desactiva y no se le cambia `applies` —si alguien pudiera,
+  // el próximo cobro de una orden quedaría archivado como gasto o fallaría—, pero SÍ
+  // se puede renombrar: el `label` es texto visible y cada rubro le dice distinto.
+  // Tampoco se ofrece para movimientos manuales: "Venta" significa exactamente
+  // "cobro de una orden".
+  isSystem Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

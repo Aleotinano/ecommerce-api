@@ -7,7 +7,12 @@ import {
   buildArqueo,
   summarizeMovements,
 } from "./cash-register-math.js";
-import { buildSessionXlsx, sessionFileName } from "./cash-register-export.js";
+import {
+  buildPeriodXlsx,
+  buildSessionXlsx,
+  periodFileName,
+  sessionFileName,
+} from "./cash-register-export.js";
 import {
   expiredByMinutes,
   isExpired,
@@ -50,6 +55,27 @@ export const DEFAULT_CASH_CATEGORIES = [
   { key: "ajuste", label: "Ajuste", applies: "BOTH", position: 6 },
 ];
 
+/**
+ * Etiquetas RESERVADAS: las escribe el enganche con el libro de cobros, no una
+ * persona. Existen para que el resumen por etiqueta cubra el **100%** de la plata —
+ * antes los movimientos de orden entraban sin etiqueta y ese eje no sumaba al neto.
+ *
+ * Van separadas por `applies` en vez de una sola con `BOTH` para que el reporte diga
+ * "Venta 850.000 / Devolución −2.000" y no un neto de 848.000, donde la devolución
+ * desaparece.
+ */
+export const SYSTEM_CASH_CATEGORIES = [
+  { key: "venta", label: "Venta", applies: "INCOME", position: 90 },
+  { key: "devolucion", label: "Devolución", applies: "EXPENSE", position: 91 },
+];
+
+/** Qué etiqueta reservada le toca a cada tipo de movimiento de orden. */
+const ORDER_TYPE_TO_CATEGORY = {
+  ORDER_DEPOSIT: "venta",
+  ORDER_PAYMENT: "venta",
+  ORDER_REFUND: "devolucion",
+};
+
 const CATEGORY_FIELDS = {
   id: true,
   key: true,
@@ -57,7 +83,32 @@ const CATEGORY_FIELDS = {
   applies: true,
   position: true,
   isActive: true,
+  isSystem: true,
 };
+
+/**
+ * Las etiquetas reservadas del tenant, creándolas si faltan. Idempotente y
+ * self-healing: un tenant que habilitó la caja antes de que existieran las recibe
+ * igual la primera vez que cobra, sin que nadie corra nada.
+ */
+async function ensureSystemCategories(tenantId, client = prisma) {
+  const rows = [];
+
+  for (const category of SYSTEM_CASH_CATEGORIES) {
+    rows.push(
+      await client.cashCategory.upsert({
+        where: { tenantId_key: { tenantId, key: category.key } },
+        create: { tenantId, ...category, isSystem: true },
+        // No se toca lo que ya existe: el tenant puede haber renombrado "Venta" a
+        // "Ingreso por pedidos", y ese nombre es suyo.
+        update: {},
+        select: CATEGORY_FIELDS,
+      })
+    );
+  }
+
+  return new Map(rows.map((row) => [row.key, row]));
+}
 
 const MOVEMENT_INCLUDE = {
   include: { category: { select: CATEGORY_FIELDS } },
@@ -467,6 +518,46 @@ export const CashRegisterModel = {
     return { buffer, filename: sessionFileName(session) };
   },
 
+  /**
+   * La planilla del PERÍODO: todos los turnos del rango con el detalle completo, para
+   * pasarle el mes al contador de una sola vez.
+   *
+   * Los turnos se toman por `openedAt` y **enteros** (mismo criterio que el
+   * dashboard): el turno noche que cierra a las 2 AM entra completo en el mes en que
+   * empezó, no se parte.
+   */
+  async exportPeriod({ tenantId, from, to }) {
+    await assertEnabled(tenantId);
+
+    const range = dateRange(from, to);
+
+    const sessions = await prisma.cashRegisterSession.findMany({
+      where: { tenantId, ...(range && { openedAt: range }) },
+      orderBy: { openedAt: "asc" },
+      include: {
+        movements: { ...MOVEMENT_INCLUDE, orderBy: { createdAt: "asc" } },
+      },
+    });
+
+    const [config, userNames] = await Promise.all([
+      prisma.tenantConfig.findUnique({
+        where: { tenantId },
+        select: { storeName: true, currency: true },
+      }),
+      resolveUserNames(sessions),
+    ]);
+
+    const buffer = await buildPeriodXlsx({
+      sessions,
+      range: { from: from ?? null, to: to ?? null },
+      storeName: config?.storeName ?? null,
+      currency: config?.currency ?? "ARS",
+      userNames,
+    });
+
+    return { buffer, filename: periodFileName({ from, to }) };
+  },
+
   // ── Movimientos ──────────────────────────────────────────────────────────
 
   /**
@@ -607,6 +698,18 @@ export const CashRegisterModel = {
   async createCategory({ tenantId, key, label, applies = "EXPENSE", position = 0 }) {
     await assertEnabled(tenantId);
 
+    // Las claves reservadas ya existen y son del sistema; que alguien cree otra
+    // "venta" con otra dirección haría ambiguo el reporte.
+    if (SYSTEM_CASH_CATEGORIES.some((category) => category.key === key)) {
+      const error = createError(
+        `"${key}" es una etiqueta reservada del sistema`,
+        "CASH_CATEGORY_RESERVED",
+        400
+      );
+      error.details = { reservadas: SYSTEM_CASH_CATEGORIES.map((c) => c.key) };
+      throw error;
+    }
+
     try {
       return await prisma.cashCategory.create({
         data: { tenantId, key, label, applies, position },
@@ -629,11 +732,24 @@ export const CashRegisterModel = {
 
     const category = await prisma.cashCategory.findFirst({
       where: { id, tenantId },
-      select: { id: true },
+      select: { id: true, key: true, isSystem: true },
     });
 
     if (!category) {
       throw createError("Etiqueta no encontrada", "CASH_CATEGORY_NOT_FOUND", 404);
+    }
+
+    // De una reservada solo se puede cambiar el NOMBRE. Desactivarla o darle vuelta
+    // la dirección rompería el próximo cobro de una orden (o lo archivaría como
+    // gasto); renombrarla es inofensivo y cada rubro le dice distinto.
+    if (category.isSystem && (applies !== undefined || isActive !== undefined)) {
+      const error = createError(
+        "De una etiqueta del sistema solo se puede cambiar el nombre",
+        "CASH_CATEGORY_RESERVED",
+        400
+      );
+      error.details = { etiqueta: category.key, editable: ["label", "position"] };
+      throw error;
     }
 
     return prisma.cashCategory.update({
@@ -659,11 +775,21 @@ export const CashRegisterModel = {
 
     const category = await prisma.cashCategory.findFirst({
       where: { id, tenantId },
-      select: { id: true },
+      select: { id: true, key: true, isSystem: true },
     });
 
     if (!category) {
       throw createError("Etiqueta no encontrada", "CASH_CATEGORY_NOT_FOUND", 404);
+    }
+
+    if (category.isSystem) {
+      const error = createError(
+        "Las etiquetas del sistema no se borran",
+        "CASH_CATEGORY_RESERVED",
+        400
+      );
+      error.details = { etiqueta: category.key };
+      throw error;
     }
 
     const usos = await prisma.cashMovement.count({ where: { categoryId: id } });
@@ -688,7 +814,13 @@ export const CashRegisterModel = {
    * `prisma/set-cash-register.js` al habilitar la caja; idempotente.
    */
   async ensureDefaultCategories({ tenantId }) {
-    const existentes = await prisma.cashCategory.count({ where: { tenantId } });
+    // Las reservadas van siempre: no son parte del "kit de arranque" que el tenant
+    // puede haber tocado, son un requisito del enganche con los cobros.
+    await ensureSystemCategories(tenantId);
+
+    const existentes = await prisma.cashCategory.count({
+      where: { tenantId, isSystem: false },
+    });
 
     if (existentes > 0) return { created: 0, existing: existentes };
 
@@ -742,6 +874,9 @@ export async function recordOrderPayments(
   // qué. Como esto corre dentro de la transacción del caller, el 409 deja la orden
   // SIN el cobro sellado.
   const session = await requireOpenSession(tenantId, tx);
+  // Etiquetas reservadas: así el movimiento de una venta queda etiquetado como
+  // cualquier otro y el resumen por etiqueta cubre toda la plata.
+  const reservadas = await ensureSystemCategories(tenantId, tx);
 
   const data = delCajon.map((payment) => {
     const type = ORDER_KIND_TO_TYPE[payment.kind];
@@ -762,8 +897,7 @@ export async function recordOrderPayments(
       type,
       channel: payment.channel,
       amount: roundMoney(Number(payment.amount)),
-      // Sin etiqueta: un cobro de orden ya se explica por su tipo y su `orderId`.
-      categoryId: null,
+      categoryId: reservadas.get(ORDER_TYPE_TO_CATEGORY[type])?.id ?? null,
       orderId: orden,
       orderPaymentId: payment.id,
       note: `Orden #${orden}`,
@@ -784,14 +918,17 @@ export async function recordOrderPayments(
  * son enteros sin FK —igual que `changedById` en el historial de órdenes—, y en un
  * reporte que va a un contador un "usuario #7" no dice nada.
  */
-async function resolveUserNames(session) {
-  const ids = new Set(
-    [
-      session.openedById,
-      session.closedById,
-      ...(session.movements ?? []).map((movement) => movement.createdById),
-    ].filter((id) => id != null)
-  );
+async function resolveUserNames(sessions) {
+  const ids = new Set();
+
+  for (const session of [].concat(sessions)) {
+    for (const id of [session.openedById, session.closedById]) {
+      if (id != null) ids.add(id);
+    }
+    for (const movement of session.movements ?? []) {
+      if (movement.createdById != null) ids.add(movement.createdById);
+    }
+  }
 
   if (ids.size === 0) return new Map();
 
@@ -824,6 +961,19 @@ async function resolveCategory(tx, { tenantId, categoryId, type }) {
       "CASH_CATEGORY_INACTIVE",
       409
     );
+  }
+
+  // Las reservadas significan exactamente "cobro de una orden": si se pudieran usar
+  // a mano, la cifra de ventas dejaría de tener una orden detrás y el cruce con
+  // Estadísticas (facturado vs cobrado) empezaría a mentir.
+  if (category.isSystem) {
+    const error = createError(
+      "Esa etiqueta es del sistema: la usan los cobros de las órdenes, no se puede elegir a mano",
+      "CASH_CATEGORY_RESERVED",
+      400
+    );
+    error.details = { etiqueta: category.key };
+    throw error;
   }
 
   if (category.applies !== "BOTH" && category.applies !== type) {

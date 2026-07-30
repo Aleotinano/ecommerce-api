@@ -158,7 +158,7 @@ e-commerce-express-1/
 ├── utils/                  # Utilidades varias
 ├── prisma/
 │   ├── schema.prisma       # Modelo de datos
-│   ├── migrations/         # 48 migraciones SQL
+│   ├── migrations/         # 49 migraciones SQL
 │   ├── mesa-dulce/         # Seed del primer tenant real (categorias.js, productos.js, ordenes.js, index.js)
 │   └── seed*.js            # Seeds (base, stats, tenant-config, catalog) + scripts de migración de datos
 ├── generated/prisma/       # Cliente Prisma generado (output custom, fuera de node_modules)
@@ -214,7 +214,7 @@ contraparte manual del webhook de MercadoPago para tenants que cobran en efectiv
 | **OrderItem** | `id`, `orderId`, `productId` (NOT NULL), `variantId?` (nullable solo para líneas COMBO), `quantity`, `price: Float` (snapshot), `note?`, `parentItemId?` (self-relation, árbol combo, `onDelete: Cascade`) | N-1 order (`onDelete: Cascade`), N-1 product, N-1 variant, self `parentItem`/`childItems` | **No** (scope vía Order) |
 | **CashRegisterSession** | `id`, `tenantId`, `status: CashSessionStatus=OPEN`, `openingAmount: Float` (CHECK ≥ 0), `openedById`, `openedAt`, `openingNote?`; cierre (todo null mientras `OPEN`, CHECK de completitud): `closedById?`, `closedAt?`, `closingNote?`, `countedCashAmount?`, `expectedCashAmount?`, `cashDifference?`, `transferTotal?` — **turno de caja física**, no día calendario. Los cuatro totales son un SNAPSHOT del arqueo: no se recalculan nunca | 1-N movements, N-1 tenant (`onDelete: Cascade`) | **Sí** — un solo `OPEN` por tenant, índice único **parcial** solo en la migración |
 | **CashMovement** | `id`, `tenantId`, `sessionId`, `type: CashMovementType`, `channel: PaymentChannel` (CHECK `<> GATEWAY`), `amount: Float` (CHECK > 0; el signo lo da `type`), `categoryId?` (null en los `ORDER_*`), `payee?` (texto libre: a quién se le pagó), `orderId?` (**sin FK**, hecho histórico), `orderPaymentId? @unique` (la fila del libro que lo originó → idempotencia estructural del enganche), `note?`, `createdById?`, `createdAt` | N-1 session (`onDelete: Cascade`), N-1 tenant, N-1 opcional `CashCategory` (`onDelete: Restrict`) | **Sí** |
-| **CashCategory** | `id`, `tenantId`, `key` (slug estable, no editable), `label` (display), `applies: CashCategoryApplies=EXPENSE`, `position=0`, `isActive=true`, `createdAt`, `updatedAt` — catálogo de etiquetas de movimiento **del tenant** (sueldos, insumos, proveedores…), mismo patrón que `TenantAttribute`. Se siembran 7 al habilitar la caja | 1-N movements, N-1 tenant (`onDelete: Cascade`) | **Sí** (`@@unique([tenantId, key])`) |
+| **CashCategory** | `id`, `tenantId`, `key` (slug estable, no editable), `label` (display), `applies: CashCategoryApplies=EXPENSE`, `position=0`, `isActive=true`, `isSystem=false`, `createdAt`, `updatedAt` — catálogo de etiquetas de movimiento **del tenant** (sueldos, insumos, proveedores…), mismo patrón que `TenantAttribute`. Se siembran 7 al habilitar la caja, más 2 **reservadas** (`venta`/`devolucion`, `isSystem`) que usan los movimientos de orden: solo se pueden renombrar, y no se pueden elegir a mano | 1-N movements, N-1 tenant (`onDelete: Cascade`) | **Sí** (`@@unique([tenantId, key])`) |
 | **ContentSuggestion** | `id`, `productId`, `angle: SuggestionAngle`, `status: SuggestionStatus=SUGGESTED`, `source: SuggestionSource=AUTO`, `date @db.Date`, `copy?`, `hashtags: String[]=[]`, `model?`, `generatedAt?`, `createdAt`, `updatedAt` | N-1 tenant, N-1 product, 1-N images (`SuggestionImage`) | **Sí** |
 | **SuggestionImage** | `id`, `suggestionId`, `imageUrl`, `imagePublicId`, `options: Json={}` (`{ imagen, infoEnPantalla, precioEnPantalla }`), `model?`, `prompt`, `chosen=false`, `createdAt` | N-1 `ContentSuggestion` (`onDelete: Cascade`), N-1 tenant | **Sí** |
 | **TenantPageSpec** | `id`, `tenantId @unique`, `draftSpec: Json?`, `publishedSpec: Json?`, `version=0`, `publishedAt?`, `createdAt`, `updatedAt` — spec del page builder (borrador editable + publicado que sirve el storefront) | 1-1 `Tenant` (`onDelete: Cascade`) | **Sí** (`tenantId @unique`) |
@@ -299,7 +299,7 @@ contraparte manual del webhook de MercadoPago para tenants que cobran en efectiv
 
 ### Migraciones
 
-48 migraciones en `prisma/migrations/` (cronológicas):
+49 migraciones en `prisma/migrations/` (cronológicas):
 
 `..._initial_multi_tenant`, `..._email_global_unique`, `..._email_verification`,
 `..._add_tenant_config`, `..._add_product_price`, `..._expand_roles_storefront`,
@@ -367,7 +367,16 @@ comportamiento anterior, así que ningún tenant existente cambia),
 `TenantConfig.cashRegisterEnabled=false`. Aditiva, sin backfill. Lo agregado **a mano** al SQL
 generado: el índice único **parcial** de un solo turno `OPEN` por tenant, y cuatro CHECK —
 `amount > 0`, `channel <> 'GATEWAY'`, `openingAmount >= 0`, y la completitud del cierre
-`status=CLOSED ⇔ closedAt & countedCashAmount`).
+`status=CLOSED ⇔ closedAt & countedCashAmount`),
+`20260730044307_cash_session_schedule` (turnos con horario: `TenantConfig.cashSchedule` JSON, enum
+`CashSessionTrigger`, y `trigger`/`label`/`expiresAt`/`closedWithoutCount` en `CashRegisterSession`. El
+CHECK de completitud del cierre se **reemplaza** para admitir el turno cerrado sin conteo — sigue
+prohibiendo el caso que importa, un `CLOSED` sin arqueo y sin declararlo),
+`20260730044550_cash_session_auto_opener` (`CashRegisterSession.openedById` pasa a nullable: una
+apertura automática no tiene persona detrás),
+`20260730053400_cash_system_categories` (`CashCategory.isSystem` + **backfill**: siembra las etiquetas
+reservadas `venta`/`devolucion` por tenant y les asigna los movimientos de orden que ya existían, que
+hasta acá entraban con `categoryId NULL` y dejaban las ventas afuera del eje de etiquetas).
 
 ---
 
@@ -607,6 +616,7 @@ rechaza.
 | GET | `/cash-register` | `query: cashSessionQuery` | `getAll` → `getAll` (historial, `limit` ≤ 100) |
 | GET | `/cash-register/:id` | `params: validateId` | `getById` → `getById` |
 | GET | `/cash-register/:id/export` | `params: validateId` | `exportSession` → `exportSession` — responde un `.xlsx` binario (`Content-Disposition: attachment`), no JSON |
+| GET | `/cash-register/export` | `query: cashSummaryQuery` | `exportPeriod` → `exportPeriod` — el período entero en `.xlsx` (un renglón por turno + todos los movimientos) |
 
 ### `/content-suggestions` (admin) — `routes/content-suggestions.js`
 

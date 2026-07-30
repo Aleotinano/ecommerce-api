@@ -93,12 +93,7 @@ export class CashRegisterController {
     }
   }
 
-  /**
-   * Descarga del turno en Excel. Se responde el buffer completo y no un stream:
-   * un turno son decenas de filas, no un dataset — y así un error al armar la
-   * planilla sale por el `errorHandler` normal en vez de cortar una respuesta a
-   * medio enviar.
-   */
+  /** Descarga de un turno en Excel. */
   static async exportSession(req, res, next) {
     try {
       const { buffer, filename } = await CashRegisterModel.exportSession({
@@ -106,19 +101,42 @@ export class CashRegisterController {
         id: req.params.id,
       });
 
-      res.setHeader(
-        "Content-Type",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-      );
-      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-      // El nombre del archivo lo necesita el front para mostrarlo (fetch + blob no
-      // lee Content-Disposition sin exponerlo).
-      res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
-
-      return res.send(Buffer.from(buffer));
+      return CashRegisterController.sendXlsx(res, buffer, filename);
     } catch (error) {
       next(error);
     }
+  }
+
+  /** El mes entero en una planilla: todos los turnos del rango con su detalle. */
+  static async exportPeriod(req, res, next) {
+    try {
+      const { buffer, filename } = await CashRegisterModel.exportPeriod({
+        tenantId: req.tenantId,
+        ...req.search,
+      });
+
+      return CashRegisterController.sendXlsx(res, buffer, filename);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Responde un `.xlsx`. Se manda el buffer completo y no un stream: son decenas o
+   * unos miles de filas, no un dataset — y así un error al armar la planilla sale
+   * por el `errorHandler` normal en vez de cortar una respuesta a medio enviar.
+   */
+  static sendXlsx(res, buffer, filename) {
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    // El nombre del archivo lo necesita el front para mostrarlo (fetch + blob no
+    // lee Content-Disposition sin exponerlo).
+    res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+
+    return res.send(Buffer.from(buffer));
   }
 
   // ── Etiquetas ──────────────────────────────────────────────────────────────

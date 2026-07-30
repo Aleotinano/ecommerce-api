@@ -193,14 +193,21 @@ describe("un movimiento por fila del libro", () => {
 
     const [movimiento] = await movementsOf(order.id);
 
+    const venta = await prisma.cashCategory.findFirst({
+      where: { tenantId: acme.id, key: "venta" },
+    });
+
     expect(movimiento).toMatchObject({
       sessionId: session.id,
       type: "ORDER_PAYMENT",
       channel: "CASH",
       amount: order.total,
-      categoryId: null,
+      // Etiqueta reservada: el movimiento de una venta queda etiquetado como
+      // cualquier otro, así el resumen por etiqueta cubre toda la plata.
+      categoryId: venta.id,
       createdById: adminId,
     });
+    expect(venta.isSystem).toBe(true);
     expect(movimiento.orderPaymentId).not.toBeNull();
     expect(movimiento.note).toBe(`Orden #${order.id}`);
 
@@ -341,7 +348,7 @@ describe("un movimiento por fila del libro", () => {
     expect(current.totals.expectedCashAmount).toBe(0);
   });
 
-  it("los movimientos de órdenes se leen por tipo, no por etiqueta", async () => {
+  it("las ventas y los egresos conviven en el mismo eje de etiquetas", async () => {
     await abrirCaja(0);
     const order = await checkout({ paymentMethod: "CASH" });
 
@@ -368,8 +375,16 @@ describe("un movimiento por fila del libro", () => {
 
     expect(resumen.byType.ORDER_PAYMENT).toBe(order.total);
     expect(resumen.byCategory.insumos.total).toBe(-500);
-    // La venta no entra en ninguna etiqueta: no tiene por qué.
-    expect(Object.keys(resumen.byCategory)).toEqual(["insumos"]);
+    // La venta también tiene etiqueta, así que el eje por etiqueta cubre TODA la
+    // plata y su suma coincide con el neto — antes las ventas quedaban afuera.
+    expect(resumen.byCategory.venta.total).toBe(order.total);
+
+    const sumaEtiquetas = Object.values(resumen.byCategory).reduce(
+      (total, bucket) => total + bucket.total,
+      0
+    );
+    const neto = Object.values(resumen.byType).reduce((total, value) => total + value, 0);
+    expect(sumaEtiquetas).toBe(neto);
   });
 });
 

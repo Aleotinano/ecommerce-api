@@ -412,9 +412,19 @@ describe("catálogo de etiquetas", () => {
     const res = await request(app).get("/cash-register/categories").set("Cookie", acmeCookie);
 
     expect(res.status).toBe(200);
-    expect(res.body.categories.map((c) => c.key)).toEqual(
-      DEFAULT_CASH_CATEGORIES.map((c) => c.key)
-    );
+
+    const propias = res.body.categories.filter((c) => !c.isSystem).map((c) => c.key);
+    expect(propias).toEqual(DEFAULT_CASH_CATEGORIES.map((c) => c.key));
+  });
+
+  it("las etiquetas reservadas del sistema vienen marcadas y con su dirección", async () => {
+    const res = await request(app).get("/cash-register/categories").set("Cookie", acmeCookie);
+    const sistema = res.body.categories.filter((c) => c.isSystem);
+
+    expect(sistema.map((c) => [c.key, c.applies])).toEqual([
+      ["venta", "INCOME"],
+      ["devolucion", "EXPENSE"],
+    ]);
   });
 
   it("ensureDefaultCategories es idempotente", async () => {
@@ -493,6 +503,68 @@ describe("catálogo de etiquetas", () => {
     expect(
       await prisma.cashCategory.findUnique({ where: { id: categoria.id } })
     ).toBeNull();
+  });
+
+  it("una etiqueta reservada no se puede usar a mano", async () => {
+    // "Venta" significa exactamente "cobro de una orden": si se pudiera elegir a
+    // mano, la cifra de ventas dejaría de tener una orden detrás.
+    const venta = await prisma.cashCategory.findFirst({
+      where: { tenantId: acme.id, key: "venta" },
+    });
+
+    const res = await request(app)
+      .post("/cash-register/movements")
+      .set("Cookie", acmeCookie)
+      .send({ type: "INCOME", channel: "CASH", amount: 100, categoryId: venta.id });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("CASH_CATEGORY_RESERVED");
+  });
+
+  it("una etiqueta reservada se puede RENOMBRAR pero no desactivar ni dar vuelta", async () => {
+    const venta = await prisma.cashCategory.findFirst({
+      where: { tenantId: acme.id, key: "venta" },
+    });
+
+    // El nombre visible es del tenant: cada rubro le dice distinto.
+    const renombrada = await request(app)
+      .patch(`/cash-register/categories/${venta.id}`)
+      .set("Cookie", acmeCookie)
+      .send({ label: "Ingreso por pedidos" });
+
+    expect(renombrada.status).toBe(200);
+    expect(renombrada.body.category.label).toBe("Ingreso por pedidos");
+    expect(renombrada.body.category.key).toBe("venta");
+
+    // Desactivarla o volverla egreso rompería el próximo cobro de una orden.
+    for (const body of [{ isActive: false }, { applies: "EXPENSE" }]) {
+      const res = await request(app)
+        .patch(`/cash-register/categories/${venta.id}`)
+        .set("Cookie", acmeCookie)
+        .send(body);
+
+      expect(res.status, JSON.stringify(body)).toBe(400);
+      expect(res.body.error.code).toBe("CASH_CATEGORY_RESERVED");
+    }
+
+    const borrada = await request(app)
+      .delete(`/cash-register/categories/${venta.id}`)
+      .set("Cookie", acmeCookie);
+
+    expect(borrada.status).toBe(400);
+    expect(borrada.body.error.code).toBe("CASH_CATEGORY_RESERVED");
+
+    await prisma.cashCategory.update({ where: { id: venta.id }, data: { label: "Venta" } });
+  });
+
+  it("no se puede crear una etiqueta con una clave reservada", async () => {
+    const res = await request(app)
+      .post("/cash-register/categories")
+      .set("Cookie", acmeCookie)
+      .send({ key: "venta", label: "Mi venta", applies: "EXPENSE" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("CASH_CATEGORY_RESERVED");
   });
 
   it("una etiqueta con movimientos NO se borra: se desactiva", async () => {
@@ -707,6 +779,130 @@ describe("exportación a Excel", () => {
 
   // El scoping por tenant no se re-testea acá: `exportSession` va por `getById`,
   // que ya lo cubre en "aislamiento entre tenants".
+});
+
+describe("exportación del período", () => {
+  it("trae todos los turnos del rango con su detalle y los totales", async () => {
+    // "Mandame el Excel de julio": antes había que bajar turno por turno.
+    const { buffer, filename } = await CashRegisterModel.exportPeriod({
+      tenantId: acme.id,
+    });
+
+    expect(filename).toBe("caja-todo_todo.xlsx");
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer);
+
+    expect(workbook.worksheets.map((s) => s.name)).toEqual([
+      "Turnos",
+      "Movimientos",
+      "Resumen",
+    ]);
+
+    const turnos = await prisma.cashRegisterSession.count({ where: { tenantId: acme.id } });
+    const movimientos = await prisma.cashMovement.count({ where: { tenantId: acme.id } });
+
+    // +1 por el encabezado en cada hoja.
+    expect(workbook.getWorksheet("Turnos").rowCount).toBe(turnos + 1);
+    expect(workbook.getWorksheet("Movimientos").rowCount).toBe(movimientos + 1);
+  });
+
+  it("un rango sin turnos devuelve la planilla vacía, no un error", async () => {
+    // Fechas LOCALES, que es lo que produce el schema a partir de "2020-01-01" /
+    // "2020-01-31" (ver `dayBoundary`). Un `new Date("2020-01-01")` sería medianoche
+    // UTC y con el server en UTC−3 caería en el 31 de diciembre.
+    const { buffer, filename } = await CashRegisterModel.exportPeriod({
+      tenantId: acme.id,
+      from: new Date(2020, 0, 1),
+      to: new Date(2020, 0, 31, 23, 59, 59, 999),
+    });
+
+    expect(filename).toBe("caja-2020-01-01_2020-01-31.xlsx");
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer);
+
+    expect(workbook.getWorksheet("Turnos").rowCount).toBe(1); // solo el encabezado
+  });
+
+  it("por HTTP responde un .xlsx con el rango en el nombre", async () => {
+    const res = await request(app)
+      .get("/cash-register/export?from=2026-07-01&to=2026-07-31")
+      .set("Cookie", acmeCookie)
+      .buffer()
+      .parse((res, cb) => {
+        const chunks = [];
+        res.on("data", (chunk) => chunks.push(chunk));
+        res.on("end", () => cb(null, Buffer.concat(chunks)));
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-disposition"]).toContain("caja-2026-07-01_2026-07-31.xlsx");
+    expect(res.body.slice(0, 2).toString()).toBe("PK");
+  });
+
+  it("un rango YYYY-MM-DD toma el día local completo, con el último día adentro", async () => {
+    // `z.coerce.date()` parsearía "2026-07-31" como medianoche UTC y con el server en
+    // UTC−3 el 31 quedaba afuera del "Excel de julio". Un día calendario no es un
+    // instante: el `from` va al arranque del día local y el `to` al final.
+    const hoy = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    const dia = `${hoy.getFullYear()}-${pad(hoy.getMonth() + 1)}-${pad(hoy.getDate())}`;
+
+    const res = await request(app)
+      .get(`/cash-register?from=${dia}&to=${dia}`)
+      .set("Cookie", acmeCookie);
+
+    expect(res.status).toBe(200);
+    // Los turnos de los bloques anteriores se abrieron hoy: si el rango de un solo
+    // día no los incluyera, el filtro estaría corrido.
+    expect(res.body.sessions.length).toBeGreaterThan(0);
+
+    const abiertoHoy = await prisma.cashRegisterSession.count({
+      where: {
+        tenantId: acme.id,
+        openedAt: {
+          gte: new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()),
+          lte: new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 23, 59, 59, 999),
+        },
+      },
+    });
+    expect(res.body.total).toBe(abiertoHoy);
+  });
+
+  it("el turno cerrado sin conteo dice SIN CONTEO en la hoja de turnos", async () => {
+    const turno = await prisma.cashRegisterSession.create({
+      data: {
+        tenantId: acme.id,
+        openingAmount: 300,
+        openedById: null,
+        trigger: "AUTO",
+        label: "Vencido",
+        status: "CLOSED",
+        closedAt: new Date(),
+        closedWithoutCount: true,
+        expectedCashAmount: 300,
+        transferTotal: 0,
+      },
+    });
+
+    const { buffer } = await CashRegisterModel.exportPeriod({ tenantId: acme.id });
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer);
+
+    let fila = null;
+    workbook.getWorksheet("Turnos").eachRow((row) => {
+      if (row.getCell(1).value === turno.id) fila = row;
+    });
+
+    expect(fila).not.toBeNull();
+    expect(fila.getCell(5).value).toBe("automático");
+    expect(fila.getCell(6).value).toBe("sistema (vencido)");
+    expect(fila.getCell(9).value).toBe("SIN CONTEO");
+    expect(fila.getCell(10).value).toBe("—");
+
+    await prisma.cashRegisterSession.delete({ where: { id: turno.id } });
+  });
 });
 
 describe("aislamiento entre tenants", () => {
