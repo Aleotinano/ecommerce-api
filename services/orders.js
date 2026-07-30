@@ -53,6 +53,11 @@ const orderItemsInclude = {
     // estimar desde los sellos. Son pocas filas por orden — el costo es marginal
     // al lado de tener que recordar incluirlo en cada query.
     payments: { orderBy: { confirmedAt: "asc" } },
+    // Solo el CONTEO de comprobantes vivos, no las filas: alcanza para que el
+    // motor diga "hay 2 comprobantes sin revisar" en el blocker de transferencia, y
+    // las filas (con su URL firmada, que hay que emitir de nuevo cada vez) solo se
+    // traen cuando alguien pide el detalle. Ver services/order-receipts.js.
+    _count: { select: { receipts: { where: { deletedAt: null } } } },
   },
 };
 
@@ -341,8 +346,19 @@ async function notifyAutoAdvance(orderId, status) {
  *                            Puede venir vacío: confirmar algo ya cobrado no crea
  *                            una fila duplicada, pero igual sella y reevalúa.
  * @param {object} [p.extraData] campos de la orden a sellar en el mismo update
+ * @param {number[]} [p.linkReceiptIds] comprobantes que respaldan ESTE cobro (ver
+ *                            services/order-receipts.js). Se enlazan adentro de la
+ *                            misma transacción: "lo cobré" y "esto es lo que miré
+ *                            para darlo por cobrado" entran juntos o no entran.
  */
-async function applyPayments({ tenantId, order, entries = [], actorId, extraData = {} }) {
+async function applyPayments({
+  tenantId,
+  order,
+  entries = [],
+  actorId,
+  extraData = {},
+  linkReceiptIds = [],
+}) {
   const orderId = order.id;
 
   // Apertura automática ANTES de la transacción, no adentro: si dos cobros
@@ -376,6 +392,18 @@ async function applyPayments({ tenantId, order, entries = [], actorId, extraData
     // abierto esto lanza, y el cobro NO queda sellado.
     if (creadas.length) {
       await recordOrderPayments(tx, { tenantId, orderId, payments: creadas, actorId });
+    }
+
+    // El comprobante queda apuntando a la fila del libro que respalda. Si el monto
+    // dio 0 no se creó ninguna fila (la transferencia ya estaba cubierta por la
+    // seña, por ejemplo): ahí el comprobante se queda colgado de la ORDEN con
+    // `orderPaymentId: null`, que es lo correcto — hay evidencia, pero no hay un
+    // cobro nuevo al cual atarla.
+    if (creadas.length && linkReceiptIds.length) {
+      await tx.orderReceipt.updateMany({
+        where: { id: { in: linkReceiptIds }, tenantId, orderId },
+        data: { orderPaymentId: creadas[0].id },
+      });
     }
 
     const payments = await tx.orderPayment.findMany({ where: { orderId } });
@@ -1385,10 +1413,16 @@ export const OrderModel = {
    * cosa —el cliente transfirió una parte— se manda `amount` y manda ese número:
    * quien confirma está mirando el extracto bancario, el software no.
    *
+   * Acepta los `receiptIds` del comprobante que se está mirando (ver
+   * [[Comprobantes]] en services/order-receipts.js): quedan enlazados a la fila
+   * del libro que genera esta confirmación. Subir el comprobante NO confirma —eso
+   * lo sigue haciendo una persona—, pero confirmar sí puede registrar qué miró.
+   *
    * @param {number} [p.amount] monto realmente recibido; por defecto, lo que falte
    *   por transferencia
+   * @param {number[]} [p.receiptIds] comprobantes que respaldan esta confirmación
    */
-  async confirmTransfer({ tenantId, orderId, confirmedById, amount }) {
+  async confirmTransfer({ tenantId, orderId, confirmedById, amount, receiptIds = [] }) {
     const order = await prisma.order.findFirst({
       where: { id: orderId, tenantId },
       include: { payments: true },
@@ -1432,6 +1466,7 @@ export const OrderModel = {
         transferConfirmedById: confirmedById,
         transferConfirmedAt: new Date(),
       },
+      linkReceiptIds: receiptIds,
     });
   },
 

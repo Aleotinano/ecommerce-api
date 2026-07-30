@@ -275,6 +275,27 @@ export const orderConfirmTransfer = z.object({
     .number({ invalid_type_error: "amount debe ser un número" })
     .positive("amount debe ser mayor a 0")
     .optional(),
+  // Comprobantes que quien confirma está mirando (ver orderReceiptCreate). Se
+  // enlazan a la fila del libro que genera esta confirmación. Sirven tanto para
+  // los ya cargados antes como para el que viaja en este mismo request multipart.
+  receiptIds: z
+    .array(z.coerce.number().int().positive("receiptIds debe traer ids válidos"))
+    .optional(),
+});
+
+// Comprobante de transferencia adjunto a la orden: el archivo va como multipart
+// (campo `receipt`), acá solo viaja la nota opcional. Subirlo NO confirma nada —
+// es evidencia; la confirmación la hace una persona mirando la cuenta.
+export const orderReceiptCreate = z.object({
+  note: paymentNote,
+});
+
+// Params de las rutas anidadas de comprobantes. NO se puede reusar `validateId`:
+// `validate` pisa `req.params` con lo que devuelve Zod, y como Zod descarta las
+// claves que no declara, el `receiptId` se perdería antes de llegar al controller.
+export const orderReceiptParams = z.object({
+  id: z.coerce.number().int().positive("ID inválido"),
+  receiptId: z.coerce.number().int().positive("ID de comprobante inválido"),
 });
 
 // Cobro total dado por bueno a mano (mueve paymentStatus a PAID_IN_FULL). Es la

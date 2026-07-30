@@ -149,6 +149,7 @@ e-commerce-express-1/
 │   ├── cash-register-export.js # El turno a .xlsx (exceljs); sin DB, recibe el turno y devuelve buffer
 │   └── cash-register-schedule.js # Turnos con horario (puro): qué turno es ahora, vencimiento, gracia
 ├── lib/                    # Infra/integraciones: prisma, redis, cache, logger, mailer, cloudinary, tokens, slug, imageManager, crypto (AES-256-GCM), phone (normalización E.164), whatsapp-link (deep-link wa.me del pedido — módulo puro, NO es el bot)
+│   ├── storage/            # Puerto de archivos PRIVADOS (comprobantes): index.js (putFile/signedUrl/deleteFile), cloudinary.js (adaptador), constants.js. Distinto de imageManager, que sube imágenes públicas de catálogo
 │   └── llm/                # Cliente LLM: index.js, prompt.js, parse.js, fallback.js
 │       ├── providers/      # anthropic.js, gemini.js (fetch directo, sin SDK)
 │       └── tools/          # schema.js — specs de tools del agente (TOOL_DEFINITIONS, AUTHENTICATED_TOOLS, CHANNEL_ORDER_TOOLS)
@@ -156,9 +157,10 @@ e-commerce-express-1/
 ├── schemas/                # Schemas zod (env, auth, product, order, combo, chat, page-spec, stats, content-suggestion, etc.)
 ├── helpers/                # error.js (createError), password.js (argon2), price.js (getProductPrice/resolveProductStock), etc.
 ├── utils/                  # Utilidades varias
+├── scripts/                # Tareas de mantenimiento para el cron del HOST (no hay scheduler en el proceso): purge-receipts.js
 ├── prisma/
 │   ├── schema.prisma       # Modelo de datos
-│   ├── migrations/         # 49 migraciones SQL
+│   ├── migrations/         # 50 migraciones SQL
 │   ├── mesa-dulce/         # Seed del primer tenant real (categorias.js, productos.js, ordenes.js, index.js)
 │   └── seed*.js            # Seeds (base, stats, tenant-config, catalog) + scripts de migración de datos
 ├── generated/prisma/       # Cliente Prisma generado (output custom, fuera de node_modules)
@@ -211,6 +213,7 @@ Generador con `output = "../generated/prisma"`.
 contraparte manual del webhook de MercadoPago para tenants que cobran en efectivo/transferencia); **entrega**: `fulfillmentMethod: FulfillmentMethod?` (`DELIVERY`/`PICKUP`), `addressText?`, `addressLat?`, `addressLng?`, `addressDetails?`, `addressMapsUrl?` (link de Google Maps, solo se valida el host); **procedencia**: `origin: OrderOrigin=ADMIN`, `contactPhone?`, `contactName?`, `reviewedById?`, `reviewedAt?`; **seña**: `requiresDeposit=false`, `depositAmount?` (snapshot), `depositConfirmedById?`, `depositConfirmedAt?`; `creationContext?`, `createdAt`, `updatedAt` | N-1 user, N-1 tenant, 1-N orderItems, 1-N statusHistory | **Sí** |
 | **OrderStatusHistory** | `id`, `orderId`, `fromStatus?`, `toStatus`, `note?`, `changedById?`, `trigger: StatusTrigger=MANUAL` (quién lo movió: persona, motor o webhook), `createdAt` | N-1 order (`onDelete: Cascade`) | **No** (scope vía Order) |
 | **OrderPayment** | `id`, `tenantId`, `orderId`, `kind: OrderPaymentKind`, `channel: PaymentChannel`, `amount: Float` (siempre > 0, CHECK en SQL), `note?`, `confirmedById?`, `confirmedAt`, `createdAt` — **libro de cobros: una fila por cobro**. `Order.paymentStatus` se deriva de estas filas (`derivePaymentStatus`, `services/order-state.js`) y la columna queda como cache para poder filtrar por SQL | N-1 order (`onDelete: Cascade`), N-1 tenant | **Sí** |
+| **OrderReceipt** | `id`, `tenantId`, `orderId`, `orderPaymentId?` (**null hasta que alguien confirma con ese archivo**), `storageProvider="cloudinary"`, `publicId`, `resourceType` (`image`/`raw`), `deliveryType` (`authenticated`), `format?`, `mimeType`, `bytes`, `originalName?`, `note?`, `uploadedById?`, `createdAt`, `deletedAt?`/`deletedById?` (soft-delete) — **comprobante de transferencia**. No hay columna de URL a propósito: se emite firmada y con vencimiento en cada respuesta (`lib/storage`) | N-1 order (`onDelete: Cascade`), N-1 opcional orderPayment (`onDelete: SetNull`), N-1 tenant | **Sí** |
 | **OrderItem** | `id`, `orderId`, `productId` (NOT NULL), `variantId?` (nullable solo para líneas COMBO), `quantity`, `price: Float` (snapshot), `note?`, `parentItemId?` (self-relation, árbol combo, `onDelete: Cascade`) | N-1 order (`onDelete: Cascade`), N-1 product, N-1 variant, self `parentItem`/`childItems` | **No** (scope vía Order) |
 | **CashRegisterSession** | `id`, `tenantId`, `status: CashSessionStatus=OPEN`, `openingAmount: Float` (CHECK ≥ 0), `openedById`, `openedAt`, `openingNote?`; cierre (todo null mientras `OPEN`, CHECK de completitud): `closedById?`, `closedAt?`, `closingNote?`, `countedCashAmount?`, `expectedCashAmount?`, `cashDifference?`, `transferTotal?` — **turno de caja física**, no día calendario. Los cuatro totales son un SNAPSHOT del arqueo: no se recalculan nunca | 1-N movements, N-1 tenant (`onDelete: Cascade`) | **Sí** — un solo `OPEN` por tenant, índice único **parcial** solo en la migración |
 | **CashMovement** | `id`, `tenantId`, `sessionId`, `type: CashMovementType`, `channel: PaymentChannel` (CHECK `<> GATEWAY`), `amount: Float` (CHECK > 0; el signo lo da `type`), `categoryId?` (null en los `ORDER_*`), `payee?` (texto libre: a quién se le pagó), `orderId?` (**sin FK**, hecho histórico), `orderPaymentId? @unique` (la fila del libro que lo originó → idempotencia estructural del enganche), `note?`, `createdById?`, `createdAt` | N-1 session (`onDelete: Cascade`), N-1 tenant, N-1 opcional `CashCategory` (`onDelete: Restrict`) | **Sí** |
@@ -376,7 +379,9 @@ prohibiendo el caso que importa, un `CLOSED` sin arqueo y sin declararlo),
 apertura automática no tiene persona detrás),
 `20260730053400_cash_system_categories` (`CashCategory.isSystem` + **backfill**: siembra las etiquetas
 reservadas `venta`/`devolucion` por tenant y les asigna los movimientos de orden que ya existían, que
-hasta acá entraban con `categoryId NULL` y dejaban las ventas afuera del eje de etiquetas).
+hasta acá entraban con `categoryId NULL` y dejaban las ventas afuera del eje de etiquetas),
+`20260730185126_order_receipts` (comprobantes de transferencia: tabla `OrderReceipt` + índices + FKs.
+Aditiva y sin backfill — no hay comprobantes previos que convertir).
 
 ---
 
@@ -490,11 +495,14 @@ Convenciones de middleware citadas: `verifyToken` (cookie admin), `requireRole([
 | PATCH | `/orders/:id` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params,body)` | `OrderController.update` → `OrderModel.updateOrderStatus` (transiciones y precondiciones: `services/order-state.js`) |
 | POST | `/orders/:id/review` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params, body: orderReview)` | `OrderController.review` → `OrderModel.reviewOrder` (marca revisado un pedido BOT o STORE; corrección inline opcional de cantidades/notas y de los datos de entrega/pago. **Puede dejar la orden ya en `PROCESSING`**: avance automático) |
 | POST | `/orders/:id/confirm-deposit` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params, body: orderConfirmDeposit)` | `OrderController.confirmDeposit` → `OrderModel.confirmDeposit` (`paymentStatus → DEPOSIT_PAID`) |
-| POST | `/orders/:id/confirm-transfer` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params, body: orderConfirmTransfer)` | `OrderController.confirmTransfer` → `OrderModel.confirmTransfer` (sella `transferConfirmedById`/`At`) |
+| POST | `/orders/:id/confirm-transfer` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `uploadReceipt`, `normalizeMultipartBody`, `validate(params, body: orderConfirmTransfer)` | `OrderController.confirmTransfer` → `OrderModel.confirmTransfer` (sella `transferConfirmedById`/`At`; acepta el comprobante en el mismo multipart y lo enlaza a la fila del libro) |
 | POST | `/orders/:id/confirm-payment` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params, body: orderConfirmPayment)` | `OrderController.confirmPayment` → `OrderModel.confirmPayment` (`paymentStatus → PAID_IN_FULL`; solo desde `PENDING`/`DEPOSIT_PAID`) |
 
 | POST | `/orders/:id/payments` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params, body: orderPaymentCreate)` | `OrderController.registerPayment` → `OrderModel.registerPayment` (alta en el libro de cobros: `{ kind, channel, amount, note? }`) |
 | GET | `/orders/:id/payments` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params)` | `OrderController.getPayments` → `OrderModel.getPayments` (libro + resumen + pendiente por vía) |
+| POST | `/orders/:id/receipts` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `uploadReceipt`, `normalizeMultipartBody`, `validate(params, body: orderReceiptCreate)` | `OrderController.addReceipt` → `OrderReceiptModel.addReceipt` (comprobante de transferencia, imagen o PDF. **No confirma nada**) |
+| GET | `/orders/:id/receipts` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(params)` | `OrderController.getReceipts` → `OrderReceiptModel.listReceipts` (URL firmada con vencimiento, emitida en cada respuesta) |
+| DELETE | `/orders/:id/receipts/:receiptId` | `verifyToken`, `requireRole(["ADMIN"])`, `validate(params: orderReceiptParams)` | `OrderController.removeReceipt` → `OrderReceiptModel.removeReceipt` (borra del proveedor + soft-delete) |
 
 > Las tres confirmaciones de cobro **no mueven `status` por sí mismas**, pero desde 2026-07-29 pueden
 > destrabar el avance automático a `PROCESSING` (`applyAutoAdvance`) si con ese cobro la orden queda
@@ -835,6 +843,12 @@ más el `WHATSAPP_VERIFY_TOKEN` del handshake inicial.
   `signedAmount`, `summarizeMovements`, `buildArqueo`), igual que `order-state.js`: se testea sin base.
   Y la planilla en `services/cash-register-export.js`, que tampoco toca la base: recibe el turno
   cargado y devuelve un buffer `.xlsx`. Ver [[Caja]].
+- **Comprobantes aparte del servicio de órdenes:** `services/order-receipts.js` exporta
+  `OrderReceiptModel` (`addReceipt`, `listReceipts`, `removeReceipt`, `purgeExpired`) y habla con el
+  proveedor **solo** a través del puerto `lib/storage/`. Está fuera de `services/orders.js` por
+  tamaño (aquel ya pasa las 1400 líneas); el único punto de contacto es el parámetro
+  `linkReceiptIds` de `applyPayments`, que enlaza el comprobante a la fila del libro dentro de la
+  misma transacción. Ver [[Órdenes]] §Comprobantes de transferencia.
 - **Excepción a la convención `XModel`:** `services/combos.js` no exporta un modelo, sino una
   única función pura `validateComboSelection({ tx, tenantId, comboProduct, selection,
   checkStock })`, compartida por `services/cart.js` (`CartModel.addCombo`) y
@@ -1076,6 +1090,21 @@ docs asumen **Next.js**) debería consumir esta API:
   solo expone `CLOUDINARY_FOLDER`. `lib/cloudinary.js` lee las credenciales **directo de
   `process.env`** (no pasa por `DEFAULTS`). Funciona, pero rompe la convención de "toda la
   config pasa por `config.js`".
+- **Cloudinary es un singleton global y el modelo de negocio pide una cuenta por cliente.**
+  `lib/cloudinary.js` llama `cloudinary.config()` con `process.env` **al importarse**: no hay ningún
+  camino por el que dos tenants usen cuentas distintas en el mismo proceso. Como el deploy es una
+  instancia multi-tenant única y la intención es que cada cliente de producción conecte **sus
+  propias** cuentas de servicios externos, esto es una restricción real, no teórica. El refactor está
+  acotado —8 call sites, todos vía `lib/imageManager.js`— pero arrastra secretos cifrados en reposo,
+  una factory con cache por `tenantId` y decidir qué pasa con un tenant sin credenciales cargadas.
+  Mitigación parcial ya hecha (2026-07-30): el puerto `lib/storage/` recibe `tenantId` en `putFile` y
+  guarda los comprobantes en `{folder}/tenants/{tenantId}/receipts`, así el día que se implemente el
+  cambio queda contenido en el adaptador y la separación de archivos ya existe.
+- **La retención de comprobantes depende de un cron externo.** `pnpm receipts:purge`
+  (`scripts/purge-receipts.js`) borra los comprobantes de más de 12 meses, pero **no hay scheduler en
+  el proceso** que lo dispare — es deliberado (ver `services/cash-register-schedule.js`), a costa de
+  que si nadie lo engancha al crontab del host la retención no ocurre. Misma clase de dependencia
+  externa que Postgres, que tampoco está en el `docker-compose.yml`.
 - **Archivo duplicado de Cloudinary.** Conviven `lib/cloudinary.js` y `lib/cloudinary.ts`.
   El runtime ESM usa el `.js`; el `.ts` no se ejecuta como parte de la app.
 - **`datasource db` sin `url` en el schema.** La conexión va por `@prisma/adapter-pg`

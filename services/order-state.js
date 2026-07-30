@@ -251,8 +251,21 @@ function moneyBlocker(order, payment) {
   return {
     code: "TRANSFER_NOT_CONFIRMED",
     message: "La transferencia debe estar confirmada antes de producir",
-    details: { esperado, cobrado },
+    // `comprobantes` distingue las dos situaciones que antes se veían igual: "el
+    // cliente todavía no mandó nada" y "hay un comprobante cargado esperando que
+    // alguien lo mire". Como el comprobante no confirma por sí solo, este es el
+    // único lugar donde el panel se entera de que hay algo para revisar.
+    details: { esperado, cobrado, comprobantes: receiptCount(order) },
   };
+}
+
+/**
+ * Comprobantes vivos de la orden. Sale del `_count` del include compartido de
+ * services/orders.js; si la query no lo trajo da 0, igual que el resto del módulo,
+ * que nunca inventa datos que no le pasaron.
+ */
+function receiptCount(order) {
+  return order?._count?.receipts ?? 0;
 }
 
 /**

@@ -112,6 +112,10 @@ export async function seedTenants() {
   await prisma.cartItem.deleteMany();
   await prisma.cart.deleteMany();
   await prisma.orderItem.deleteMany();
+  // Explícito aunque la FK cascadee desde Order: deja claro que los comprobantes
+  // no sobreviven a un reseed, y no depende de en qué orden resuelva Postgres las
+  // dos FKs de la tabla (Order en cascade, OrderPayment en set null).
+  await prisma.orderReceipt.deleteMany();
   await prisma.order.deleteMany();
   await prisma.productVariant.deleteMany();
   await prisma.product.deleteMany();

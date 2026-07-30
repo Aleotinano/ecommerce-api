@@ -1,9 +1,17 @@
-import { cleanupUploadedImage } from "./upload.js";
+import { cleanupUploadedImage, cleanupUploadedReceipt } from "./upload.js";
+
+// Multer ya escribió el archivo en disco cuando esto corre: si la validación
+// rechaza el request, el temporal se queda ahí para siempre. Se limpian los dos
+// campos posibles porque `validate` es genérico y no sabe qué ruta lo montó.
+const cleanupUploads = (req) => {
+  void cleanupUploadedImage(req);
+  void cleanupUploadedReceipt(req);
+};
 
 export const validate = (schemas) => {
   return (req, res, next) => {
     const fail = (status, message, errors) => {
-      void cleanupUploadedImage(req);
+      cleanupUploads(req);
       return res.status(status).json({ message, errors });
     };
 
@@ -38,7 +46,7 @@ export const validate = (schemas) => {
 
       next();
     } catch (error) {
-      void cleanupUploadedImage(req);
+      cleanupUploads(req);
       return res.status(500).json({
         message: "Error interno de validacion",
         error: error.message,

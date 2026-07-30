@@ -11,9 +11,12 @@ import {
   orderConfirmTransfer,
   orderConfirmPayment,
   orderPaymentCreate,
+  orderReceiptCreate,
+  orderReceiptParams,
   orderCreate,
 } from "../schemas/order.schema.js";
 import { validateId } from "../schemas/id.schema.js";
+import { uploadReceipt, normalizeMultipartBody } from "../middleware/upload.js";
 
 export const ordersRouter = Router();
 
@@ -28,8 +31,15 @@ const validation = {
   confirmTransfer: validate({ body: orderConfirmTransfer }),
   confirmPayment: validate({ body: orderConfirmPayment }),
   payment: validate({ body: orderPaymentCreate }),
+  receipt: validate({ body: orderReceiptCreate }),
+  receiptParams: validate({ params: orderReceiptParams }),
   query: validate({ query: orderQuery }),
 };
+
+// Subida de comprobante: multer + verificación del contenido real del archivo, y
+// después el casteo de los campos de texto del multipart (llegan todos como
+// string) para que Zod vea números y arrays, no `"5"` y `"[1,2]"`.
+const receiptUpload = [uploadReceipt, normalizeMultipartBody];
 
 // Crear orden con el carrito
 ordersRouter.post("/", verifyToken, validation.create, OrderController.create);
@@ -79,14 +89,49 @@ ordersRouter.post(
   OrderController.confirmDeposit
 );
 
-// Confirmar que la transferencia del pago llegó (revisión manual, no automática)
+// Confirmar que la transferencia del pago llegó (revisión manual, no automática).
+// Acepta el comprobante en el mismo request (multipart, campo `receipt`) para que
+// quien ya decidió confirme y adjunte de una; con JSON puro funciona igual que
+// siempre.
 ordersRouter.post(
   "/:id/confirm-transfer",
   verifyToken,
   requireRole(roleRequired),
+  receiptUpload,
   validation.id,
   validation.confirmTransfer,
   OrderController.confirmTransfer
+);
+
+// Comprobantes de la transferencia: el archivo que se miró para dar el cobro por
+// bueno. Adjuntar NO confirma nada — son dos actos distintos a propósito, ver
+// services/order-receipts.js.
+ordersRouter.post(
+  "/:id/receipts",
+  verifyToken,
+  requireRole(roleRequired),
+  receiptUpload,
+  validation.id,
+  validation.receipt,
+  OrderController.addReceipt
+);
+
+ordersRouter.get(
+  "/:id/receipts",
+  verifyToken,
+  requireRole(roleRequired),
+  validation.id,
+  OrderController.getReceipts
+);
+
+// Borrar es solo de ADMIN: no es una corrección cosmética, saca del proveedor un
+// archivo que quizá alguien ya usó para confirmar un cobro.
+ordersRouter.delete(
+  "/:id/receipts/:receiptId",
+  verifyToken,
+  requireRole(["ADMIN"]),
+  validation.receiptParams,
+  OrderController.removeReceipt
 );
 
 // Dar por cobrado el total de la orden → paymentStatus = PAID_IN_FULL

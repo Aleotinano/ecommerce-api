@@ -1,6 +1,11 @@
 import { OrderModel } from "../services/orders.js";
+import { OrderReceiptModel } from "../services/order-receipts.js";
 import { evaluateOrder } from "../services/order-state.js";
 import { buildOrderWhatsappLink } from "../lib/whatsapp-link.js";
+import {
+  cleanupUploadedReceipt,
+  getUploadedReceiptFile,
+} from "../middleware/upload.js";
 import { logger } from "../lib/logger.js";
 
 const log = logger.child({ module: "orders-controller" });
@@ -221,6 +226,10 @@ export class OrderController {
         ...stateOf(order),
         transferConfirmedAt: order.transferConfirmedAt,
         paymentConfirmedAt: order.paymentConfirmedAt,
+        // Cuántos comprobantes tiene, no cuáles: alcanza para badgear la fila
+        // ("hay algo para revisar") sin emitir una URL firmada por archivo en cada
+        // listado. Las filas salen por GET /:id/receipts.
+        receiptsCount: order._count?.receipts ?? 0,
         total: order.total,
         createdAt: order.createdAt,
         updatedAt: order.updatedAt,
@@ -455,15 +464,41 @@ export class OrderController {
     }
   }
 
+  /**
+   * Confirma la transferencia y, opcionalmente, adjunta el comprobante en el mismo
+   * request (multipart con el campo `receipt`). Sigue aceptando JSON puro: quien
+   * ya venía llamando a este endpoint no se entera del cambio.
+   *
+   * El archivo se sube ANTES de la transacción del cobro —red adentro de una
+   * transacción es veneno—, así que si `confirmTransfer` falla después
+   * (`TRANSFER_ALREADY_CONFIRMED`, por ejemplo) hay que borrar el comprobante
+   * recién creado: mismo patrón que el rollback de imagen en controllers/productos.js.
+   */
   static async confirmTransfer(req, res, next) {
+    const uploadedFile = getUploadedReceiptFile(req);
+    let receipt = null;
+
     try {
       const { id: orderId } = req.params;
+      const receiptIds = [...(req.body.receiptIds ?? [])];
+
+      if (uploadedFile) {
+        receipt = await OrderReceiptModel.addReceipt({
+          tenantId: req.tenantId,
+          orderId,
+          file: uploadedFile,
+          uploadedById: req.user.id,
+          note: req.body.note ?? null,
+        });
+        receiptIds.push(receipt.id);
+      }
 
       const order = await OrderModel.confirmTransfer({
         tenantId: req.tenantId,
         orderId,
         confirmedById: req.user.id,
         amount: req.body.amount,
+        receiptIds,
       });
 
       return res.json({
@@ -481,7 +516,76 @@ export class OrderController {
           ...stateOf(order),
           updatedAt: order.updatedAt,
         },
+        receiptId: receipt?.id ?? null,
       });
+    } catch (error) {
+      // La confirmación falló pero el comprobante ya está arriba: se borra, si no
+      // queda un archivo con el CBU de alguien colgado de una orden que nunca se
+      // confirmó y sin nada en la respuesta que lo mencione.
+      if (receipt) {
+        await OrderReceiptModel.removeReceipt({
+          tenantId: req.tenantId,
+          orderId: req.params.id,
+          receiptId: receipt.id,
+          deletedById: req.user.id,
+        }).catch(() => {});
+      }
+      next(error);
+    } finally {
+      await cleanupUploadedReceipt(req).catch(() => {});
+    }
+  }
+
+  /** Adjunta un comprobante SIN confirmar nada (ver services/order-receipts.js). */
+  static async addReceipt(req, res, next) {
+    try {
+      const receipt = await OrderReceiptModel.addReceipt({
+        tenantId: req.tenantId,
+        orderId: req.params.id,
+        file: getUploadedReceiptFile(req),
+        uploadedById: req.user.id,
+        note: req.body.note ?? null,
+      });
+
+      const receipts = await OrderReceiptModel.listReceipts({
+        tenantId: req.tenantId,
+        orderId: req.params.id,
+      });
+
+      return res.status(201).json({
+        message: "Comprobante adjuntado exitosamente",
+        receipt: receipts.find((r) => r.id === receipt.id) ?? null,
+      });
+    } catch (error) {
+      next(error);
+    } finally {
+      await cleanupUploadedReceipt(req).catch(() => {});
+    }
+  }
+
+  static async getReceipts(req, res, next) {
+    try {
+      const receipts = await OrderReceiptModel.listReceipts({
+        tenantId: req.tenantId,
+        orderId: req.params.id,
+      });
+
+      return res.json({ receipts });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async removeReceipt(req, res, next) {
+    try {
+      await OrderReceiptModel.removeReceipt({
+        tenantId: req.tenantId,
+        orderId: req.params.id,
+        receiptId: req.params.receiptId,
+        deletedById: req.user.id,
+      });
+
+      return res.status(204).send();
     } catch (error) {
       next(error);
     }

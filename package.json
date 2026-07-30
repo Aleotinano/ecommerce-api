@@ -15,7 +15,8 @@
     "seed:mesa-dulce": "node prisma/mesa-dulce/index.js",
     "seed:mesa-dulce:categorias": "node prisma/mesa-dulce/categorias.js",
     "seed:mesa-dulce:productos": "node prisma/mesa-dulce/productos.js",
-    "seed:mesa-dulce:ordenes": "node prisma/mesa-dulce/ordenes.js"
+    "seed:mesa-dulce:ordenes": "node prisma/mesa-dulce/ordenes.js",
+    "receipts:purge": "node scripts/purge-receipts.js"
   },
   "keywords": [],
   "author": "",

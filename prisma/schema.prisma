@@ -36,6 +36,7 @@ model Tenant {
   cashCategories         CashCategory[]
   cashSessions           CashRegisterSession[]
   cashMovements          CashMovement[]
+  orderReceipts          OrderReceipt[]
 }
 
 model TenantConfig {
@@ -557,6 +558,7 @@ model Order {
   orderItems    OrderItem[]
   statusHistory OrderStatusHistory[]
   payments      OrderPayment[]
+  receipts      OrderReceipt[]
 
   paymentStatus PaymentStatus       @default(PENDING)
   paymentMethod OrderPaymentMethod?
@@ -649,11 +651,76 @@ model OrderPayment {
   confirmedAt   DateTime @default(now())
   createdAt     DateTime @default(now())
 
-  order  Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  order    Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  tenant   Tenant         @relation(fields: [tenantId], references: [id])
+  receipts OrderReceipt[]
 
   @@index([orderId])
   @@index([tenantId])
+}
+
+// Comprobante de una transferencia: el archivo que miró un humano para dar el
+// cobro por bueno. Cierra el hueco de que `transferConfirmedAt` decía CUÁNDO se
+// confirmó pero no QUÉ se miró.
+//
+// Vive en su propia tabla y no como columna de `Order` ni de `OrderPayment`, por
+// dos razones que se refuerzan:
+//   - Una orden MIXED, o una con seña por transferencia más el saldo también por
+//     transferencia, tiene DOS comprobantes distintos. Un campo en `Order` no los
+//     cubre.
+//   - La fila del libro de cobros no existe hasta que alguien confirma
+//     (`applyPayments`), así que colgarlo de `OrderPayment` dejaría sin lugar al
+//     estado "hay comprobante cargado, falta confirmar" — que es justamente el
+//     estado que el panel necesita mostrar.
+//
+// Subir NO confirma: el comprobante es evidencia y la confirmación la sigue
+// haciendo una persona que mira la cuenta. Los comprobantes se falsifican en dos
+// minutos, y además confirmar dispara el avance automático de la orden.
+model OrderReceipt {
+  id       Int @id @default(autoincrement())
+  tenantId Int
+  orderId  Int
+
+  // Se llena cuando un humano CONFIRMA usando este archivo (ver `linkReceiptIds`
+  // en services/orders.js). Null = evidencia cargada, todavía sin confirmar.
+  // NO es unique a propósito: el cliente puede mandar dos capturas de la misma
+  // transferencia, y las dos son evidencia de ese mismo cobro.
+  orderPaymentId Int?
+
+  // Con qué ubicar y firmar el archivo en el proveedor. **No se guarda una URL
+  // usable**: un comprobante lleva CBU, nombre y a veces el saldo de la cuenta, así
+  // que las URLs se emiten firmadas y con expiración en cada respuesta
+  // (lib/storage). Persistir el link lo volvería legible para siempre por
+  // cualquiera que lo viera una vez.
+  storageProvider String  @default("cloudinary")
+  publicId        String
+  resourceType    String // "image" | "raw" — el PDF va como raw
+  deliveryType    String // "authenticated" | "private"
+  format          String?
+  mimeType        String
+  bytes           Int
+  originalName    String?
+
+  note         String?
+  uploadedById Int?
+  createdAt    DateTime @default(now())
+
+  // Soft-delete: el HECHO de que hubo un archivo es inmutable (alguien confirmó
+  // mirando algo), pero el dato personal se borra de verdad del proveedor. La
+  // inmutabilidad del libro de cobros es sobre PLATA; un adjunto equivocado con el
+  // CBU de un tercero no tiene por qué quedar para siempre.
+  deletedAt   DateTime?
+  deletedById Int?
+
+  order        Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderPayment OrderPayment? @relation(fields: [orderPaymentId], references: [id], onDelete: SetNull)
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+
+  @@index([orderId])
+  @@index([tenantId])
+  @@index([orderPaymentId])
+  // Lo usa la purga por antigüedad (`purgeExpired`, services/order-receipts.js).
+  @@index([tenantId, createdAt])
 }
 
 model OrderStatusHistory {
