@@ -137,7 +137,7 @@ e-commerce-express-1/
 │   ├── store/              # Controllers de la storefront
 │   └── webhooks/           # whatsapp.js
 ├── services/               # Lógica de negocio. Cada feature exporta un objeto `XModel`
-│   ├── stats/              # Dashboard: queries.js, builders.js, order-helpers.js, utils.js, constants.js, README.md
+│   ├── stats/              # Dashboard: queries.js, builders.js, money.js (cobranzas + caja, puro), order-helpers.js, utils.js, constants.js, README.md
 │   ├── content-suggestions/# index.js (fachada) + selection.js, angles.js, queries.js, cost-guard.js
 │   ├── whatsapp/           # Bot de WhatsApp: index.js, signature.js, history.js, rate-limit.js, graph-api.js, dedup.js, tenant-resolver.js
 │   ├── chat/               # Agente de chat de tienda: index.js, tools.js, prompt.js, cost-guard.js
@@ -573,6 +573,14 @@ asociados a la promo. Se aplica al pricear el carrito/la orden.
 | Método | Ruta | Middleware | Controller → Service |
 |---|---|---|---|
 | GET | `/stats/dashboard` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(query: StatsQuery)` | `StatsController.get` → `StatsModel.getDashboard` |
+
+Además de KPIs/gráficos/ranking, el dashboard devuelve desde 2026-07-30 **`cobranzas`** (facturado vs
+cobrado, la brecha entre los dos, y el desglose por vía desde `OrderPayment`) y **`caja`** (turnos,
+egresos por etiqueta, diferencia de arqueo acumulada y un resultado aproximado; `null` si el tenant no
+tiene el módulo). Las dos ventanas son distintas a propósito y están declaradas en `meta.criteria`:
+los cobros se cuentan por `confirmedAt`, y los turnos de caja **enteros** por `openedAt` — un turno
+noche que cierra a las 2 AM cuenta en el día que abrió y no se parte, porque así lo nombra el negocio.
+Ver [[Estadísticas]] y [[Caja]].
 
 ### `/cash-register` (admin) — `routes/cash-register.js`
 

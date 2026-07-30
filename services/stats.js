@@ -5,6 +5,7 @@ import {
   buildProductRanking,
   buildRevenueByCategory,
 } from "./stats/builders.js";
+import { buildCashPanel, buildCollectionsPanel } from "./stats/money.js";
 import {
   isCompletedOrder,
   sumCompletedRevenue,
@@ -46,6 +47,20 @@ export const StatsModel = {
         ? previousRevenue / previousCompletedOrders
         : 0;
 
+    // Facturado (arriba) vs cobrado: hasta acá el dashboard solo sabía de
+    // facturación. Ver services/stats/money.js.
+    const cobranzas = buildCollectionsPanel({
+      facturado: currentRevenue,
+      payments: data.currentPayments,
+      previousPayments: data.previousPayments,
+    });
+
+    // `null` —y no un panel en cero— cuando el tenant no tiene caja: cero egresos
+    // por no llevar caja no es lo mismo que cero egresos.
+    const caja = data.cashRegisterEnabled
+      ? buildCashPanel({ sessions: data.cashSessions ?? [], cobrado: cobranzas.cobrado })
+      : null;
+
     return {
       generatedAt: now,
       filters: {
@@ -81,7 +96,24 @@ export const StatsModel = {
           current: currentUniqueCustomers.size,
           previous: previousPeriodCustomers.size,
         }),
+        // Plata que entró de verdad en el período, neta de devoluciones. Junto a
+        // `revenue` (facturado) es la comparación que antes no se podía hacer.
+        collected: buildMetric({
+          current: cobranzas.cobrado,
+          previous: cobranzas.cobradoPrevio,
+        }),
       },
+
+      cobranzas: {
+        facturado: cobranzas.facturado,
+        cobrado: cobranzas.cobrado,
+        brecha: cobranzas.brecha,
+        devuelto: cobranzas.devuelto,
+        cobros: cobranzas.cobros,
+        porVia: cobranzas.porVia,
+      },
+
+      caja,
       charts: {
         dailyTrend: {
           metric: "revenue",
@@ -107,6 +139,13 @@ export const StatsModel = {
           revenueBasedOn: "COMPLETED_ORDERS",
           rankingSize: 5,
           lowStockThreshold,
+          // Dos ventanas distintas a propósito, y hay que saberlo para leer el
+          // `resultadoAproximado`: los cobros se cuentan por cuándo entró la plata
+          // (`confirmedAt`), y los turnos de caja por cuándo se ABRIERON, enteros —
+          // un turno noche que cierra a las 2 AM cuenta en el día que abrió y no se
+          // parte, porque así lo nombra el negocio.
+          collectedBasedOn: "PAYMENT_CONFIRMED_AT",
+          cashBasedOn: "SESSION_OPENED_AT",
         },
       },
     };
