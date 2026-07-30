@@ -171,13 +171,19 @@ export const OrderReceiptModel = {
   },
 
   /**
-   * Retención: borra del proveedor los comprobantes más viejos que la ventana y
-   * deja las filas en soft-delete. Idempotente — los ya borrados no se vuelven a
-   * tocar—, así que se puede correr las veces que sea.
+   * Borra del proveedor los comprobantes más viejos que la ventana y deja las filas
+   * en soft-delete. Idempotente — los ya borrados no se vuelven a tocar—, así que se
+   * puede correr las veces que sea.
    *
-   * No es un job del proceso: lo dispara `scripts/purge-receipts.js` desde el cron
-   * del host. El proyecto no tiene scheduler y tiene una postura escrita en contra
-   * (ver services/cash-register-schedule.js).
+   * **Hoy no lo llama nadie automáticamente, a propósito.** El borrado normal es
+   * manual desde el panel (`removeReceipt`); esto existe como herramienta por si
+   * algún cliente pide una política de retención. No purgar por default es lo
+   * correcto acá: el archivo que se guarda es el comprobante que el comercio baja de
+   * SU cuenta de cobro, o sea respaldo contable de sus ventas.
+   *
+   * Si alguna vez se engancha, va por `scripts/purge-receipts.js` desde el cron del
+   * host y no como job del proceso — el proyecto no tiene scheduler y tiene una
+   * postura escrita en contra (ver services/cash-register-schedule.js).
    *
    * Un fallo del proveedor sobre una fila no corta la corrida: se loguea y sigue,
    * y la próxima pasada la vuelve a agarrar porque quedó sin marcar.

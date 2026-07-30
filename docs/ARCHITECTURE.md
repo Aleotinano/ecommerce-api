@@ -1100,11 +1100,14 @@ docs asumen **Next.js**) debería consumir esta API:
   Mitigación parcial ya hecha (2026-07-30): el puerto `lib/storage/` recibe `tenantId` en `putFile` y
   guarda los comprobantes en `{folder}/tenants/{tenantId}/receipts`, así el día que se implemente el
   cambio queda contenido en el adaptador y la separación de archivos ya existe.
-- **La retención de comprobantes depende de un cron externo.** `pnpm receipts:purge`
-  (`scripts/purge-receipts.js`) borra los comprobantes de más de 12 meses, pero **no hay scheduler en
-  el proceso** que lo dispare — es deliberado (ver `services/cash-register-schedule.js`), a costa de
-  que si nadie lo engancha al crontab del host la retención no ocurre. Misma clase de dependencia
-  externa que Postgres, que tampoco está en el `docker-compose.yml`.
+- **Los comprobantes de transferencia no se borran solos, y es intencional.** Existe
+  `pnpm receipts:purge` (`scripts/purge-receipts.js`, default 12 meses) pero **no está enganchado a
+  nada**: no hay scheduler en el proceso y tampoco se pide que se agregue al cron del host. Dos
+  motivos: el almacenamiento corre por cuenta de cada tenant (ver el punto anterior), y el archivo
+  que se espera guardar es el PDF que el comercio baja de **su propia** cuenta de cobro — respaldo
+  contable, no datos de terceros acumulados. El borrado es manual desde el panel (`DELETE`, solo
+  `ADMIN`). El script queda como herramienta si algún cliente pide una política de retención. Lo que
+  **no** hay que hacer es documentarlo como si borrara solo.
 - **Archivo duplicado de Cloudinary.** Conviven `lib/cloudinary.js` y `lib/cloudinary.ts`.
   El runtime ESM usa el `.js`; el `.ts` no se ejecuta como parte de la app.
 - **`datasource db` sin `url` en el schema.** La conexión va por `@prisma/adapter-pg`
