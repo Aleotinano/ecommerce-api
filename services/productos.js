@@ -1069,7 +1069,9 @@ export const ProductModel = {
       select: { imagePublicId: true },
     });
     await Promise.allSettled(
-      suggestionImages.map((image) => deleteCloudinaryImage(image.imagePublicId))
+      suggestionImages.map((image) =>
+        deleteCloudinaryImage(image.imagePublicId, { tenantId })
+      )
     );
 
     const result = await prisma.product.delete({

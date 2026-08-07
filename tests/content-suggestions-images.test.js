@@ -2,12 +2,18 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
 
 // Cloudinary mockeado (sin red): controlamos upload/destroy. La persistencia
 // (SuggestionImage) se ejerce de verdad contra la DB de test.
-const { uploadMock, destroyMock } = vi.hoisted(() => ({
+const { uploadMock, destroyMock, CREDS } = vi.hoisted(() => ({
   uploadMock: vi.fn(),
   destroyMock: vi.fn(),
+  CREDS: { cloud_name: "cuenta-test", api_key: "key", api_secret: "secret" },
 }));
 vi.mock("../lib/cloudinary.js", () => ({
   default: { uploader: { upload: uploadMock, destroy: destroyMock } },
+  ENV_CREDENTIALS: CREDS,
+  credentialsFor: vi.fn(async () => CREDS),
+  credentialsForCloudName: vi.fn(async () => CREDS),
+  isEnvAccount: () => true,
+  platformAccountConfigured: () => true,
 }));
 
 const prisma = (await import("../lib/prisma.js")).default;

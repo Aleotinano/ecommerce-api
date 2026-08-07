@@ -44,8 +44,13 @@ function extensionOf(filename) {
   return ext || null;
 }
 
-/** Lo que sale hacia el controller. Nunca incluye `publicId`. */
-function toPublic(receipt) {
+/**
+ * Lo que sale hacia el controller. Nunca incluye `publicId` ni `cloudName`.
+ *
+ * `async` porque firmar la URL necesita las credenciales de Cloudinary del tenant
+ * (cada cliente puede tener su propia cuenta) y eso sale de la DB.
+ */
+async function toPublic(receipt) {
   return {
     id: receipt.id,
     orderId: receipt.orderId,
@@ -60,7 +65,7 @@ function toPublic(receipt) {
     note: receipt.note,
     uploadedById: receipt.uploadedById,
     createdAt: receipt.createdAt,
-    url: signedUrl(receipt),
+    url: await signedUrl(receipt),
   };
 }
 
@@ -110,6 +115,7 @@ export const OrderReceiptModel = {
         tenantId,
         orderId: order.id,
         storageProvider: stored.storageProvider,
+        cloudName: stored.cloudName ?? null,
         publicId: stored.publicId,
         resourceType: stored.resourceType,
         deliveryType: stored.deliveryType,
@@ -134,7 +140,7 @@ export const OrderReceiptModel = {
       orderBy: { createdAt: "asc" },
     });
 
-    return receipts.map(toPublic);
+    return Promise.all(receipts.map(toPublic));
   },
 
   /**

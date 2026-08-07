@@ -43,6 +43,7 @@ export const persistVariants = async ({
   for (const variant of variants) {
     try {
       const { img, imgPublicId } = await uploadBase64ToCloudinary(variant, {
+        tenantId,
         entity: ENTITY,
       });
       uploaded.push({ imageUrl: img, imagePublicId: imgPublicId });
@@ -96,7 +97,7 @@ export const chooseVariant = async ({ tenantId, suggestionId, imageId }) => {
   // Borrar los assets de Cloudinary de las otras variantes (best-effort: un fallo
   // de borrado en el CDN no debe abortar la eleccion).
   await Promise.allSettled(
-    others.map((o) => deleteCloudinaryImage(o.imagePublicId))
+    others.map((o) => deleteCloudinaryImage(o.imagePublicId, { tenantId }))
   );
   await prisma.suggestionImage.deleteMany({
     where: { suggestionId, tenantId, id: { not: imageId } },
@@ -124,7 +125,9 @@ export const deleteVariant = async ({ tenantId, imageId }) => {
     );
   }
 
-  await deleteCloudinaryImage(target.imagePublicId).catch(() => {});
+  await deleteCloudinaryImage(target.imagePublicId, { tenantId }).catch(
+    () => {}
+  );
   await prisma.suggestionImage.delete({ where: { id: imageId } });
 
   return { id: imageId };

@@ -1,15 +1,23 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
-const { uploadMock, destroyMock, signMock } = vi.hoisted(() => ({
+const { uploadMock, destroyMock, signMock, CREDS } = vi.hoisted(() => ({
   uploadMock: vi.fn(),
   destroyMock: vi.fn(),
   signMock: vi.fn(),
+  CREDS: { cloud_name: "cuenta-test", api_key: "key", api_secret: "secret" },
 }));
 vi.mock("../lib/cloudinary.js", () => ({
   default: {
     uploader: { upload: uploadMock, destroy: destroyMock },
     utils: { private_download_url: signMock },
   },
+  // La resolución de credenciales por tenant tiene su propio test
+  // (cloudinary-per-tenant); acá interesa el puerto, no de dónde salen.
+  ENV_CREDENTIALS: CREDS,
+  credentialsFor: vi.fn(async () => CREDS),
+  credentialsForCloudName: vi.fn(async () => CREDS),
+  isEnvAccount: () => true,
+  platformAccountConfigured: () => true,
 }));
 
 // El puerto borra el temporal después de subir; en este test no hay archivo real.
@@ -97,10 +105,10 @@ describe("putFile", () => {
 });
 
 describe("signedUrl", () => {
-  it("pide siempre una URL con vencimiento", () => {
+  it("pide siempre una URL con vencimiento", async () => {
     const antes = Math.floor(Date.now() / 1000);
 
-    signedUrl({
+    await signedUrl({
       storageProvider: "cloudinary",
       publicId: "carpeta/asset",
       resourceType: "raw",
@@ -132,11 +140,14 @@ describe("deleteFile", () => {
 
     // `destroy` asume image/upload si no se los pasás: con los defaults, borrar un
     // PDF authenticated devuelve "not found" y NO falla — el archivo se queda.
-    expect(destroyMock).toHaveBeenCalledWith("carpeta/comprobante", {
-      resource_type: "raw",
-      type: "authenticated",
-      invalidate: true,
-    });
+    expect(destroyMock).toHaveBeenCalledWith(
+      "carpeta/comprobante",
+      expect.objectContaining({
+        resource_type: "raw",
+        type: "authenticated",
+        invalidate: true,
+      })
+    );
   });
 
   it("no llama al proveedor si no hay publicId", async () => {

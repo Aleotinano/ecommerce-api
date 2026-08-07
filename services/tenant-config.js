@@ -9,7 +9,13 @@ import {
 import { wrap, del, tenantNs } from "../lib/cache.js";
 import { encryptSecret } from "../lib/crypto.js";
 import {
+  invalidateCredentials,
+  verifyCredentials,
+} from "../lib/cloudinary.js";
+import {
+  CLOUDINARY_CREDENTIAL_FIELDS,
   READONLY_TENANT_CONFIG_FIELDS,
+  SECRET_TENANT_CONFIG_FIELDS,
   UPDATABLE_TENANT_CONFIG_FIELDS,
 } from "../schemas/tenant-config.schema.js";
 
@@ -20,16 +26,17 @@ const JSON_NULLABLE_FIELDS = ["themeSections"];
 
 // Proyección pública de la config, derivada del schema Zod para que un campo nuevo
 // aparezca en las respuestas sin tocar cada `select` a mano (evita el bug de
-// "persiste pero no se refleja"). Se excluye `whatsappAccessToken` (secreto que
-// nunca se devuelve) y se agregan campos de solo-display no actualizables (logoUrl)
-// más los de flujo de venta, que el tenant lee pero no escribe: el storefront
-// necesita saber qué métodos de pago pintar aunque no pueda cambiarlos.
+// "persiste pero no se refleja"). Se excluyen los campos de
+// SECRET_TENANT_CONFIG_FIELDS (secretos que no salen nunca) y se agregan campos de
+// solo-display no actualizables (logoUrl) más los de flujo de venta, que el tenant
+// lee pero no escribe: el storefront necesita saber qué métodos de pago pintar
+// aunque no pueda cambiarlos.
 const TENANT_CONFIG_PUBLIC_SELECT = {
   id: true,
   logoUrl: true,
   ...Object.fromEntries(
     [...UPDATABLE_TENANT_CONFIG_FIELDS, ...READONLY_TENANT_CONFIG_FIELDS]
-      .filter((field) => field !== "whatsappAccessToken")
+      .filter((field) => !SECRET_TENANT_CONFIG_FIELDS.includes(field))
       .map((field) => [field, true])
   ),
 };
@@ -73,13 +80,32 @@ export const TenantConfigModel = {
       throw createError("El tenant no existe", "TENANT_NOT_FOUND", 404);
     }
 
-    // El access token es un secreto: se cifra en reposo (AES-256-GCM). null se
-    // guarda tal cual (desconectar -> usa el token global de env).
-    if (data.whatsappAccessToken != null) {
-      data = {
-        ...data,
-        whatsappAccessToken: encryptSecret(data.whatsappAccessToken),
-      };
+    // Credenciales de Cloudinary: se validan contra el proveedor ANTES de
+    // guardarlas. Un `api_secret` mal pegado sin esto no se descubre hasta que
+    // alguien sube una imagen y falla, con la config ya persistida. El schema
+    // garantiza que vienen las tres o ninguna.
+    if (data.cloudinaryCloudName != null) {
+      const valid = await verifyCredentials({
+        cloudName: data.cloudinaryCloudName,
+        apiKey: data.cloudinaryApiKey,
+        apiSecret: data.cloudinaryApiSecret,
+      });
+
+      if (!valid) {
+        throw createError(
+          "Cloudinary rechazó esas credenciales: revisá cloud name, API key y API secret",
+          "CLOUDINARY_CREDENTIALS_INVALID",
+          400
+        );
+      }
+    }
+
+    // Los secretos se cifran en reposo (AES-256-GCM). null se guarda tal cual
+    // (desconectar -> se usa el token / la cuenta global de env).
+    for (const field of SECRET_TENANT_CONFIG_FIELDS) {
+      if (data[field] != null) {
+        data = { ...data, [field]: encryptSecret(data[field]) };
+      }
     }
 
     // En un campo Json?, Prisma interpreta `null` como el VALOR JSON null, no
@@ -104,6 +130,13 @@ export const TenantConfigModel = {
     });
 
     await invalidateTenantConfigCache(tenantId);
+    // Las credenciales de Cloudinary se cachean en memoria (lib/cloudinary.js): sin
+    // esto, la subida siguiente seguiría yendo a la cuenta vieja hasta que venciera
+    // el TTL.
+    if (CLOUDINARY_CREDENTIAL_FIELDS.some((field) => field in data)) {
+      invalidateCredentials(tenantId);
+    }
+
     return config;
   },
 
@@ -118,6 +151,7 @@ export const TenantConfigModel = {
     }
 
     const uploadedImage = await uploadImageToCloudinary(filePath, {
+      tenantId,
       entity: "tenant-logos",
     });
 
@@ -128,7 +162,7 @@ export const TenantConfigModel = {
 
     if (currentConfig?.logoPublicId) {
       try {
-        await deleteCloudinaryImage(currentConfig.logoPublicId);
+        await deleteCloudinaryImage(currentConfig.logoPublicId, { tenantId });
       } catch (error) {
         console.warn(
           `No se pudo borrar logo anterior de Cloudinary: ${error.message}`
@@ -182,7 +216,7 @@ export const TenantConfigModel = {
     }
 
     try {
-      await deleteCloudinaryImage(config.logoPublicId);
+      await deleteCloudinaryImage(config.logoPublicId, { tenantId });
     } catch (error) {
       throw createError(
         `Error al borrar imagen de Cloudinary: ${error.message}`,

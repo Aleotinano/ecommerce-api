@@ -167,6 +167,23 @@ model TenantConfig {
   // null = usar el token global de env (WHATSAPP_ACCESS_TOKEN).
   whatsappAccessToken   String?
 
+  // Cuenta de Cloudinary DEL CLIENTE. Cada cliente que sale a producción se crea
+  // sus propias cuentas de servicios externos, pero el deploy es una instancia
+  // multi-tenant única: no alcanza con un `.env` distinto, hay que resolver las
+  // credenciales por tenant en runtime (ver lib/cloudinary.js).
+  //
+  // Los tres NULL = usar la cuenta global de env. Esa cuenta no es transitoria:
+  // queda como cuenta de la plataforma. Los assets que un tenant subió ANTES de
+  // cargar su cuenta se quedan en la global (no se migran).
+  //
+  // Van los tres o ninguno (CHECK en la migración): media credencial cargada es un
+  // tenant que sube a ningún lado. Además el `api_secret` nunca vuelve en el GET,
+  // así que el panel no puede editar uno solo aunque quisiera.
+  cloudinaryCloudName String?
+  // Cifradas AES-256-GCM (lib/crypto.js), igual que `whatsappAccessToken`.
+  cloudinaryApiKey    String?
+  cloudinaryApiSecret String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -693,6 +710,14 @@ model OrderReceipt {
   // (lib/storage). Persistir el link lo volvería legible para siempre por
   // cualquiera que lo viera una vez.
   storageProvider String  @default("cloudinary")
+  // En QUÉ cuenta del proveedor quedó el archivo. `null` = la cuenta global de env
+  // (todas las filas anteriores a que existieran cuentas por tenant).
+  //
+  // No es redundante con `tenantId`: el tenant puede cargar su propia cuenta de
+  // Cloudinary DESPUÉS de haber recibido comprobantes, y los viejos se quedan en la
+  // global. Firmar con la cuenta equivocada no da error — da una URL que 404ea al
+  // abrirla, y del otro lado hay un CBU que alguien necesita mirar.
+  cloudName       String?
   publicId        String
   resourceType    String // "image" | "raw" — el PDF va como raw
   deliveryType    String // "authenticated" | "private"

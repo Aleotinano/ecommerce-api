@@ -13,9 +13,18 @@ export const envSchema = z.object({
 
   PUBLIC_KEY: z.string().min(1),
   ACCESS_TOKEN: z.string().min(1),
-  CLOUDINARY_CLOUD_NAME: z.string().min(1),
-  CLOUDINARY_API_KEY: z.string().min(1),
-  CLOUDINARY_API_SECRET: z.string().min(1),
+  // Cuenta de Cloudinary de la PLATAFORMA. Opcionales a propósito: cada cliente de
+  // producción carga la suya en `TenantConfig` (ver lib/cloudinary.js), así que un
+  // deploy donde todas las tiendas tienen cuenta propia no necesita ninguna acá — y
+  // dejarlas vacías es lo que garantiza que ningún archivo de un cliente pueda
+  // terminar en nuestra cuenta por accidente.
+  //
+  // Con esto vacío, un tenant sin credenciales propias no puede subir nada
+  // (`CLOUDINARY_NOT_CONFIGURED`). Lo que NO se rompe es ver las imágenes ya
+  // subidas: son URLs públicas y las sirve el CDN sin credenciales.
+  CLOUDINARY_CLOUD_NAME: z.string().min(1).optional(),
+  CLOUDINARY_API_KEY: z.string().min(1).optional(),
+  CLOUDINARY_API_SECRET: z.string().min(1).optional(),
   CLOUDINARY_FOLDER: z.string().min(1).default("e-commerce-express"),
 
   ORIGINS: z.string().optional(),
@@ -65,8 +74,13 @@ export const envSchema = z.object({
   WHATSAPP_ACCESS_TOKEN: z.string().optional(),
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
   WHATSAPP_GRAPH_API_VERSION: z.string().default("v21.0"),
-  // Clave para cifrar el access token per-tenant en reposo (AES-256-GCM, ver
-  // lib/crypto.js). 32 bytes en hex (64 chars) o base64. Sin ella no se guardan
-  // ni se usan tokens de DB (se cae al token global de env).
+  // Clave para cifrar los secretos per-tenant en reposo (access token de WhatsApp
+  // y credenciales de Cloudinary del cliente; AES-256-GCM, ver lib/crypto.js).
+  // 32 bytes en hex (64 chars) o base64. Sin ella no se guardan ni se usan
+  // secretos de DB (se cae a la cuenta / token global de env).
+  //
+  // `WHATSAPP_TOKEN_ENC_KEY` es el nombre viejo y sigue funcionando como fallback:
+  // renombrarlo no puede exigir tocar el deploy.
+  SECRET_ENC_KEY: z.string().optional(),
   WHATSAPP_TOKEN_ENC_KEY: z.string().optional(),
 });

@@ -112,6 +112,7 @@ export class productsController {
 
       if (uploadedFile) {
         uploadedImage = await uploadImageToCloudinary(uploadedFile.path, {
+          tenantId: req.tenantId,
           entity: PRODUCT_IMAGE_ENTITY,
         });
       }
@@ -140,7 +141,9 @@ export class productsController {
       });
     } catch (error) {
       if (uploadedImage?.imgPublicId) {
-        await deleteCloudinaryImage(uploadedImage.imgPublicId).catch(() => {});
+        await deleteCloudinaryImage(uploadedImage.imgPublicId, {
+          tenantId: req.tenantId,
+        }).catch(() => {});
       }
       next(error);
     } finally {
@@ -178,6 +181,7 @@ export class productsController {
 
       if (uploadedFile) {
         uploadedImage = await uploadImageToCloudinary(uploadedFile.path, {
+          tenantId: req.tenantId,
           entity: PRODUCT_IMAGE_ENTITY,
         });
         imageData.img = uploadedImage.img;
@@ -208,7 +212,9 @@ export class productsController {
       );
 
       if (shouldDeletePreviousImage) {
-        await deleteCloudinaryImage(existing.imgPublicId);
+        await deleteCloudinaryImage(existing.imgPublicId, {
+          tenantId: req.tenantId,
+        });
       }
 
       return res.json({
@@ -217,7 +223,9 @@ export class productsController {
       });
     } catch (error) {
       if (uploadedImage?.imgPublicId) {
-        await deleteCloudinaryImage(uploadedImage.imgPublicId).catch(() => {});
+        await deleteCloudinaryImage(uploadedImage.imgPublicId, {
+          tenantId: req.tenantId,
+        }).catch(() => {});
       }
       next(error);
     } finally {
@@ -254,7 +262,9 @@ export class productsController {
       });
 
       if (existing.imgPublicId) {
-        await deleteCloudinaryImage(existing.imgPublicId);
+        await deleteCloudinaryImage(existing.imgPublicId, {
+          tenantId: req.tenantId,
+        });
       }
 
       const deletedProduct = await ProductModel.delete({

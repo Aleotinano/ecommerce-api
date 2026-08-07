@@ -4,16 +4,22 @@ import request from "supertest";
 // Cloudinary mockeado: los comprobantes no salen a la red en los tests, pero SÍ
 // se verifica con qué argumentos se lo llama — sobre todo en el borrado, donde
 // mandar mal `resource_type`/`type` deja el archivo vivo sin fallar.
-const { uploadMock, destroyMock, signMock } = vi.hoisted(() => ({
+const { uploadMock, destroyMock, signMock, CREDS } = vi.hoisted(() => ({
   uploadMock: vi.fn(),
   destroyMock: vi.fn(),
   signMock: vi.fn(),
+  CREDS: { cloud_name: "cuenta-test", api_key: "key", api_secret: "secret" },
 }));
 vi.mock("../lib/cloudinary.js", () => ({
   default: {
     uploader: { upload: uploadMock, destroy: destroyMock },
     utils: { private_download_url: signMock },
   },
+  ENV_CREDENTIALS: CREDS,
+  credentialsFor: vi.fn(async () => CREDS),
+  credentialsForCloudName: vi.fn(async () => CREDS),
+  isEnvAccount: () => true,
+  platformAccountConfigured: () => true,
 }));
 
 const prisma = (await import("../lib/prisma.js")).default;

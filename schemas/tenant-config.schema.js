@@ -37,6 +37,30 @@ const sectionOverride = z
   })
   .strict();
 
+/** Las tres credenciales de Cloudinary, que viajan siempre juntas. */
+export const CLOUDINARY_CREDENTIAL_FIELDS = [
+  "cloudinaryCloudName",
+  "cloudinaryApiKey",
+  "cloudinaryApiSecret",
+];
+
+/**
+ * Campos que se guardan **cifrados** (lib/crypto.js) y que **nunca** salen por la
+ * API. Los consume `services/tenant-config.js` para dos cosas: cifrar al escribir y
+ * excluirlos de la proyección pública. Un campo secreto nuevo se agrega acá y queda
+ * cubierto en los dos lados — que es justo lo que evita el bug de estrenar un
+ * secreto que se devuelve en el GET sin que nadie lo note.
+ *
+ * `cloudinaryCloudName` NO está: no es un secreto, y devolverlo es lo que le
+ * permite al panel mostrar si el tenant tiene cuenta propia (por el CHECK, si está
+ * el cloud name están las tres).
+ */
+export const SECRET_TENANT_CONFIG_FIELDS = [
+  "whatsappAccessToken",
+  "cloudinaryApiKey",
+  "cloudinaryApiSecret",
+];
+
 const updateTenantConfigObject = z
   .object({
     storeName: z
@@ -135,6 +159,38 @@ const updateTenantConfigObject = z
       .min(1, "El access token no puede estar vacío")
       .max(500, "El access token es demasiado largo")
       .trim()
+      .nullable()
+      .optional(),
+
+    // ── Cuenta de Cloudinary del cliente ─────────────────────────────────────
+    // Van los tres juntos o los tres en null (ver `cloudinaryCredentialsTogether`
+    // más abajo y el CHECK equivalente en la DB). El `cloud_name` vuelve en el GET;
+    // los otros dos se cifran y no salen nunca.
+    //
+    // Los formatos NO se validan a fondo a propósito: el que descubre un
+    // `api_secret` mal pegado es el ping contra Cloudinary al guardar
+    // (`verifyCredentials`), no una regex que adivine el formato del proveedor.
+    cloudinaryCloudName: z
+      .string({ invalid_type_error: "El cloud name debe ser texto" })
+      .trim()
+      .min(1, "El cloud name no puede estar vacío")
+      .max(100, "El cloud name es demasiado largo")
+      .nullable()
+      .optional(),
+
+    cloudinaryApiKey: z
+      .string({ invalid_type_error: "La API key debe ser texto" })
+      .trim()
+      .min(1, "La API key no puede estar vacía")
+      .max(100, "La API key es demasiado larga")
+      .nullable()
+      .optional(),
+
+    cloudinaryApiSecret: z
+      .string({ invalid_type_error: "El API secret debe ser texto" })
+      .trim()
+      .min(1, "El API secret no puede estar vacío")
+      .max(200, "El API secret es demasiado largo")
       .nullable()
       .optional(),
 
@@ -392,9 +448,56 @@ export const updateTenantConfig = updateTenantConfigObject
       }
     }
   })
+  .superRefine(cloudinaryCredentialsTogether)
   .refine((data) => Object.values(data).some((value) => value !== undefined), {
     message: "No hay cambios para actualizar",
   });
+
+/**
+ * Las credenciales de Cloudinary se mandan **las tres o ninguna**, y todas con
+ * valor o todas en null (null = volver a la cuenta global).
+ *
+ * No es una restricción arbitraria: media credencial cargada es un tenant que sube
+ * a ningún lado, y el error aparecería recién en la primera foto. El CHECK
+ * `TenantConfig_cloudinary_credentials_check` dice lo mismo del lado de la DB; esto
+ * lo dice antes y con un mensaje que se entiende.
+ *
+ * Tampoco le pide nada raro al panel: el `api_secret` nunca vuelve en el GET, así
+ * que editar una sola de las tres no era posible de todos modos.
+ */
+function cloudinaryCredentialsTogether(data, ctx) {
+  const present = CLOUDINARY_CREDENTIAL_FIELDS.filter(
+    (field) => data[field] !== undefined
+  );
+  if (present.length === 0) return;
+
+  if (present.length !== CLOUDINARY_CREDENTIAL_FIELDS.length) {
+    const missing = CLOUDINARY_CREDENTIAL_FIELDS.filter(
+      (field) => data[field] === undefined
+    );
+    for (const field of missing) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [field],
+        message:
+          "Las credenciales de Cloudinary se mandan las tres juntas (cloud name, API key y API secret)",
+      });
+    }
+    return;
+  }
+
+  const nulls = present.filter((field) => data[field] === null);
+  if (nulls.length > 0 && nulls.length !== present.length) {
+    for (const field of nulls) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [field],
+        message:
+          "Para volver a la cuenta global las tres credenciales van en null; si no, las tres con valor",
+      });
+    }
+  }
+}
 
 // Campos actualizables, derivados del schema: el controller arma el `data` de
 // persistencia a partir de esta lista, así agregar un campo nuevo al schema

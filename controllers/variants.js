@@ -50,6 +50,7 @@ export class variantsController {
 
       if (uploadedFile) {
         uploadedImage = await uploadImageToCloudinary(uploadedFile.path, {
+          tenantId: req.tenantId,
           entity: VARIANT_IMAGE_ENTITY,
         });
       }
@@ -68,7 +69,9 @@ export class variantsController {
       return res.status(201).json({ message: "Variante creada", variant });
     } catch (error) {
       if (uploadedImage?.imgPublicId) {
-        await deleteCloudinaryImage(uploadedImage.imgPublicId).catch(() => {});
+        await deleteCloudinaryImage(uploadedImage.imgPublicId, {
+          tenantId: req.tenantId,
+        }).catch(() => {});
       }
       next(error);
     } finally {
@@ -94,6 +97,7 @@ export class variantsController {
 
       if (uploadedFile) {
         uploadedImage = await uploadImageToCloudinary(uploadedFile.path, {
+          tenantId: req.tenantId,
           entity: VARIANT_IMAGE_ENTITY,
         });
         imageData.img = uploadedImage.img;
@@ -111,13 +115,17 @@ export class variantsController {
       );
 
       if (shouldDeletePreviousImage) {
-        await deleteCloudinaryImage(existing.imgPublicId);
+        await deleteCloudinaryImage(existing.imgPublicId, {
+          tenantId: req.tenantId,
+        });
       }
 
       return res.json({ message: "Variante actualizada", variant });
     } catch (error) {
       if (uploadedImage?.imgPublicId) {
-        await deleteCloudinaryImage(uploadedImage.imgPublicId).catch(() => {});
+        await deleteCloudinaryImage(uploadedImage.imgPublicId, {
+          tenantId: req.tenantId,
+        }).catch(() => {});
       }
       next(error);
     } finally {
@@ -135,7 +143,9 @@ export class variantsController {
       });
 
       if (existing.imgPublicId) {
-        await deleteCloudinaryImage(existing.imgPublicId);
+        await deleteCloudinaryImage(existing.imgPublicId, {
+          tenantId: req.tenantId,
+        });
       }
 
       await VariantModel.deleteVariant({

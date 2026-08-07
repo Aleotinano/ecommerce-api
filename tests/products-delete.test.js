@@ -2,11 +2,17 @@ import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 
 // Cloudinary mockeado (sin red): ProductModel.delete intenta limpiar los
 // assets de las SuggestionImage del producto antes de borrarlo.
-const { destroyMock } = vi.hoisted(() => ({
+const { destroyMock, CREDS } = vi.hoisted(() => ({
   destroyMock: vi.fn(),
+  CREDS: { cloud_name: "cuenta-test", api_key: "key", api_secret: "secret" },
 }));
 vi.mock("../lib/cloudinary.js", () => ({
   default: { uploader: { upload: vi.fn(), destroy: destroyMock } },
+  ENV_CREDENTIALS: CREDS,
+  credentialsFor: vi.fn(async () => CREDS),
+  credentialsForCloudName: vi.fn(async () => CREDS),
+  isEnvAccount: () => true,
+  platformAccountConfigured: () => true,
 }));
 
 const prisma = (await import("../lib/prisma.js")).default;

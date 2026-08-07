@@ -56,6 +56,7 @@ export class CategoryController {
 
       if (uploadedFile) {
         uploadedImage = await uploadImageToCloudinary(uploadedFile.path, {
+          tenantId: req.tenantId,
           entity: CATEGORY_IMAGE_ENTITY,
         });
       }
@@ -77,7 +78,9 @@ export class CategoryController {
       });
     } catch (error) {
       if (uploadedImage?.imgPublicId) {
-        await deleteCloudinaryImage(uploadedImage.imgPublicId).catch(() => {});
+        await deleteCloudinaryImage(uploadedImage.imgPublicId, {
+          tenantId: req.tenantId,
+        }).catch(() => {});
       }
       next(error);
     } finally {
@@ -102,6 +105,7 @@ export class CategoryController {
 
       if (uploadedFile) {
         uploadedImage = await uploadImageToCloudinary(uploadedFile.path, {
+          tenantId: req.tenantId,
           entity: CATEGORY_IMAGE_ENTITY,
         });
         imageData.imageUrl = uploadedImage.img;
@@ -125,13 +129,17 @@ export class CategoryController {
       });
 
       if (shouldDeletePreviousImage) {
-        await deleteCloudinaryImage(existing.imgPublicId);
+        await deleteCloudinaryImage(existing.imgPublicId, {
+          tenantId: req.tenantId,
+        });
       }
 
       res.json({ message: "Categoria editada", category: category });
     } catch (error) {
       if (uploadedImage?.imgPublicId) {
-        await deleteCloudinaryImage(uploadedImage.imgPublicId).catch(() => {});
+        await deleteCloudinaryImage(uploadedImage.imgPublicId, {
+          tenantId: req.tenantId,
+        }).catch(() => {});
       }
       next(error);
     } finally {
@@ -149,7 +157,9 @@ export class CategoryController {
       });
 
       if (category.imgPublicId) {
-        await deleteCloudinaryImage(category.imgPublicId).catch(() => {});
+        await deleteCloudinaryImage(category.imgPublicId, {
+          tenantId: req.tenantId,
+        }).catch(() => {});
       }
 
       res.json({ message: "Categoria eliminada", category });
