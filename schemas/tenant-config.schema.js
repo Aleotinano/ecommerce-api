@@ -522,10 +522,16 @@ export const UPDATABLE_TENANT_CONFIG_FIELDS = Object.keys(
  *
  * Van igual en la proyección pública (ver `TENANT_CONFIG_PUBLIC_SELECT` en
  * services/tenant-config.js, que mergea las dos listas): el storefront necesita
- * `paymentMethodsEnabled` para pintar solo los métodos que el tenant acepta, y el
- * panel necesita `cashRegisterEnabled` para saber si mostrar el módulo de caja.
+ * `paymentMethodsEnabled` para pintar solo los métodos que el tenant acepta, el
+ * panel necesita `cashRegisterEnabled` para saber si mostrar el módulo de caja, y
+ * `storeMode` decide si la tienda tiene carrito.
  */
 export const READONLY_TENANT_CONFIG_FIELDS = [
+  // Si el catálogo se compra o solo se lee. Es lo más drástico de la lista: en
+  // "MENU" el storefront apaga el checkout entero. Justamente por eso no lo
+  // toca el tenant — el que se lo prendiera sin querer se quedaría sin ventas y
+  // sin ningún error que se lo explique. Se setea con el perfil `carta`.
+  "storeMode",
   "paymentMethodsEnabled",
   "fulfillmentMethodsEnabled",
   "depositEnabled",

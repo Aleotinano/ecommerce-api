@@ -50,6 +50,8 @@ describe("GET /tenant-config/:tenantId", () => {
     expect(res.body.fulfillmentMethodsEnabled).toEqual(["DELIVERY", "PICKUP"]);
     expect(res.body.depositEnabled).toBe(false);
     expect(res.body.depositPercentage).toBe(50);
+    // Sin esto el storefront no sabe si montar el carrito.
+    expect(res.body.storeMode).toBe("SHOP");
   });
 
   it("tenant sin configuración → 404 TENANT_CONFIG_NOT_FOUND", async () => {
@@ -94,7 +96,10 @@ describe("PATCH /tenant-config/:tenantId", () => {
     // El ADMIN de este PATCH es el admin DEL TENANT, así que el rol no alcanza
     // para distinguirlo de nosotros: el bloqueo es que el campo no está en
     // `updateTenantConfigObject`.
+    const value = { depositPercentage: 30, storeMode: "MENU" };
+
     for (const field of [
+      "storeMode",
       "paymentMethodsEnabled",
       "fulfillmentMethodsEnabled",
       "depositEnabled",
@@ -103,7 +108,7 @@ describe("PATCH /tenant-config/:tenantId", () => {
       const res = await request(app)
         .patch(`/tenant-config/${acme.id}`)
         .set("Cookie", acmeAdminCookie)
-        .send({ [field]: field === "depositPercentage" ? 30 : true });
+        .send({ [field]: value[field] ?? true });
 
       expect(res.status, field).toBe(400);
       expect(res.body.errors[field], field).toBeDefined();

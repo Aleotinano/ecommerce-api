@@ -69,6 +69,12 @@ export const UserModel = {
    *   cliente HTTP — quién vende con seña y quién solo contra entrega lo decidimos
    *   nosotros, no quien se registra. Por defecto, `estandar` (todo habilitado,
    *   sin seña), que es el comportamiento de siempre.
+   * @param {boolean} [p.trusted] el alta la hace un operador desde la consola del
+   *   servidor (`prisma/create-tenant.js`), no un desconocido por HTTP. Deja el
+   *   email verificado y no manda el correo: pedirle que confirme su propio email
+   *   a quien tiene la base de datos delante no prueba nada, y con SMTP
+   *   configurado el mail saldría igual hacia una casilla que nadie mira. Mismo
+   *   criterio que `profile` — parámetro de service, nunca un campo del request.
    */
   async register({
     username,
@@ -76,6 +82,7 @@ export const UserModel = {
     email,
     tenantName,
     profile = DEFAULT_TENANT_PROFILE,
+    trusted = false,
   }) {
     const slug = slugify(tenantName);
     // El alta solo pide el nombre de la tienda; el admin recibe un username
@@ -98,7 +105,8 @@ export const UserModel = {
     const hashedPassword = await hashPassword(password);
     // En dev (sin SMTP) no se puede enviar el correo, así que auto-verificamos
     // para no dejar al usuario trabado. En prod el flujo normal sigue intacto.
-    const autoVerify = !isSmtpConfigured();
+    // El alta por consola (`trusted`) tampoco verifica: ver el JSDoc de arriba.
+    const autoVerify = trusted || !isSmtpConfigured();
 
     const { user, tenant } = await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({

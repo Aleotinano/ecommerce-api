@@ -4,7 +4,7 @@
 //   node prisma/set-tenant-profile.js mesa-dulce estandar
 //   node prisma/set-tenant-profile.js                     # lista perfiles y tenants
 //
-// Es la herramienta de operación: estos cuatro campos NO se editan desde el panel
+// Es la herramienta de operación: estos campos NO se editan desde el panel
 // (ver READONLY_TENANT_CONFIG_FIELDS en schemas/tenant-config.schema.js), porque el
 // admin del tenant podría trabar pedidos que ya están en curso. Los configuramos
 // nosotros, cliente por cliente.
@@ -26,6 +26,7 @@ import {
 } from "../services/tenant-profiles.js";
 
 const PROFILE_FIELDS = [
+  "storeMode",
   "paymentMethodsEnabled",
   "fulfillmentMethodsEnabled",
   "depositEnabled",
@@ -34,7 +35,10 @@ const PROFILE_FIELDS = [
 
 function formatFlow(config) {
   if (!config) return "(sin config)";
+  // El modo va primero y con nombre en castellano: es lo primero que hay que
+  // mirar en la lista, porque en "carta" el resto de la línea no gobierna nada.
   return [
+    `modo: ${config.storeMode === "MENU" ? "carta (sin carrito)" : "tienda"}`,
     `pagos: ${(config.paymentMethodsEnabled ?? []).join(",") || "—"}`,
     `entregas: ${(config.fulfillmentMethodsEnabled ?? []).join(",") || "—"}`,
     `seña: ${config.depositEnabled ? `sí (${config.depositPercentage}%)` : "no"}`,
@@ -52,6 +56,7 @@ async function listAndExit() {
       slug: true,
       config: {
         select: {
+          storeMode: true,
           paymentMethodsEnabled: true,
           fulfillmentMethodsEnabled: true,
           depositEnabled: true,

@@ -14,11 +14,24 @@ import {
 describe("resolveProfile", () => {
   it("devuelve los valores del perfil pedido", () => {
     expect(resolveProfile("contraentrega")).toEqual({
+      storeMode: "SHOP",
       paymentMethodsEnabled: ["CASH"],
       fulfillmentMethodsEnabled: ["DELIVERY"],
       depositEnabled: false,
       depositPercentage: 50,
     });
+  });
+
+  it("carta es el único que no vende online", () => {
+    // El modo es lo que distingue a este perfil: sus métodos de pago y entrega
+    // son los de `estandar` a propósito (en MENU no nacen órdenes, así que no
+    // gobiernan nada), y si alguien los vaciara buscando "coherencia" rompería
+    // el día que el cliente pase a vender.
+    const menu = TENANT_PROFILE_NAMES.filter(
+      (name) => TENANT_PROFILES[name].storeMode === "MENU"
+    );
+    expect(menu).toEqual(["carta"]);
+    expect(resolveProfile("carta").paymentMethodsEnabled.length).toBeGreaterThan(0);
   });
 
   it("sin argumento cae al perfil por defecto", () => {
@@ -46,14 +59,15 @@ describe("resolveProfile", () => {
   });
 });
 
-describe("los tres perfiles", () => {
-  it("todos declaran las cuatro claves de flujo", () => {
+describe("todos los perfiles", () => {
+  it("todos declaran las cinco claves de flujo", () => {
     for (const [name, values] of Object.entries(TENANT_PROFILES)) {
       expect(Object.keys(values).sort(), `perfil ${name}`).toEqual([
         "depositEnabled",
         "depositPercentage",
         "fulfillmentMethodsEnabled",
         "paymentMethodsEnabled",
+        "storeMode",
       ]);
       expect(values.paymentMethodsEnabled.length, `perfil ${name}`).toBeGreaterThan(0);
       expect(values.fulfillmentMethodsEnabled.length, `perfil ${name}`).toBeGreaterThan(0);
@@ -113,5 +127,10 @@ describe("el perfil por defecto coincide con los @default() de Prisma", () => {
   it("depositEnabled y depositPercentage", () => {
     expect(defaultScalar("depositEnabled")).toBe(String(estandar.depositEnabled));
     expect(Number(defaultScalar("depositPercentage"))).toBe(estandar.depositPercentage);
+  });
+
+  it("storeMode", () => {
+    // El default de la columna es texto entre comillas en el schema.
+    expect(defaultScalar("storeMode").replace(/"/g, "")).toBe(estandar.storeMode);
   });
 });

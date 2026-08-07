@@ -120,12 +120,22 @@ model TenantConfig {
   productVariantsEnabled Boolean @default(true)
 
   // ---- Flujo de venta: LO CONFIGURAMOS NOSOTROS, no el tenant ----
-  // Estos cuatro campos deciden cuándo una orden puede producirse y cuánta plata
-  // se exige antes. No están en `updateTenantConfigObject` (ver
+  // Estos campos deciden SI el tenant vende, cuándo una orden puede producirse y
+  // cuánta plata se exige antes. No están en `updateTenantConfigObject` (ver
   // schemas/tenant-config.schema.js): si el admin del tenant pudiera cambiarlos,
   // podría trabar pedidos que ya están en curso. Se setean desde un perfil
   // (services/tenant-profiles.js) al crear el tenant, y después a mano con
   // `prisma/set-tenant-profile.js`.
+
+  // Qué es la tienda para el cliente:
+  //   SHOP  catálogo que se compra (default: todo como siempre)
+  //   MENU  catálogo que se LEE — carta de restaurante o de cafetería. No hay
+  //         carrito ni checkout; el pedido se cierra por fuera (WhatsApp, mostrador).
+  // Es el más drástico de los campos de este bloque, y por eso el que más razón
+  // tiene de estar acá: en MENU el storefront apaga /checkout entero. Un tenant
+  // que se lo pudiera prender solo se quedaría sin ventas sin entender por qué.
+  // Enum cerrado → CHECK en la migración, igual que customerPhoneMode.
+  storeMode String @default("SHOP")
 
   // Métodos que el tenant acepta. Los enums de Zod (schemas/order.schema.js) son
   // los valores POSIBLES; estas dos listas son los HABILITADOS para este tenant,

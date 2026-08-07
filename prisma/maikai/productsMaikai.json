@@ -1,0 +1,3297 @@
+[
+  {
+    "id": 420,
+    "name": "Comidas",
+    "description": null,
+    "image_url": null,
+    "products": [],
+    "children": [
+      {
+        "id": 424,
+        "name": "Ciabattas",
+        "description": null,
+        "image_url": null,
+        "products": [
+          {
+            "id": 2103,
+            "name": "Ciabatta de carne al plato",
+            "description": "200 Gr de Carne desmechada, palta, huevo, queso tybo, tomate perita, lechuga, limón, mayo casera y barbacoa.",
+            "extra": null,
+            "price": "22000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2104,
+            "name": "Ciabatta de Carne Desmechada Radical",
+            "description": "400gr de Carne Desmechada, pan de ciabatta, aceite de oliva mediterráneo, queso crema, tomate perita, cheddar, panceta ahumada, huevo, mayo casera.",
+            "extra": null,
+            "price": "46000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/CBy5TA82tGJXN7SbbCME.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2105,
+            "name": "Media Ciabatta de Carne Mechada Radical",
+            "description": "200gr de Carne Desmechada, pan de ciabatta, aceite de oliva mediterráneo, queso crema, tomate perita, cheddar, panceta ahumada, huevo, mayo casera.",
+            "extra": null,
+            "price": "25000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/LE05tWixhxTyIZTs5YW8.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2106,
+            "name": "Ciabatta Completa",
+            "description": "Pan de Ciabatta, aceite de oliva mediterráneo, queso crema, queso tybo, tomate, palta, huevo, mayo casera.",
+            "extra": null,
+            "price": "27000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/BlsXB8ElHvl3MB9OzakO.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2107,
+            "name": "Media Ciabatta Completa",
+            "description": "Pan de Ciabatta, aceite de oliva mediterráneo, queso crema, queso tybo, tomate, palta, huevo, mayo casera.",
+            "extra": null,
+            "price": "15000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/9793fcCteYQFA8CCtycL.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2108,
+            "name": "Ciabatta de Milanesa",
+            "description": "Pan de Ciabatta, aceite de oliva mediterráneo, queso crema, queso tybo, milanesa de peceto, tomate, lechuga, huevo, mayo casera.",
+            "extra": null,
+            "price": "32000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/gF1t95mzIpZJxbKAISIq.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2109,
+            "name": "Media Ciabatta de Milanesa",
+            "description": "Pan de Ciabatta, aceite de oliva mediterráneo, queso crema, queso tybo, milanesa de peceto, tomate, lechuga, huevo, mayo casera.",
+            "extra": null,
+            "price": "17000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/qgwz6Ow0mxqNbZ3Uqnkp.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2110,
+            "name": "Ciabatta Española",
+            "description": "Pan de Ciabatta, aceite de oliva mediterráneo, queso crema, queso tybo, salame español, rúcula, tomate y mayo.",
+            "extra": null,
+            "price": "25000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/3MlNqOikkxUV6BWUAak1.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2111,
+            "name": "Media CIabatta Española",
+            "description": "Pan de Ciabatta, aceite de oliva mediterráneo, queso crema, queso tybo, salame español, rúcula, tomate y mayo.",
+            "extra": null,
+            "price": "14000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/NpUUg1giUhr8khuk1RkC.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2112,
+            "name": "Ciabatta Estilo Cesar",
+            "description": "Pan de Ciabatta, aceite de oliva mediterráneo, queso crema, queso tybo, palta, rúcula, tomate, pollo, aderezo cesar , mix de semillas, mayo casera.",
+            "extra": null,
+            "price": "30000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/ioEfHia9lpN16tg4mygB.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2113,
+            "name": "Media Ciabatta estilo Cesar",
+            "description": "Pan de Ciabatta, aceite de oliva mediterráneo, queso crema, queso tybo, palta, rúcula, tomate, pollo, aderezo cesar , mix de semillas, mayo casera.",
+            "extra": null,
+            "price": "17000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/OhKVxsvaRfhGYqXVtGoS.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2114,
+            "name": "Ciabatta Maikai",
+            "description": "Pan de Ciabatta, 400gr Carne Desmechada, aceite de oliva mediterráneo, queso crema, queso tybo, tomate, lechuga, queso azul y mayo.",
+            "extra": null,
+            "price": "46000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/hK0lp1ttO6BhMG5ddbWV.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2115,
+            "name": "Media Ciabatta Maikai",
+            "description": "Pan de Ciabatta, 200gr Carne Desmechada, aceite de oliva mediterráneo, queso crema, queso tybo, tomate, lechuga, queso azul y mayo.",
+            "extra": null,
+            "price": "25000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/KdrkjVJEQp7RvedXQ64B.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2022,
+            "name": "Media Ciabatta Veggie",
+            "description": "Pan ciabatta, queso crema, milanesa de berenjena, queso tybo, tomate, rúcula y palta.",
+            "extra": null,
+            "price": "17000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/56nqVs8pfRriIVDCsLa4.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2046,
+            "name": "Ciabatta Veggie",
+            "description": "Pan ciabatta, queso crema, milanesa de berenjena, queso tybo, tomate, rúcula y palta.",
+            "extra": null,
+            "price": "24000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/qRcC3FKH2YlhadsPyAu9.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2031,
+            "name": "Media Ciabatta de Carne mechada",
+            "description": "Pan ciabatta, queso crema, carne desmechada, queso tybo, tomate y mayonesa casera/ barbacoa.",
+            "extra": null,
+            "price": "23000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/Dl65pQRXFTyS1PM3I5FO.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2019,
+            "name": "Ciabatta de Carne mechada",
+            "description": "Pan ciabatta, queso crema, carne desmechada, queso tybo, tomate y mayonesa casera/ barbacoa.",
+            "extra": null,
+            "price": "43000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/lFY9W84zHA1k65dCFo0r.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2032,
+            "name": "Media Ciabatta Clasica",
+            "description": "Pan ciabatta, queso crema, queso tybo, jamón cocido, tomate y palta.",
+            "extra": null,
+            "price": "14000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/sxspy6hRPVUwTorirH6C.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2020,
+            "name": "Ciabatta Clasica",
+            "description": "Pan ciabatta, queso crema, queso tybo, jamón cocido, tomate y palta.",
+            "extra": null,
+            "price": "25000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/F68eZkCiVDjxY0GE7b5B.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2033,
+            "name": "Media Ciabatta Ibérica",
+            "description": "Pan ciabatta, queso crema, queso tybo, jamón crudo, rúcula y tomate.",
+            "extra": null,
+            "price": "14000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/ppCjoH1EojZ0ZJv2f1vb.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2021,
+            "name": "Ciabatta Ibérica",
+            "description": "Pan ciabatta, queso crema, queso tybo, jamón crudo, rúcula y tomate.",
+            "extra": null,
+            "price": "25000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/gFee2apxEUO73OBiIvTr.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2034,
+            "name": "Media Ciabatta de Pollo Crispy",
+            "description": "Pan de Ciabatta, Queso Crema, Pollo Crispy, Lechuga, Panceta Ahumada, Huevo y Mayo de la Casa.",
+            "extra": null,
+            "price": "19000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/BrAw0g0I81NcSSNiv0Gx.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2023,
+            "name": "Ciabatta de Pollo Crispy",
+            "description": "Pan de Ciabatta, Queso Crema, Pollo Crispy, Lechuga, Panceta Ahumada, Huevo y Mayo de la Casa.",
+            "extra": null,
+            "price": "35000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/yG5KOBpxe8bcAHUCuPoE.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          }
+        ]
+      },
+      {
+        "id": 440,
+        "name": "Pastas",
+        "description": null,
+        "image_url": null,
+        "products": [
+          {
+            "id": 2242,
+            "name": "Ravioles",
+            "description": "Porción de 20 Ravioles de Bondiola Braseada/Pollo Mediterráneo/Jamón y Queso.\r\nSalsas Disponibles: Azul, Champiñones, Boloñesa De Carne Mechada, Pesto, Langostinos y Fileto Casero.",
+            "extra": null,
+            "price": "15000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/ubMTyjmUviaAiJNhHydm.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2243,
+            "name": "Sorrentinos",
+            "description": "Porción de 8 Sorrentinos de Bondiola Braseada/Pollo Mediterráneo/Jamón y Queso\r\nSalsas Disponibles: Azul, Champiñones, Boloñesa De Carne Mechada, Pesto, Langostinos y Fileto Casero.",
+            "extra": null,
+            "price": "15000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/WSH4xf0xoaj024BJcpMH.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2244,
+            "name": "Fetuccini",
+            "description": "Porción de 300gr de Fetuccini.\r\nSalsas Disponibles: Azul, Champiñones, Boloñesa De Carne Mechada, Pesto, Langostinos y Fileto Casero.",
+            "extra": null,
+            "price": "15000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/ZPpaU2uiT8o8vcOGisGE.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          }
+        ]
+      },
+      {
+        "id": 431,
+        "name": "Ensaladas",
+        "description": null,
+        "image_url": null,
+        "products": [
+          {
+            "id": 2050,
+            "name": "Ensalada Cesar",
+            "description": "Crutones, lechuga, queso tybo, cherry, mix de semillas, aderezo cesar, rúcula, palta y pollo.",
+            "extra": null,
+            "price": "20000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2051,
+            "name": "Ensalada Veggie",
+            "description": "Huevo, tomate, zanahoria, choclo, palta, queso tybo, queso azul y pan de mesa.",
+            "extra": null,
+            "price": "20000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2052,
+            "name": "Ensalada Maikai",
+            "description": "Rúcula, lechuga, aceitunas, queso tybo, palta, queso azul, mix de semillas, crutones y carne desmechada.",
+            "extra": null,
+            "price": "25000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2161,
+            "name": "Ensalada Iberica",
+            "description": "Rúcula, lechuga, jamón crudo, tomate cherry, aceitunas, queso azul, palta, queso tybo, mix de semillas y crutones.",
+            "extra": null,
+            "price": "21500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2173,
+            "name": "Ensalada Fresca",
+            "description": "Rúcula, zanahoria, manzana verde, manazana roja, tomate cherry, tomate hidradato, palta, boccaccino  y pistacho.",
+            "extra": null,
+            "price": "24000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          }
+        ]
+      },
+      {
+        "id": 432,
+        "name": "Menú Ejecutivo",
+        "description": null,
+        "image_url": null,
+        "products": [
+          {
+            "id": 2053,
+            "name": "Milanesas con Papas",
+            "description": "milanesa con papas, pan de mesa y mayo casera. 2 huevos a caballo",
+            "extra": null,
+            "price": "19000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/VPvJCw2jSXLxQHfpQYvG.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2054,
+            "name": "Milanesas con Ensalada",
+            "description": "Milanesa de peceto, huevo frito, palta, tomate perita, lechuga, pan de la casa y mayo casera.",
+            "extra": null,
+            "price": "19000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/GIXj1OROBsJIDvzpGGgM.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2055,
+            "name": "Pollo Crispy con Papas",
+            "description": "Pollo Crujiente con papas fritas.",
+            "extra": null,
+            "price": "17000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2056,
+            "name": "Pollo Crispy con Ensalada",
+            "description": "Pollo crujiente con ensalada de tomate, lechuga y palta.",
+            "extra": null,
+            "price": "17000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2091,
+            "name": "Milanesa de Berenjena con Ensalada",
+            "description": "Milanesas de berenjena, queso azul, ensalada de tomate lechuga y palta, pan de mesa y mayo casera.",
+            "extra": null,
+            "price": "18000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/lieLUvbkeL83YW6yMhfq.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2092,
+            "name": "Milanesa de Berenjena con Papas Fritas",
+            "description": "Milanesas de berenjena, queso azul, papas fritas, pan de mesa y mayo casera.",
+            "extra": null,
+            "price": "18000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/d5Jd49zsIqZ8klHRxzpZ.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2093,
+            "name": "Milanesa Napolitana con ensalada",
+            "description": "Milanesas de peceto, salsa de tomate, mozzarella, huevo, tomate, lechuga, palta. pan de mesa y mayo de la casa.",
+            "extra": null,
+            "price": "22000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/gY4wkvd302qWpYKro4zk.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2094,
+            "name": "Milanesa Napolitana con Papas Fritas",
+            "description": "Milanesas de peceto, salsa de tomate, mozzarella, papas fritas, pan de mesa y mayo de la casa.",
+            "extra": null,
+            "price": "22000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/n1nTwfaHXUN7h255zyLy.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2119,
+            "name": "Milanesa de berenjenas napolitana con papas",
+            "description": "Milanesas de Berenjena, salsa de tomate, queso azul, papas fritas , pan de mesa y mayo de la casa.",
+            "extra": null,
+            "price": "19000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/GNdMqqmHhCDRNZu8mXkI.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2120,
+            "name": "Milanesa de berenjena napolitana con ensalada",
+            "description": "Milanesas de Berenjena, salsa de tomate, queso azul, tomate, lechuga, palta, pan de mesa y mayo de la casa.",
+            "extra": null,
+            "price": "19000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/ThbJlylBSHZ2yaliOX1Y.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2126,
+            "name": "Sandwich Americano",
+            "description": "Pan de Molde, queso crema, queso tybo, jamón cocido, tomate, lechuga y mayo de la casa.",
+            "extra": null,
+            "price": "9500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2127,
+            "name": "Sandwich Americano de Carne Desmechada",
+            "description": "Pan de molde, queso crema, carne desmechada, queso tybo, tomate, palta y mayo de la casa.",
+            "extra": null,
+            "price": "14500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2128,
+            "name": "Sandwich Americano de Pollo Crispy",
+            "description": "Pan de molde, queso crema, pollo crispy, tomate, panceta, huevo y mayo de la casa.",
+            "extra": null,
+            "price": "13000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2129,
+            "name": "Sandwich Americano Español",
+            "description": "Pan de molde, queso crema, salame español, rúcula, tomate y mayo de la casa.",
+            "extra": null,
+            "price": "11000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2130,
+            "name": "Sandwich Americano para compartir",
+            "description": "Sándwich Americano, Sándwich Americano de Carne Desmechada, Sándwich Americano de Pollo Crispy y Sándwich Americano Español.",
+            "extra": null,
+            "price": "43000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2131,
+            "name": "Sandwich Americano Veggie",
+            "description": "Pan de Molde, queso crema, queso tybo, queso azul, palta, tomate, rúcula y mayo de la casa.",
+            "extra": null,
+            "price": "10500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2214,
+            "name": "Bifes de Pollo con Ensalada",
+            "description": "Bifes de pechuga, lechuga, rúcula, tomate, palta, pan de mesa, rodaja de limón y mayo de la casa.",
+            "extra": null,
+            "price": "14000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2220,
+            "name": "Balma Chicken",
+            "description": "Pollo estilo Cesar, palta, tomate cherry, queso crema, queso tybo, rúcula, cebolla de verdeo, choclo, humus de remolacha y mayo de la casa.",
+            "extra": null,
+            "price": "15000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/aNaTpZSSdZuTGzv1us5m.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          }
+        ]
+      },
+      {
+        "id": 421,
+        "name": "Brunch",
+        "description": null,
+        "image_url": null,
+        "products": [
+          {
+            "id": 2009,
+            "name": "Brunchemos",
+            "description": "4 Tostadas de pan de masa madre, huevos revuelto, palta en trozos, tomate cherry, jamón crudo, chía y dip de queso crema.",
+            "extra": null,
+            "price": "24000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2012,
+            "name": "Plato fit",
+            "description": "2 Tostadas de pan de masa madre, queso crema, huevo, palta y jamón crudo.",
+            "extra": null,
+            "price": "15000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2058,
+            "name": "Tostón Fit",
+            "description": "Pan de masa madre, queso crema, aceite de oliva, queso tybo, huevo, palta y tomate cherry.",
+            "extra": null,
+            "price": "7500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2059,
+            "name": "Tostón Iberico",
+            "description": "Pan de masa madre, queso crema, aceite de oliva, queso tybo, jamón crudo, rúcula y tomate cherry.",
+            "extra": null,
+            "price": "9000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2060,
+            "name": "Tostón Veggie",
+            "description": "Pan de masa madre, aceite de oliva, queso crema, queso tybo, palta, tomate cherry, humus de remolacha y mix de semillas.",
+            "extra": null,
+            "price": "7000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2061,
+            "name": "Tostón Clasico",
+            "description": "Pan de masa madre, queso crema, aceite de oliva, queso tybo y jamón cocido.",
+            "extra": null,
+            "price": "6000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2062,
+            "name": "Bagel Ibérico",
+            "description": "Bagel con queso tybo, jamón crudo, rúcula y tomate.",
+            "extra": null,
+            "price": "12000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2063,
+            "name": "Bagel Fit",
+            "description": "Bagel con queso tybo, jamón cocido, tomate, palta y huevo revuelto.",
+            "extra": null,
+            "price": "12000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2090,
+            "name": "Tostón Italiano",
+            "description": "Pan de campo, queso crema, aceite de oliva, jamón crudo, tomate cherry, queso Stracciatella y pesto.",
+            "extra": null,
+            "price": "16000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2133,
+            "name": "Tostado de Jamon y Queso triple",
+            "description": "Tostado con 150gr de queso tybo y  150gr de jamón cocido.",
+            "extra": null,
+            "price": "11000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2134,
+            "name": "Medio Tostado de Jamon y Queso",
+            "description": "Medio Tostado con 100gr de queso tybo y 120gr de jamón cocido.",
+            "extra": null,
+            "price": "6000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2149,
+            "name": "Toston Bacon",
+            "description": "Pan de campo, queso crema, aceite de oliva, queso tybo, huevo, palta, panceta ahumada, tomate cherry y mix de semillas.",
+            "extra": null,
+            "price": "12500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2193,
+            "name": "Plato Gym",
+            "description": "2 Tostadas de pan de masa madre, queso crema,  8 huevos, palta, jamón cocido y queso tybo.",
+            "extra": null,
+            "price": "20000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2218,
+            "name": "Bagel Iberico",
+            "description": "Bagel, queso crema, queso tybo, jamón crudo, tomate y rúcula.",
+            "extra": null,
+            "price": "12000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2219,
+            "name": "Bagel Fit",
+            "description": "Bagel, queso crema, queso tybo, jamón cocido, palta, tomate y huevo.",
+            "extra": null,
+            "price": "12000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2221,
+            "name": "Batido Proteico",
+            "description": "Batido Proteico sabor mango, con leche o agua.",
+            "extra": null,
+            "price": "6500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2236,
+            "name": "Yogur Griego con Frutas de Estación (Endulzado)",
+            "description": "Copa de yogur griego con frutas de estación endulzado naturalmente.",
+            "extra": null,
+            "price": "8500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2237,
+            "name": "Yogur Griego con Frutas de Estación (Sin Endulzar)",
+            "description": "Copa de yogur griego con frutas de estación sin endulzar.",
+            "extra": null,
+            "price": "8500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2239,
+            "name": "Tostado Triple de Jamón Crudo",
+            "description": "Tostado con 200gr de queso tybo y 200gr de jamón crudo.",
+            "extra": null,
+            "price": "13000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2240,
+            "name": "Medio Tostado de Jamón Crudo",
+            "description": "Medio Tostado con 100gr de queso tybo y 120gr de jamón crudo.",
+            "extra": null,
+            "price": "7000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          }
+        ]
+      },
+      {
+        "id": 425,
+        "name": "Focaccia",
+        "description": null,
+        "image_url": null,
+        "products": [
+          {
+            "id": 2097,
+            "name": "Focaccia Stracciatella",
+            "description": "Pan de Foccacia, rúcula, jamón crudo, queso stracciatella, pesto y mayo de la casa.",
+            "extra": null,
+            "price": "30000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2098,
+            "name": "Media Focaccia Stracciatella",
+            "description": "Pan de Foccacia, rúcula, jamón crudo, queso stracciatella, pesto y mayo de la casa.",
+            "extra": null,
+            "price": "18000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2184,
+            "name": "Media Focaccia Ibérica",
+            "description": "Pan de Foccacia, queso crema, queso tybo, jamón crudo, rúcula, tomate, pesto y mayo de la casa.",
+            "extra": null,
+            "price": "12000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2162,
+            "name": "Focaccia Ibérica",
+            "description": "Pan de Foccacia, queso crema, queso tybo, jamón crudo, rúcula, tomate, pesto y mayo de la casa.",
+            "extra": null,
+            "price": "25000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2167,
+            "name": "Media Focaccia Española",
+            "description": "Pan de Focaccia, queso crema, queso pategras, queso tybo, salame español, tomate, rúcula.",
+            "extra": null,
+            "price": "13000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2168,
+            "name": "Focaccia Española",
+            "description": "Pan de Focaccia, queso crema, queso pategras, queso tybo, salame español, tomate, rúcula.",
+            "extra": null,
+            "price": "22000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2169,
+            "name": "Media Focaccia Vegetariana",
+            "description": "Pan de Focaccia, queso crema, cebolla de verdeo, rúcula, huevo, repollo morado, palta, tomate.",
+            "extra": null,
+            "price": "20000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2170,
+            "name": "Focaccia Vegetariana",
+            "description": "Pan de Focaccia, queso crema, cebolla de verdeo, rúcula, huevo, repollo morado, palta, tomate.",
+            "extra": null,
+            "price": "12000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2171,
+            "name": "Media Focaccia Estilo Caesar",
+            "description": "Pan de Focaccia, queso crema, queso pategras, ajo, aderezo Caesar, rúcula, pollo.",
+            "extra": null,
+            "price": "13000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2172,
+            "name": "Focaccia Estilo Caesar",
+            "description": "Pan de Focaccia, queso crema, queso pategras, ajo, aderezo Caesar, rúcula, pollo.",
+            "extra": null,
+            "price": "22000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2027,
+            "name": "Media Focaccia  Argenta",
+            "description": "Pan de Foccacia, queso crema, queso tybo, milanesa de peceto, tomate, lechuga, huevo y mayo de la casa.",
+            "extra": null,
+            "price": "15000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2024,
+            "name": "Focaccia Argenta",
+            "description": "Pan de Foccacia, queso crema, queso tybo, milanesa de peceto, tomate, lechuga, huevo y mayo de la casa.",
+            "extra": null,
+            "price": "26500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2014,
+            "name": "Media Focaccia  de Mortadela al Pistacho",
+            "description": "Pan de Focaccia, queso crema, queso pategras, rúcula, tomate, mortadela con pistacho, mayo de la casa.",
+            "extra": null,
+            "price": "15000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2025,
+            "name": "Focaccia de Mortadela al Pistacho",
+            "description": "Pan de Focaccia, queso crema, queso pategras, rúcula, tomate, mortadela con pistacho, mayo de la casa.",
+            "extra": null,
+            "price": "25000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2028,
+            "name": "Media Focaccia  de Pollo Crispy",
+            "description": "Pan de Foccacia, queso crema, queso patagrás, rúcula, tomate, panceta, huevo y mayo de la casa.",
+            "extra": null,
+            "price": "14000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2026,
+            "name": "Focaccia de Pollo Crispy",
+            "description": "Pan de Foccacia, queso crema, queso patagrás, rúcula, tomate, panceta, huevo y mayo de la casa.",
+            "extra": null,
+            "price": "25000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          }
+        ]
+      },
+      {
+        "id": 438,
+        "name": "Lomos",
+        "description": null,
+        "image_url": null,
+        "products": [
+          {
+            "id": 2224,
+            "name": "Lomo Triple B",
+            "description": "Pan de Lomo (30cm), lomo, lechuga, tomate, queso tybo, jamón cocido, huevo y mayo de la casa.",
+            "extra": null,
+            "price": "27000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/jqWYNv7iWxIPlGQ1epsv.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2225,
+            "name": "Lomo Triple B Individual",
+            "description": "Pan de Lomo (15cm), lomo, lechuga, tomate, queso tybo, jamón cocido, huevo y mayo de la casa.",
+            "extra": null,
+            "price": "15000.00",
+            "photo_url": "https://maikai.com.ar/images/productos/WDjxGm0KEikTo4yJvnMR.webp",
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          }
+        ]
+      },
+      {
+        "id": 422,
+        "name": "Papas",
+        "description": null,
+        "image_url": null,
+        "products": [
+          {
+            "id": 2013,
+            "name": "Fritas Clásicas",
+            "description": "Papas fritas doradas y crocantes.",
+            "extra": null,
+            "price": "7000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2015,
+            "name": "Fritas Cheddar",
+            "description": "Papas fritas cubiertas de salsa cheddar.",
+            "extra": null,
+            "price": "11000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2016,
+            "name": "Fritas Cheddar + Carne desmechada",
+            "description": "Papas fritas con cheddar y carne desmechada.",
+            "extra": null,
+            "price": "18000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2048,
+            "name": "Fritas Mozzarella y jamón crudo",
+            "description": "Papas fritas cubiertas de mozzarella y jamón crudo.",
+            "extra": null,
+            "price": "14000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2049,
+            "name": "Fritas Mozzarella y Carne Desmechada",
+            "description": "Papas fritas cubiertas de mozzarella y carne desmechada.",
+            "extra": null,
+            "price": "17000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2117,
+            "name": "Fritas Cheddar y Panceta",
+            "description": "Papas Fritas cubiertas de Cheddar y Panceta.",
+            "extra": null,
+            "price": "14000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2183,
+            "name": "Papas con Mozzarella",
+            "description": "Papas fritas cubiertas de mozzarella y mayo de la casa.",
+            "extra": null,
+            "price": "10000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          }
+        ]
+      },
+      {
+        "id": 423,
+        "name": "Tapeos",
+        "description": null,
+        "image_url": null,
+        "products": [
+          {
+            "id": 2017,
+            "name": "Nuggets",
+            "description": "500 gr de Nuggets de Pollo y mayo de la casa.",
+            "extra": null,
+            "price": "10000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2018,
+            "name": "Tabla de fiambres",
+            "description": "Queso tybo, jamón cocido, jamón crudo, salame español, queso azul, tomate cherry, aceitunas, tostadas de pan de masa madre y mayo de la casa.",
+            "extra": null,
+            "price": "28000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2089,
+            "name": "Picada Maikai",
+            "description": "Porcion de 400g de papas, con cheddar y carne desmechada, 6 bastones de mozzarella y porcion de 500g de  nuggets de pollo.",
+            "extra": null,
+            "price": "45000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2099,
+            "name": "Bastones de Mozzarella",
+            "description": "6 Bastones de mozzarella y mayos de la casa.",
+            "extra": null,
+            "price": "14000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2116,
+            "name": "Nuggets con Cheddar y Panceta",
+            "description": "500gr de Nuggets de Pollo con queso Cheddar y Panceta Ahumada.",
+            "extra": null,
+            "price": "19000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2195,
+            "name": "Balde de Mini Burgers",
+            "description": "6 Mini Burgers con panceta, cheddar, salsa de la casa y papas crinkle.",
+            "extra": null,
+            "price": "28000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": 441,
+    "name": "Papas Presidenciales",
+    "description": null,
+    "image_url": null,
+    "products": [
+      {
+        "id": 2246,
+        "name": "Papas De La Rúa",
+        "description": "Porción de 650gr de Papas Fritas tradicionales",
+        "extra": null,
+        "price": "8000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2247,
+        "name": "Papas De La Rúa (1/2 Porción)",
+        "description": "Porción de 350gr de Papas Fritas Tradicionales",
+        "extra": null,
+        "price": "6000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2248,
+        "name": "Papas Juan Domingo Perón",
+        "description": "Porción de 650gr de Papas Fritas con Carne Desmechada, Mozzarella Gratinada y Verdeo.",
+        "extra": null,
+        "price": "20000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2249,
+        "name": "Papas Juan Domingo Perón (1/2 Porción)",
+        "description": "Porción de 350gr de Papas Fritas con Carne Desmechada, Mozzarella Gratinada y Verdeo.",
+        "extra": null,
+        "price": "13000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2250,
+        "name": "Papas Carlos Menem",
+        "description": "Porción de 650gr de Papas Fritas, Cheddar Cremoso, Panceta Ahumada y Verdeo",
+        "extra": null,
+        "price": "18000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2251,
+        "name": "Papas Carlos Menem (1/2Porción)",
+        "description": "Porción de 350gr de Papas Fritas, Cheddar Cremoso, Panceta Ahumada y Verdeo",
+        "extra": null,
+        "price": "11000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2252,
+        "name": "Papas Milei",
+        "description": "Porción de 650gr de Papas Fritas, Langostinos al Ajillo y Perejil.",
+        "extra": null,
+        "price": "22000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2253,
+        "name": "Papas Milei (1/2 Porción)",
+        "description": "Porción de 350gr de Papas Fritas, Langostinos al Ajillo y Perejil.",
+        "extra": null,
+        "price": "14000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2254,
+        "name": "Papas Cristina Kirchner",
+        "description": "Porción de 650gr de Papas Fritas, Chorizo Salteado, Cebolla Caramelizada y Verdeo.",
+        "extra": null,
+        "price": "20000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2255,
+        "name": "Papas Cristina Kirchner (1/2 Porción)",
+        "description": "Porción de 350gr de Papas Fritas, Chorizo Salteado, Cebolla Caramelizada y Verdeo.",
+        "extra": null,
+        "price": "12000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2256,
+        "name": "Papas Raúl Alfonsín",
+        "description": "Porción de 650gr de Papas Fritas, Cuatro Quesos Fundido y Orégano.",
+        "extra": null,
+        "price": "18000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2257,
+        "name": "Papas Raúl Alfonsín (1/2 Porción)",
+        "description": "Porción de 350gr de Papas Fritas, Cuatro Quesos Fundido y Orégano.",
+        "extra": null,
+        "price": "11000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2258,
+        "name": "Papas Hipólito Yrigoyen",
+        "description": "Porción de 650gr de Papas Fritas, Pollo Crispy, Cebolla de Verdeo y Muzzarella Gratinada.",
+        "extra": null,
+        "price": "20000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2259,
+        "name": "Papas Hipólito Yrigoyen (1/2 Porción)",
+        "description": "Porción de 350gr de Papas Fritas, Pollo Crispy, Cebolla de Verdeo y Muzzarella Gratinada.",
+        "extra": null,
+        "price": "12000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      }
+    ],
+    "children": []
+  },
+  {
+    "id": 406,
+    "name": "Cervezas",
+    "description": null,
+    "image_url": null,
+    "products": [
+      {
+        "id": 1958,
+        "name": "Budweiser 1L",
+        "description": "Cerveza rubia americana en botella de 1L.",
+        "extra": null,
+        "price": "7000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 1959,
+        "name": "Corona 330ml",
+        "description": "Cerveza mexicana en botella de 330ml.",
+        "extra": null,
+        "price": "5000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 1960,
+        "name": "Corona 710ml",
+        "description": "Cerveza mexicana en botella de 710ml.",
+        "extra": null,
+        "price": "11000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 1961,
+        "name": "Patagonia 24.7 730ml",
+        "description": "Cerveza artesanal ligera, botella de 730ml.",
+        "extra": null,
+        "price": "8500.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 1962,
+        "name": "Heineken",
+        "description": "Cerveza IPA artesanal, botella de 730ml.",
+        "extra": null,
+        "price": "12000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 1963,
+        "name": "Stella artois 1L",
+        "description": "Cerveza belga en botella de 1L.",
+        "extra": null,
+        "price": "12000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 1964,
+        "name": "Cerveza tirada pinta Honey 500ml",
+        "description": null,
+        "extra": null,
+        "price": "5500.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 1965,
+        "name": "Cerveza tirada pinta larga Honey",
+        "description": null,
+        "extra": null,
+        "price": "7500.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2176,
+        "name": "Ancestral American Ipa",
+        "description": null,
+        "extra": null,
+        "price": "6500.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2241,
+        "name": "Stella Artois Pure Gold",
+        "description": "Cerveza sin tacc",
+        "extra": null,
+        "price": "6500.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      }
+    ],
+    "children": []
+  },
+  {
+    "id": 439,
+    "name": "Almuerzos",
+    "description": null,
+    "image_url": null,
+    "products": [
+      {
+        "id": 2050,
+        "name": "Ensalada Cesar",
+        "description": "Crutones, lechuga, queso tybo, cherry, mix de semillas, aderezo cesar, rúcula, palta y pollo.",
+        "extra": null,
+        "price": "20000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2051,
+        "name": "Ensalada Veggie",
+        "description": "Huevo, tomate, zanahoria, choclo, palta, queso tybo, queso azul y pan de mesa.",
+        "extra": null,
+        "price": "20000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2052,
+        "name": "Ensalada Maikai",
+        "description": "Rúcula, lechuga, aceitunas, queso tybo, palta, queso azul, mix de semillas, crutones y carne desmechada.",
+        "extra": null,
+        "price": "25000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2053,
+        "name": "Milanesas con Papas",
+        "description": "milanesa con papas, pan de mesa y mayo casera. 2 huevos a caballo",
+        "extra": null,
+        "price": "19000.00",
+        "photo_url": "https://maikai.com.ar/images/productos/VPvJCw2jSXLxQHfpQYvG.webp",
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2054,
+        "name": "Milanesas con Ensalada",
+        "description": "Milanesa de peceto, huevo frito, palta, tomate perita, lechuga, pan de la casa y mayo casera.",
+        "extra": null,
+        "price": "19000.00",
+        "photo_url": "https://maikai.com.ar/images/productos/GIXj1OROBsJIDvzpGGgM.webp",
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2055,
+        "name": "Pollo Crispy con Papas",
+        "description": "Pollo Crujiente con papas fritas.",
+        "extra": null,
+        "price": "17000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2056,
+        "name": "Pollo Crispy con Ensalada",
+        "description": "Pollo crujiente con ensalada de tomate, lechuga y palta.",
+        "extra": null,
+        "price": "17000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2091,
+        "name": "Milanesa de Berenjena con Ensalada",
+        "description": "Milanesas de berenjena, queso azul, ensalada de tomate lechuga y palta, pan de mesa y mayo casera.",
+        "extra": null,
+        "price": "18000.00",
+        "photo_url": "https://maikai.com.ar/images/productos/lieLUvbkeL83YW6yMhfq.webp",
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2092,
+        "name": "Milanesa de Berenjena con Papas Fritas",
+        "description": "Milanesas de berenjena, queso azul, papas fritas, pan de mesa y mayo casera.",
+        "extra": null,
+        "price": "18000.00",
+        "photo_url": "https://maikai.com.ar/images/productos/d5Jd49zsIqZ8klHRxzpZ.webp",
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2093,
+        "name": "Milanesa Napolitana con ensalada",
+        "description": "Milanesas de peceto, salsa de tomate, mozzarella, huevo, tomate, lechuga, palta. pan de mesa y mayo de la casa.",
+        "extra": null,
+        "price": "22000.00",
+        "photo_url": "https://maikai.com.ar/images/productos/gY4wkvd302qWpYKro4zk.webp",
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2094,
+        "name": "Milanesa Napolitana con Papas Fritas",
+        "description": "Milanesas de peceto, salsa de tomate, mozzarella, papas fritas, pan de mesa y mayo de la casa.",
+        "extra": null,
+        "price": "22000.00",
+        "photo_url": "https://maikai.com.ar/images/productos/n1nTwfaHXUN7h255zyLy.webp",
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2119,
+        "name": "Milanesa de berenjenas napolitana con papas",
+        "description": "Milanesas de Berenjena, salsa de tomate, queso azul, papas fritas , pan de mesa y mayo de la casa.",
+        "extra": null,
+        "price": "19000.00",
+        "photo_url": "https://maikai.com.ar/images/productos/GNdMqqmHhCDRNZu8mXkI.webp",
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2120,
+        "name": "Milanesa de berenjena napolitana con ensalada",
+        "description": "Milanesas de Berenjena, salsa de tomate, queso azul, tomate, lechuga, palta, pan de mesa y mayo de la casa.",
+        "extra": null,
+        "price": "19000.00",
+        "photo_url": "https://maikai.com.ar/images/productos/ThbJlylBSHZ2yaliOX1Y.webp",
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2161,
+        "name": "Ensalada Iberica",
+        "description": "Rúcula, lechuga, jamón crudo, tomate cherry, aceitunas, queso azul, palta, queso tybo, mix de semillas y crutones.",
+        "extra": null,
+        "price": "21500.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2173,
+        "name": "Ensalada Fresca",
+        "description": "Rúcula, zanahoria, manzana verde, manazana roja, tomate cherry, tomate hidradato, palta, boccaccino  y pistacho.",
+        "extra": null,
+        "price": "24000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2214,
+        "name": "Bifes de Pollo con Ensalada",
+        "description": "Bifes de pechuga, lechuga, rúcula, tomate, palta, pan de mesa, rodaja de limón y mayo de la casa.",
+        "extra": null,
+        "price": "14000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2220,
+        "name": "Balma Chicken",
+        "description": "Pollo estilo Cesar, palta, tomate cherry, queso crema, queso tybo, rúcula, cebolla de verdeo, choclo, humus de remolacha y mayo de la casa.",
+        "extra": null,
+        "price": "15000.00",
+        "photo_url": "https://maikai.com.ar/images/productos/aNaTpZSSdZuTGzv1us5m.webp",
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2242,
+        "name": "Ravioles",
+        "description": "Porción de 20 Ravioles de Bondiola Braseada/Pollo Mediterráneo/Jamón y Queso.\r\nSalsas Disponibles: Azul, Champiñones, Boloñesa De Carne Mechada, Pesto, Langostinos y Fileto Casero.",
+        "extra": null,
+        "price": "15000.00",
+        "photo_url": "https://maikai.com.ar/images/productos/ubMTyjmUviaAiJNhHydm.webp",
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2243,
+        "name": "Sorrentinos",
+        "description": "Porción de 8 Sorrentinos de Bondiola Braseada/Pollo Mediterráneo/Jamón y Queso\r\nSalsas Disponibles: Azul, Champiñones, Boloñesa De Carne Mechada, Pesto, Langostinos y Fileto Casero.",
+        "extra": null,
+        "price": "15000.00",
+        "photo_url": "https://maikai.com.ar/images/productos/WSH4xf0xoaj024BJcpMH.webp",
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2244,
+        "name": "Fetuccini",
+        "description": "Porción de 300gr de Fetuccini.\r\nSalsas Disponibles: Azul, Champiñones, Boloñesa De Carne Mechada, Pesto, Langostinos y Fileto Casero.",
+        "extra": null,
+        "price": "15000.00",
+        "photo_url": "https://maikai.com.ar/images/productos/ZPpaU2uiT8o8vcOGisGE.webp",
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      }
+    ],
+    "children": []
+  },
+  {
+    "id": 405,
+    "name": "Cocteleria",
+    "description": null,
+    "image_url": null,
+    "products": [],
+    "children": [
+      {
+        "id": 409,
+        "name": "Clásicos",
+        "description": null,
+        "image_url": null,
+        "products": [
+          {
+            "id": 1979,
+            "name": "Aperol Sprit",
+            "description": "Clásico aperitivo con Aperol, espumante y soda.",
+            "extra": null,
+            "price": "7000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1992,
+            "name": "Negroni",
+            "description": "Cóctel clásico con gin, vermut y bitter.",
+            "extra": null,
+            "price": "7000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1981,
+            "name": "Vermut",
+            "description": "Aperitivo clásico a base de vino macerado.",
+            "extra": null,
+            "price": "6000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1983,
+            "name": "Fernet pinta (coca tradicional o zero)",
+            "description": "Fernet con cola, en pinta.",
+            "extra": null,
+            "price": "6500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1984,
+            "name": "Fernet pinta larga  (coca tradicional o zero)",
+            "description": "Fernet con cola, en pinta larga.",
+            "extra": null,
+            "price": "8000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1982,
+            "name": "Fernet Botella + Coca 1.5",
+            "description": "Botella de Fernet para compartir.",
+            "extra": null,
+            "price": "45000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1985,
+            "name": "Gin Tonic de Frutilla",
+            "description": "Gin con tónica y mix de frutos rojos.",
+            "extra": null,
+            "price": "8000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1987,
+            "name": "Gin Tonic de Naranja",
+            "description": "Gin con tónica y rodajas de naranja.",
+            "extra": null,
+            "price": "8000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1988,
+            "name": "Gin Tonic de Pomelo",
+            "description": "Gin con tónica y rodajas de pomelo.",
+            "extra": null,
+            "price": "8000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1991,
+            "name": "Mojito ",
+            "description": "Cóctel refrescante de ron, menta y lima.",
+            "extra": null,
+            "price": "7000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1994,
+            "name": "Mojito Malibu",
+            "description": "Variante del mojito con ron Malibu.",
+            "extra": null,
+            "price": "7500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2037,
+            "name": "Vodka Sky",
+            "description": null,
+            "extra": null,
+            "price": "6000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2216,
+            "name": "Vodka Absolut",
+            "description": null,
+            "extra": null,
+            "price": "7500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2039,
+            "name": "Campari",
+            "description": null,
+            "extra": null,
+            "price": "6000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1989,
+            "name": "Jagger",
+            "description": "Trago de Jägermeister, intenso y herbal.",
+            "extra": null,
+            "price": "12000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2185,
+            "name": "Espresso Maikai",
+            "description": "Gin tonic de limon y espresso de Café.",
+            "extra": null,
+            "price": "9000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2186,
+            "name": "Espresso Martini",
+            "description": "Trago de autor con café, baileys, licor de café y canela.",
+            "extra": null,
+            "price": "8000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": 403,
+    "name": "Bebidas",
+    "description": null,
+    "image_url": null,
+    "products": [],
+    "children": [
+      {
+        "id": 427,
+        "name": "Gaseosas",
+        "description": null,
+        "image_url": null,
+        "products": [
+          {
+            "id": 1966,
+            "name": "Pepsi 500ml",
+            "description": "Gaseosa refrescante en botella de 500ml.",
+            "extra": null,
+            "price": "4000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1967,
+            "name": "Pepsi 1.5L",
+            "description": "Gaseosa refrescante en botella de 1.5L.",
+            "extra": null,
+            "price": "6000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1972,
+            "name": "7up 500ml",
+            "description": "Gaseosa lima-limón en botella de 500ml.",
+            "extra": null,
+            "price": "4000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1973,
+            "name": "7up 1.5L",
+            "description": "Gaseosa lima-limón en botella de 1.5L.",
+            "extra": null,
+            "price": "6500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2177,
+            "name": "Coca Cola 1.5L",
+            "description": null,
+            "extra": null,
+            "price": "7000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2178,
+            "name": "Coca Cola Zero 1.5L",
+            "description": null,
+            "extra": null,
+            "price": "7000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2180,
+            "name": "Coca Cola 500ml",
+            "description": null,
+            "extra": null,
+            "price": "4500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2181,
+            "name": "Coca Cola Zero 500ml",
+            "description": null,
+            "extra": null,
+            "price": "4500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2182,
+            "name": "Fanta 500ml",
+            "description": null,
+            "extra": null,
+            "price": "4500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          }
+        ]
+      },
+      {
+        "id": 404,
+        "name": "Jugos",
+        "description": null,
+        "image_url": null,
+        "products": [
+          {
+            "id": 1954,
+            "name": "Jugo de naranja",
+            "description": "Jugo natural y refrescante.",
+            "extra": null,
+            "price": "3500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1955,
+            "name": "Jugo de limonada",
+            "description": "Limonada fresca y cítrica.",
+            "extra": null,
+            "price": "3500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1956,
+            "name": "Jarra de jugo de naranja",
+            "description": "Jarra de jugo natural para compartir.",
+            "extra": null,
+            "price": "8000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1957,
+            "name": "Jarra de jugo de limonada",
+            "description": "Jarra de limonada fresca para compartir.",
+            "extra": null,
+            "price": "8000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          }
+        ]
+      },
+      {
+        "id": 428,
+        "name": "Aguas",
+        "description": null,
+        "image_url": null,
+        "products": [
+          {
+            "id": 1978,
+            "name": "Paso de los Toros 1.5L Tónica",
+            "description": "Agua tónica en botella de 1.5L.",
+            "extra": null,
+            "price": "6500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          }
+        ]
+      },
+      {
+        "id": 435,
+        "name": "Smoothies",
+        "description": null,
+        "image_url": null,
+        "products": [
+          {
+            "id": 2163,
+            "name": "Smoothie Mix 1",
+            "description": "Smoothie de Sandía y Melón.",
+            "extra": null,
+            "price": "4500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2164,
+            "name": "Smoothie Mix 2",
+            "description": "Smoothie de Frutillas, arándanos y cerezas.",
+            "extra": null,
+            "price": "5000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2165,
+            "name": "Smoothie Mix 3",
+            "description": "Smoothie de Durazno, damasco y mango.",
+            "extra": null,
+            "price": "5000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2166,
+            "name": "Smoothie Mix 4",
+            "description": "Smoothie de Arándanos, banana y leche de coco.",
+            "extra": null,
+            "price": "5000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          }
+        ]
+      },
+      {
+        "id": 429,
+        "name": "Vinos",
+        "description": "Consultar carta física con mas de 150 etiquetas de espumantes, blancos, rosados y tintos.",
+        "image_url": null,
+        "products": [
+          {
+            "id": 2215,
+            "name": "Vino Tercer Tiempo Blanco Dulce Natural",
+            "description": null,
+            "extra": null,
+            "price": "16000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": 400,
+    "name": "Café",
+    "description": "Armá tu café como más te guste, para luego repetirlo cuando quieras!",
+    "image_url": null,
+    "products": [],
+    "children": [
+      {
+        "id": 402,
+        "name": "Clásicos",
+        "description": null,
+        "image_url": null,
+        "products": [
+          {
+            "id": 2238,
+            "name": "Café Dubai",
+            "description": "Café brasilero de especialidad, leche condensada, pasta de pistacho, leche espumada, crema chantilly y chocolate amargo en escamas.",
+            "extra": null,
+            "price": "8000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1941,
+            "name": "Espresso Simple",
+            "description": "30ml de café de especialidad.",
+            "extra": null,
+            "price": "3800.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1940,
+            "name": "Doppio",
+            "description": "60ml de café de especialidad.",
+            "extra": null,
+            "price": "4000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1944,
+            "name": "Americano chico",
+            "description": "60ml de café de especialidad con agua.",
+            "extra": null,
+            "price": "4200.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2192,
+            "name": "Americano Mediano",
+            "description": "60ml de café de especialidad con agua.",
+            "extra": null,
+            "price": "4400.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1942,
+            "name": "Flat White chico",
+            "description": "Café de especialidad y leche espumada.",
+            "extra": null,
+            "price": "4400.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1943,
+            "name": "Flat White grande",
+            "description": "Café de especialidad y leche espumada.",
+            "extra": null,
+            "price": "5000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2217,
+            "name": "Flat Kinder",
+            "description": "Espresso doble con abundante leche vaporizada y medio huevo Kinder.",
+            "extra": null,
+            "price": "6500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1945,
+            "name": "Latte chico",
+            "description": "Espresso con abundante leche vaporizada, suave y cremoso.",
+            "extra": null,
+            "price": "4400.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1946,
+            "name": "Latte grande",
+            "description": "Espresso con abundante leche vaporizada, suave y cremoso.",
+            "extra": null,
+            "price": "5000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2198,
+            "name": "Mokka",
+            "description": "Café brasilero de especialidad, salsa de chocolate, leche espumada, barra de chocolate Águila y salsa de chocolate.",
+            "extra": null,
+            "price": "6500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1947,
+            "name": "Caramel latte chico",
+            "description": "Café brasilero de especialidad, syrup de caramelo y leche espumada.",
+            "extra": null,
+            "price": "5500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1948,
+            "name": "Caramel latte grande",
+            "description": "Café brasilero de especialidad, syrup de caramelo y leche espumada.",
+            "extra": null,
+            "price": "6500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1949,
+            "name": "Vainilla Latte grande",
+            "description": "Café brasilero de especialidad, syrup de vainilla y leche espumada.",
+            "extra": null,
+            "price": "6500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1950,
+            "name": "Vainilla Latte chico",
+            "description": "Café brasilero de especialidad, syrup de vainilla y leche espumada.",
+            "extra": null,
+            "price": "5500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1951,
+            "name": "Submarino",
+            "description": "Leche espumada con chocolate en barra Águila.",
+            "extra": null,
+            "price": "4500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1952,
+            "name": "Capu Argentino",
+            "description": "Café brasilero de especialidad, leche condensada, leche espumada, abundante espuma de leche con cacao y canela.",
+            "extra": null,
+            "price": "6500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1953,
+            "name": "Capu Italiano",
+            "description": "Café brasilero de especialidad, leche espumada y abundante espuma de leche.",
+            "extra": null,
+            "price": "5000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2196,
+            "name": "Capuccino de Avellanas",
+            "description": "Café brasilero de especialidad, Nutella, syrup de avellanas, leche espumada y abundante espuma de leche.",
+            "extra": null,
+            "price": "6500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2197,
+            "name": "Capuccino de Vainilla",
+            "description": "Café brasilero de especialidad, syrup de vainilla, leche espumada y abundante espuma de leche.",
+            "extra": null,
+            "price": "5500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          }
+        ]
+      },
+      {
+        "id": 426,
+        "name": "Ice Coffe",
+        "description": null,
+        "image_url": null,
+        "products": [
+          {
+            "id": 1934,
+            "name": "Ice Caramel Coffe",
+            "description": "Café, leche condensada, leche, hielo, crema chantilly, salsa a elección.",
+            "extra": null,
+            "price": "7500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1935,
+            "name": "Ice Vainilla Coffe",
+            "description": "Café, leche espumada, syrup de vainilla, hielo, salsa a elección.",
+            "extra": null,
+            "price": "5500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1936,
+            "name": "Ice Tonic Coffe",
+            "description": "Café, agua tonica, hielo, naranja.",
+            "extra": null,
+            "price": "4500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1937,
+            "name": "Ice Kinder coffe",
+            "description": "Café, leche, hielo, crema chantilly, barrita Kinder, salsa a elección.",
+            "extra": null,
+            "price": "7500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1938,
+            "name": "Ice Oreo Coffe",
+            "description": "Café, leche, hielo, crema chantilly, galletas mini oreo, salsa a elección.",
+            "extra": null,
+            "price": "7500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1939,
+            "name": "Ice Avellanas Coffe",
+            "description": "Café, leche espumada, hielo, Nutella, syrup de avellanas, salsa a elección.",
+            "extra": null,
+            "price": "6500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          }
+        ]
+      },
+      {
+        "id": 436,
+        "name": "Frappe",
+        "description": null,
+        "image_url": null,
+        "products": [
+          {
+            "id": 2187,
+            "name": "Frappe de Dulce de Leche",
+            "description": "Batido de Café, leche, dulce de leche, azúcar, hielo, crema chantilly, salsa a elección.",
+            "extra": null,
+            "price": "6500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2188,
+            "name": "Frappe de Nutella",
+            "description": "Batido de Café, leche, Nutella, hielo, azúcar, crema chantilly, salsa a elección.",
+            "extra": null,
+            "price": "7500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2189,
+            "name": "Frappe Base Crunch",
+            "description": "Batido de Café, leche, dulce de leche, azúcar, hielo, crema chantilly, salsa a elección. Presentación en un vaso supermilano, recubierto de chocolate semi-amargo.",
+            "extra": null,
+            "price": "8500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2190,
+            "name": "Frappe Kinder",
+            "description": "Batido de Café, leche, dulce de leche, hielo, azúcar, crema chantilly, barrita Kinder, salsa a elección.",
+            "extra": null,
+            "price": "7500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2191,
+            "name": "Frappe Oreo",
+            "description": "Batido de Café, leche, dulce de leche/nutella, azúcar, hielo, crema chantilly, Mini Oreo, salsa a elección.",
+            "extra": null,
+            "price": "11000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          }
+        ]
+      },
+      {
+        "id": 433,
+        "name": "Agregados Café",
+        "description": null,
+        "image_url": null,
+        "products": [
+          {
+            "id": 2064,
+            "name": "Escamas de Chocolate",
+            "description": "Chocolate Aguila rallado.",
+            "extra": null,
+            "price": "600.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2065,
+            "name": "Chocolate Aguila",
+            "description": "Barrita de Chocolate Aguila.",
+            "extra": null,
+            "price": "10000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2066,
+            "name": "Cacao",
+            "description": "Cacao semi-amargo",
+            "extra": null,
+            "price": "200.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2067,
+            "name": "Canela",
+            "description": "Canela en polvo",
+            "extra": null,
+            "price": "200.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2068,
+            "name": "Leche Condensada",
+            "description": null,
+            "extra": null,
+            "price": "800.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2069,
+            "name": "Crema Chantilly",
+            "description": null,
+            "extra": null,
+            "price": "1000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2070,
+            "name": "Nutella",
+            "description": null,
+            "extra": null,
+            "price": "1400.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2071,
+            "name": "Barrita Kinder",
+            "description": "Barra de chocolate Kinder.",
+            "extra": null,
+            "price": "1200.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2072,
+            "name": "Huevo Kinder",
+            "description": "Medio huevo de chocolate Kinder.",
+            "extra": null,
+            "price": "1500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2073,
+            "name": "Rocklets",
+            "description": null,
+            "extra": null,
+            "price": "800.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2074,
+            "name": "Crocante de Maní",
+            "description": "Decorado de Crocantes de Mani",
+            "extra": null,
+            "price": "400.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2075,
+            "name": "Leche de Almendra",
+            "description": null,
+            "extra": null,
+            "price": "900.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2076,
+            "name": "Leche de Coco",
+            "description": null,
+            "extra": null,
+            "price": "900.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2077,
+            "name": "Mini Oreos",
+            "description": null,
+            "extra": null,
+            "price": "800.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2078,
+            "name": "Salsa de Caramelo",
+            "description": null,
+            "extra": null,
+            "price": "100.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2079,
+            "name": "Salsa de Dulce de Leche",
+            "description": null,
+            "extra": null,
+            "price": "100.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2080,
+            "name": "Salsa de Dulce de Leche",
+            "description": null,
+            "extra": null,
+            "price": "100.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2081,
+            "name": "Salsa de Chocolate",
+            "description": null,
+            "extra": null,
+            "price": "100.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2082,
+            "name": "Salsa de Frutos Rojos",
+            "description": null,
+            "extra": null,
+            "price": "100.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": 437,
+    "name": "Postres",
+    "description": null,
+    "image_url": null,
+    "products": [
+      {
+        "id": 2199,
+        "name": "Cookie de Chocolate Simple",
+        "description": "Galleta con ganache de chocolate y decoración con chocolate semi-amargo.",
+        "extra": null,
+        "price": "5500.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2200,
+        "name": "Cookie de Chocolate Kinder",
+        "description": "Galleta con ganache de chocolate y decoración con chocolate semi-amargo y barrita Kinder.",
+        "extra": null,
+        "price": "6000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2201,
+        "name": "Cookie De Chocolate Aguila",
+        "description": "Galleta con ganache de chocolate, decoración con chocolate semi-amargo y barrita Aguila.",
+        "extra": null,
+        "price": "6000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2204,
+        "name": "Brownie de Chocolate",
+        "description": "Brownie de chocolate con copos de Dulce de Leche y decoración de Crema Chantilly con frutilla/chips de chocolate.",
+        "extra": null,
+        "price": "4500.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2205,
+        "name": "Tarta Cabsha",
+        "description": "Tarta con ganache de chocolate, decoración de dulce de leche y chocolate semi-amargo.",
+        "extra": null,
+        "price": "7000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2206,
+        "name": "Pastaflora",
+        "description": "Pastaflora con dulce de membrillo.",
+        "extra": null,
+        "price": "5500.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2207,
+        "name": "Tarta de Coco",
+        "description": "Tarta con relleno de dulce de leche y decoración de coco.",
+        "extra": null,
+        "price": "6000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2230,
+        "name": "Alfajor de Chocolate",
+        "description": "Alfajor de Chocolate con relleno de Dulce de Leche.",
+        "extra": null,
+        "price": "5000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2231,
+        "name": "Torta Carrot Cake",
+        "description": "Porción de Bizcochuelo húmedo de zanahoria con un toque de canela y nueces, relleno y cubierto con suave frosting de queso crema.",
+        "extra": null,
+        "price": "7000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2232,
+        "name": "Balde de Mini Cookies",
+        "description": "12 mini galletas con chips de chocolate y 1 dip de nutella.",
+        "extra": null,
+        "price": "9000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2233,
+        "name": "Lemon Pie",
+        "description": "Porción de tarta con una suave crema de límon, elaborada sobre una base de crocante de galletas.",
+        "extra": null,
+        "price": "6000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      }
+    ],
+    "children": []
+  },
+  {
+    "id": 434,
+    "name": "Combos",
+    "description": null,
+    "image_url": null,
+    "products": [
+      {
+        "id": 2083,
+        "name": "Combo Fit",
+        "description": "2 Tostadas de pan de masa madre, queso crema, huevo, palta,  jamón crudo y 1 Infusión.",
+        "extra": null,
+        "price": "18000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2084,
+        "name": "Combo Clásica.",
+        "description": "Infusión + 2 medialunas/tortitas.",
+        "extra": null,
+        "price": "6000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2085,
+        "name": "Combo Submarino",
+        "description": "2 submarinos + 4 tostadas pan de masa madre, 4 fetas de jamón cocido, 4 fetas queso tybo y dip de queso crema.",
+        "extra": null,
+        "price": "18000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2087,
+        "name": "Combo Bruncheemos",
+        "description": "4 Tostadas de pan de masa madre, huevos revuelto, palta en trozos, tomate cherry, jamón crudo, chía, dip de queso crema y 2 infusiones.",
+        "extra": null,
+        "price": "30000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      },
+      {
+        "id": 2194,
+        "name": "Combo Gym",
+        "description": "2 Tostadas de pan de masa madre, queso crema,  8 huevos, palta, jamón cocido, queso tybo y 1 infusión/batido proteico.",
+        "extra": null,
+        "price": "24000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      }
+    ],
+    "children": []
+  },
+  {
+    "id": 410,
+    "name": "Panaderia",
+    "description": null,
+    "image_url": null,
+    "products": [],
+    "children": [
+      {
+        "id": 411,
+        "name": "Dulces",
+        "description": null,
+        "image_url": null,
+        "products": [
+          {
+            "id": 2132,
+            "name": "Tortita Chesse",
+            "description": "Tortita con queso gratinado.",
+            "extra": null,
+            "price": "2000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2135,
+            "name": "Croissant",
+            "description": "Croissant de Manteca.",
+            "extra": null,
+            "price": "3000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2136,
+            "name": "Croissant Clasico",
+            "description": "Croissant de manteca, queso crema, queso tybo, jamón cocido.",
+            "extra": null,
+            "price": "7500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2137,
+            "name": "Croissant Completo",
+            "description": "Croissant de Manteca, dulce de leche, frutillas, crema chantilly, azúcar impalpable, salsa a elección.",
+            "extra": null,
+            "price": "9000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2138,
+            "name": "Croissant Español",
+            "description": "Croissant de Manteca, queso crema, queso tybo, salame español.",
+            "extra": null,
+            "price": "9000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2139,
+            "name": "Croissant Frutilla y Chantilly",
+            "description": "Croissant de manteca, crema chantilly, frutillas, azúcar impalpable, salsa a elección.",
+            "extra": null,
+            "price": "8000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2140,
+            "name": "Croissant Mex (palta y tomate)",
+            "description": "Croissant de manteca, queso crema, queso tybo, jamón cocido, palta, aceite de oliva.",
+            "extra": null,
+            "price": "8500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2141,
+            "name": "Croissant Nutella",
+            "description": "Croissant de Manteca, nutella, banana, azúcar impalpable, salsa a elección.",
+            "extra": null,
+            "price": "8000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2142,
+            "name": "Croissant Oreo",
+            "description": null,
+            "extra": null,
+            "price": "10500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2143,
+            "name": "Croissant Super Kinder",
+            "description": null,
+            "extra": null,
+            "price": "12000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2144,
+            "name": "Tortita de Jamon y Queso",
+            "description": "Tortita con queso tybo y jamón cocido.",
+            "extra": null,
+            "price": "2500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2145,
+            "name": "Tostada de Jamon Crudo y Queso",
+            "description": "4 Tostadas pan de masa madre, queso crema, queso tybo, jamón crudo.",
+            "extra": null,
+            "price": "12500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2146,
+            "name": "Tostadas de Campo (2 dipp)",
+            "description": "4 Tostadas pan de masa madre, queso crema, dulce de leche/dulce de membrillo.",
+            "extra": null,
+            "price": "7500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2147,
+            "name": "Tostadas (jamón y queso)",
+            "description": "4 Tostadas pan de masa madre, queso crema, queso tybo, jamón cocido.",
+            "extra": null,
+            "price": "11000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1995,
+            "name": "Cookie de Chocolate ",
+            "description": "Galleta artesanal con chips de chocolate.",
+            "extra": null,
+            "price": "5000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1996,
+            "name": "Tarta de coco",
+            "description": "Tarta dulce con relleno de coco.",
+            "extra": null,
+            "price": "5000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1997,
+            "name": "Tarta cabsha",
+            "description": "Tarta inspirada en el clásico bombón Cabsha.",
+            "extra": null,
+            "price": "7000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1998,
+            "name": "Porción de budin",
+            "description": "Rebanada de budín casero.",
+            "extra": null,
+            "price": "2000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 1999,
+            "name": "Frola de membrillo",
+            "description": "Clásica tarta de membrillo.",
+            "extra": null,
+            "price": "5500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2000,
+            "name": "Croissant Fit",
+            "description": "Croissant integral y saludable.",
+            "extra": null,
+            "price": "8500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2002,
+            "name": "Croissant Ibérico",
+            "description": "Croissant relleno de jamón ibérico.",
+            "extra": null,
+            "price": "10500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2096,
+            "name": "Croissant Veggie",
+            "description": "Croissant de manteca, queso crema, queso tybo, queso azul, tomate, rúcula y palta.",
+            "extra": null,
+            "price": "8500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2003,
+            "name": "Croissant Dulce (crema chantilly y frutillas)",
+            "description": "Croissant relleno con crema chantilly y frutillas.",
+            "extra": null,
+            "price": "8000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2004,
+            "name": "Croissant Dulce de leche",
+            "description": "Croissant relleno de dulce de leche.",
+            "extra": null,
+            "price": "6500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2005,
+            "name": "Croissant Nutella-kinder",
+            "description": "Croissant relleno de Nutella y Kinder.",
+            "extra": null,
+            "price": "10500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2006,
+            "name": "Mafalda",
+            "description": "Pan sándwich tierno tipo mafalda.",
+            "extra": null,
+            "price": "2500.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2007,
+            "name": "Medialuna",
+            "description": "Croissant argentino, dulce y glaseado.",
+            "extra": null,
+            "price": "900.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2008,
+            "name": "Tortita",
+            "description": "Pan suave y esponjoso.",
+            "extra": null,
+            "price": "700.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          },
+          {
+            "id": 2057,
+            "name": "Cookie De Chocolate Aguila/kinder",
+            "description": "Galleta artesanal con chips de chocolate  y barrita Aguila/kinder.",
+            "extra": null,
+            "price": "6000.00",
+            "photo_url": null,
+            "is_new": false,
+            "average_rating": 0,
+            "total_ratings": 0
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": 263,
+    "name": "Sin categorizar",
+    "description": null,
+    "image_url": null,
+    "products": [
+      {
+        "id": 2101,
+        "name": "Yogur Griego con Cereal y Frutas",
+        "description": "Yogur griego, cereales, frutilla, arándanos, banana y manzana.",
+        "extra": null,
+        "price": "10000.00",
+        "photo_url": null,
+        "is_new": false,
+        "average_rating": 0,
+        "total_ratings": 0
+      }
+    ],
+    "children": []
+  }
+]

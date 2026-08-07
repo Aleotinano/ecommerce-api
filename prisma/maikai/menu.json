@@ -1,0 +1,1931 @@
+{
+  "categories": [
+    {
+      "name": "Pastas",
+      "parent": null,
+      "position": 0,
+      "icon": "soup",
+      "description": "Pastas al paso, listas en minutos. Ravioles, sorrentinos y fetuccini con salsa a elección."
+    },
+    {
+      "name": "Almuerzos",
+      "parent": null,
+      "position": 1,
+      "icon": "utensils",
+      "description": "El plato del mediodía: milanesas, pollo crispy y ensaladas."
+    },
+    {
+      "name": "Menú Ejecutivo",
+      "parent": "Almuerzos",
+      "position": 0,
+      "icon": "utensils",
+      "description": "Milanesas, pollo crispy y bifes con guarnición."
+    },
+    {
+      "name": "Ensaladas",
+      "parent": "Almuerzos",
+      "position": 1,
+      "icon": "salad",
+      "description": "Ensaladas de plato principal."
+    },
+    {
+      "name": "Entre Panes",
+      "parent": null,
+      "position": 2,
+      "icon": "sandwich",
+      "description": "Ciabattas, focaccias, sándwiches y lomos. Enteros o medios."
+    },
+    {
+      "name": "Ciabattas",
+      "parent": "Entre Panes",
+      "position": 0,
+      "icon": "sandwich",
+      "description": "Ciabattas enteras y medias."
+    },
+    {
+      "name": "Focaccias",
+      "parent": "Entre Panes",
+      "position": 1,
+      "icon": "sandwich",
+      "description": "Focaccias enteras y medias."
+    },
+    {
+      "name": "Sándwiches y Lomos",
+      "parent": "Entre Panes",
+      "position": 2,
+      "icon": "sandwich",
+      "description": "Sándwiches americanos y lomos triple B."
+    },
+    {
+      "name": "Brunch",
+      "parent": null,
+      "position": 3,
+      "icon": "egg",
+      "description": "Tostones, bagels, tostados y platos fit. Con sus combos."
+    },
+    {
+      "name": "Papas",
+      "parent": null,
+      "position": 4,
+      "icon": "popcorn",
+      "description": "Las papas presidenciales y las clásicas, para compartir."
+    },
+    {
+      "name": "Papas Presidenciales",
+      "parent": "Papas",
+      "position": 0,
+      "icon": "popcorn",
+      "description": "Porción entera o media."
+    },
+    {
+      "name": "Papas Fritas",
+      "parent": "Papas",
+      "position": 1,
+      "icon": "popcorn",
+      "description": "Fritas clásicas y con toppings."
+    },
+    {
+      "name": "Para Compartir",
+      "parent": "Papas",
+      "position": 2,
+      "icon": "popcorn",
+      "description": "Picadas, tablas, nuggets y mini burgers."
+    },
+    {
+      "name": "Panadería y Postres",
+      "parent": null,
+      "position": 5,
+      "icon": "croissant",
+      "description": "Croissants, medialunas, tortas y postres del día."
+    },
+    {
+      "name": "Panadería",
+      "parent": "Panadería y Postres",
+      "position": 0,
+      "icon": "croissant",
+      "description": "Croissants, medialunas, tortitas y tostadas."
+    },
+    {
+      "name": "Postres",
+      "parent": "Panadería y Postres",
+      "position": 1,
+      "icon": "cake",
+      "description": "Tortas, tartas y cookies."
+    },
+    {
+      "name": "Café",
+      "parent": null,
+      "position": 6,
+      "icon": "coffee",
+      "description": "Café de especialidad, frío y caliente, con todos sus agregados."
+    },
+    {
+      "name": "Cafés",
+      "parent": "Café",
+      "position": 0,
+      "icon": "coffee",
+      "description": "Espressos, lattes, capuccinos y submarinos."
+    },
+    {
+      "name": "Ice Coffee y Frappé",
+      "parent": "Café",
+      "position": 1,
+      "icon": "coffee",
+      "description": "Café frío y frappés."
+    },
+    {
+      "name": "Agregados de Café",
+      "parent": "Café",
+      "position": 2,
+      "icon": "plus",
+      "description": "Toppings, salsas y leches vegetales para sumar a cualquier café."
+    },
+    {
+      "name": "Bebidas",
+      "parent": null,
+      "position": 7,
+      "icon": "martini",
+      "description": "Coctelería, cervezas, vinos y bebidas sin alcohol."
+    },
+    {
+      "name": "Coctelería",
+      "parent": "Bebidas",
+      "position": 0,
+      "icon": "martini",
+      "description": "Tragos clásicos y de autor."
+    },
+    {
+      "name": "Cervezas y Vinos",
+      "parent": "Bebidas",
+      "position": 1,
+      "icon": "beer",
+      "description": "Botellas, latas y cerveza tirada."
+    },
+    {
+      "name": "Sin Alcohol",
+      "parent": "Bebidas",
+      "position": 2,
+      "icon": "cup-soda",
+      "description": "Gaseosas, jugos, aguas y smoothies."
+    }
+  ],
+  "products": [
+    {
+      "sku": "MK-RAVIOLES",
+      "name": "Ravioles",
+      "description": "Porción de 20 Ravioles de Bondiola Braseada/Pollo Mediterráneo/Jamón y Queso.\nSalsas Disponibles: Azul, Champiñones, Boloñesa De Carne Mechada, Pesto, Langostinos y Fileto Casero.",
+      "price": 15000,
+      "category": "Pastas"
+    },
+    {
+      "sku": "MK-SORRENTINOS",
+      "name": "Sorrentinos",
+      "description": "Porción de 8 Sorrentinos de Bondiola Braseada/Pollo Mediterráneo/Jamón y Queso\nSalsas Disponibles: Azul, Champiñones, Boloñesa De Carne Mechada, Pesto, Langostinos y Fileto Casero.",
+      "price": 15000,
+      "category": "Pastas"
+    },
+    {
+      "sku": "MK-FETUCCINI",
+      "name": "Fetuccini",
+      "description": "Porción de 300gr de Fetuccini.\nSalsas Disponibles: Azul, Champiñones, Boloñesa De Carne Mechada, Pesto, Langostinos y Fileto Casero.",
+      "price": 15000,
+      "category": "Pastas"
+    },
+    {
+      "sku": "MK-MILANESAS-CON-PAPAS",
+      "name": "Milanesas con Papas",
+      "description": "milanesa con papas, pan de mesa y mayo casera. 2 huevos a caballo",
+      "price": 19000,
+      "category": "Menú Ejecutivo"
+    },
+    {
+      "sku": "MK-MILANESAS-CON-ENSALADA",
+      "name": "Milanesas con Ensalada",
+      "description": "Milanesa de peceto, huevo frito, palta, tomate perita, lechuga, pan de la casa y mayo casera.",
+      "price": 19000,
+      "category": "Menú Ejecutivo"
+    },
+    {
+      "sku": "MK-POLLO-CRISPY-CON-PAPAS",
+      "name": "Pollo Crispy con Papas",
+      "description": "Pollo Crujiente con papas fritas.",
+      "price": 17000,
+      "category": "Menú Ejecutivo"
+    },
+    {
+      "sku": "MK-POLLO-CRISPY-CON-ENSALADA",
+      "name": "Pollo Crispy con Ensalada",
+      "description": "Pollo crujiente con ensalada de tomate, lechuga y palta.",
+      "price": 17000,
+      "category": "Menú Ejecutivo"
+    },
+    {
+      "sku": "MK-MILANESA-DE-BERENJENA-CON-ENSALADA",
+      "name": "Milanesa de Berenjena con Ensalada",
+      "description": "Milanesas de berenjena, queso azul, ensalada de tomate lechuga y palta, pan de mesa y mayo casera.",
+      "price": 18000,
+      "category": "Menú Ejecutivo"
+    },
+    {
+      "sku": "MK-MILANESA-DE-BERENJENA-CON-PAPAS-FRITAS",
+      "name": "Milanesa de Berenjena con Papas Fritas",
+      "description": "Milanesas de berenjena, queso azul, papas fritas, pan de mesa y mayo casera.",
+      "price": 18000,
+      "category": "Menú Ejecutivo"
+    },
+    {
+      "sku": "MK-MILANESA-NAPOLITANA-CON-ENSALADA",
+      "name": "Milanesa Napolitana con ensalada",
+      "description": "Milanesas de peceto, salsa de tomate, mozzarella, huevo, tomate, lechuga, palta. pan de mesa y mayo de la casa.",
+      "price": 22000,
+      "category": "Menú Ejecutivo"
+    },
+    {
+      "sku": "MK-MILANESA-NAPOLITANA-CON-PAPAS-FRITAS",
+      "name": "Milanesa Napolitana con Papas Fritas",
+      "description": "Milanesas de peceto, salsa de tomate, mozzarella, papas fritas, pan de mesa y mayo de la casa.",
+      "price": 22000,
+      "category": "Menú Ejecutivo"
+    },
+    {
+      "sku": "MK-MILANESA-DE-BERENJENAS-NAPOLITANA-CON-",
+      "name": "Milanesa de berenjenas napolitana con papas",
+      "description": "Milanesas de Berenjena, salsa de tomate, queso azul, papas fritas , pan de mesa y mayo de la casa.",
+      "price": 19000,
+      "category": "Menú Ejecutivo"
+    },
+    {
+      "sku": "MK-MILANESA-DE-BERENJENA-NAPOLITANA-CON-E",
+      "name": "Milanesa de berenjena napolitana con ensalada",
+      "description": "Milanesas de Berenjena, salsa de tomate, queso azul, tomate, lechuga, palta, pan de mesa y mayo de la casa.",
+      "price": 19000,
+      "category": "Menú Ejecutivo"
+    },
+    {
+      "sku": "MK-BIFES-DE-POLLO-CON-ENSALADA",
+      "name": "Bifes de Pollo con Ensalada",
+      "description": "Bifes de pechuga, lechuga, rúcula, tomate, palta, pan de mesa, rodaja de limón y mayo de la casa.",
+      "price": 14000,
+      "category": "Menú Ejecutivo"
+    },
+    {
+      "sku": "MK-BALMA-CHICKEN",
+      "name": "Balma Chicken",
+      "description": "Pollo estilo Cesar, palta, tomate cherry, queso crema, queso tybo, rúcula, cebolla de verdeo, choclo, humus de remolacha y mayo de la casa.",
+      "price": 15000,
+      "category": "Menú Ejecutivo"
+    },
+    {
+      "sku": "MK-ENSALADA-CESAR",
+      "name": "Ensalada Cesar",
+      "description": "Crutones, lechuga, queso tybo, cherry, mix de semillas, aderezo cesar, rúcula, palta y pollo.",
+      "price": 20000,
+      "category": "Ensaladas"
+    },
+    {
+      "sku": "MK-ENSALADA-VEGGIE",
+      "name": "Ensalada Veggie",
+      "description": "Huevo, tomate, zanahoria, choclo, palta, queso tybo, queso azul y pan de mesa.",
+      "price": 20000,
+      "category": "Ensaladas"
+    },
+    {
+      "sku": "MK-ENSALADA-MAIKAI",
+      "name": "Ensalada Maikai",
+      "description": "Rúcula, lechuga, aceitunas, queso tybo, palta, queso azul, mix de semillas, crutones y carne desmechada.",
+      "price": 25000,
+      "category": "Ensaladas"
+    },
+    {
+      "sku": "MK-ENSALADA-IBERICA",
+      "name": "Ensalada Iberica",
+      "description": "Rúcula, lechuga, jamón crudo, tomate cherry, aceitunas, queso azul, palta, queso tybo, mix de semillas y crutones.",
+      "price": 21500,
+      "category": "Ensaladas"
+    },
+    {
+      "sku": "MK-ENSALADA-FRESCA",
+      "name": "Ensalada Fresca",
+      "description": "Rúcula, zanahoria, manzana verde, manazana roja, tomate cherry, tomate hidradato, palta, boccaccino  y pistacho.",
+      "price": 24000,
+      "category": "Ensaladas"
+    },
+    {
+      "sku": "MK-CIABATTA-DE-CARNE-AL-PLATO",
+      "name": "Ciabatta de carne al plato",
+      "description": "200 Gr de Carne desmechada, palta, huevo, queso tybo, tomate perita, lechuga, limón, mayo casera y barbacoa.",
+      "price": 22000,
+      "category": "Ciabattas"
+    },
+    {
+      "sku": "MK-CIABATTA-DE-CARNE-DESMECHADA-RADICAL",
+      "name": "Ciabatta de Carne Desmechada Radical",
+      "description": "400gr de Carne Desmechada, pan de ciabatta, aceite de oliva mediterráneo, queso crema, tomate perita, cheddar, panceta ahumada, huevo, mayo casera.",
+      "price": 46000,
+      "category": "Ciabattas"
+    },
+    {
+      "sku": "MK-MEDIA-CIABATTA-DE-CARNE-MECHADA-RADICA",
+      "name": "Media Ciabatta de Carne Mechada Radical",
+      "description": "200gr de Carne Desmechada, pan de ciabatta, aceite de oliva mediterráneo, queso crema, tomate perita, cheddar, panceta ahumada, huevo, mayo casera.",
+      "price": 25000,
+      "category": "Ciabattas"
+    },
+    {
+      "sku": "MK-CIABATTA-COMPLETA",
+      "name": "Ciabatta Completa",
+      "description": "Pan de Ciabatta, aceite de oliva mediterráneo, queso crema, queso tybo, tomate, palta, huevo, mayo casera.",
+      "price": 27000,
+      "category": "Ciabattas"
+    },
+    {
+      "sku": "MK-MEDIA-CIABATTA-COMPLETA",
+      "name": "Media Ciabatta Completa",
+      "description": "Pan de Ciabatta, aceite de oliva mediterráneo, queso crema, queso tybo, tomate, palta, huevo, mayo casera.",
+      "price": 15000,
+      "category": "Ciabattas"
+    },
+    {
+      "sku": "MK-CIABATTA-DE-MILANESA",
+      "name": "Ciabatta de Milanesa",
+      "description": "Pan de Ciabatta, aceite de oliva mediterráneo, queso crema, queso tybo, milanesa de peceto, tomate, lechuga, huevo, mayo casera.",
+      "price": 32000,
+      "category": "Ciabattas"
+    },
+    {
+      "sku": "MK-MEDIA-CIABATTA-DE-MILANESA",
+      "name": "Media Ciabatta de Milanesa",
+      "description": "Pan de Ciabatta, aceite de oliva mediterráneo, queso crema, queso tybo, milanesa de peceto, tomate, lechuga, huevo, mayo casera.",
+      "price": 17000,
+      "category": "Ciabattas"
+    },
+    {
+      "sku": "MK-CIABATTA-ESPANOLA",
+      "name": "Ciabatta Española",
+      "description": "Pan de Ciabatta, aceite de oliva mediterráneo, queso crema, queso tybo, salame español, rúcula, tomate y mayo.",
+      "price": 25000,
+      "category": "Ciabattas"
+    },
+    {
+      "sku": "MK-MEDIA-CIABATTA-ESPANOLA",
+      "name": "Media CIabatta Española",
+      "description": "Pan de Ciabatta, aceite de oliva mediterráneo, queso crema, queso tybo, salame español, rúcula, tomate y mayo.",
+      "price": 14000,
+      "category": "Ciabattas"
+    },
+    {
+      "sku": "MK-CIABATTA-ESTILO-CESAR",
+      "name": "Ciabatta Estilo Cesar",
+      "description": "Pan de Ciabatta, aceite de oliva mediterráneo, queso crema, queso tybo, palta, rúcula, tomate, pollo, aderezo cesar , mix de semillas, mayo casera.",
+      "price": 30000,
+      "category": "Ciabattas"
+    },
+    {
+      "sku": "MK-MEDIA-CIABATTA-ESTILO-CESAR",
+      "name": "Media Ciabatta estilo Cesar",
+      "description": "Pan de Ciabatta, aceite de oliva mediterráneo, queso crema, queso tybo, palta, rúcula, tomate, pollo, aderezo cesar , mix de semillas, mayo casera.",
+      "price": 17000,
+      "category": "Ciabattas"
+    },
+    {
+      "sku": "MK-CIABATTA-MAIKAI",
+      "name": "Ciabatta Maikai",
+      "description": "Pan de Ciabatta, 400gr Carne Desmechada, aceite de oliva mediterráneo, queso crema, queso tybo, tomate, lechuga, queso azul y mayo.",
+      "price": 46000,
+      "category": "Ciabattas"
+    },
+    {
+      "sku": "MK-MEDIA-CIABATTA-MAIKAI",
+      "name": "Media Ciabatta Maikai",
+      "description": "Pan de Ciabatta, 200gr Carne Desmechada, aceite de oliva mediterráneo, queso crema, queso tybo, tomate, lechuga, queso azul y mayo.",
+      "price": 25000,
+      "category": "Ciabattas"
+    },
+    {
+      "sku": "MK-MEDIA-CIABATTA-VEGGIE",
+      "name": "Media Ciabatta Veggie",
+      "description": "Pan ciabatta, queso crema, milanesa de berenjena, queso tybo, tomate, rúcula y palta.",
+      "price": 17000,
+      "category": "Ciabattas"
+    },
+    {
+      "sku": "MK-CIABATTA-VEGGIE",
+      "name": "Ciabatta Veggie",
+      "description": "Pan ciabatta, queso crema, milanesa de berenjena, queso tybo, tomate, rúcula y palta.",
+      "price": 24000,
+      "category": "Ciabattas"
+    },
+    {
+      "sku": "MK-MEDIA-CIABATTA-DE-CARNE-MECHADA",
+      "name": "Media Ciabatta de Carne mechada",
+      "description": "Pan ciabatta, queso crema, carne desmechada, queso tybo, tomate y mayonesa casera/ barbacoa.",
+      "price": 23000,
+      "category": "Ciabattas"
+    },
+    {
+      "sku": "MK-CIABATTA-DE-CARNE-MECHADA",
+      "name": "Ciabatta de Carne mechada",
+      "description": "Pan ciabatta, queso crema, carne desmechada, queso tybo, tomate y mayonesa casera/ barbacoa.",
+      "price": 43000,
+      "category": "Ciabattas"
+    },
+    {
+      "sku": "MK-MEDIA-CIABATTA-CLASICA",
+      "name": "Media Ciabatta Clasica",
+      "description": "Pan ciabatta, queso crema, queso tybo, jamón cocido, tomate y palta.",
+      "price": 14000,
+      "category": "Ciabattas"
+    },
+    {
+      "sku": "MK-CIABATTA-CLASICA",
+      "name": "Ciabatta Clasica",
+      "description": "Pan ciabatta, queso crema, queso tybo, jamón cocido, tomate y palta.",
+      "price": 25000,
+      "category": "Ciabattas"
+    },
+    {
+      "sku": "MK-MEDIA-CIABATTA-IBERICA",
+      "name": "Media Ciabatta Ibérica",
+      "description": "Pan ciabatta, queso crema, queso tybo, jamón crudo, rúcula y tomate.",
+      "price": 14000,
+      "category": "Ciabattas"
+    },
+    {
+      "sku": "MK-CIABATTA-IBERICA",
+      "name": "Ciabatta Ibérica",
+      "description": "Pan ciabatta, queso crema, queso tybo, jamón crudo, rúcula y tomate.",
+      "price": 25000,
+      "category": "Ciabattas"
+    },
+    {
+      "sku": "MK-MEDIA-CIABATTA-DE-POLLO-CRISPY",
+      "name": "Media Ciabatta de Pollo Crispy",
+      "description": "Pan de Ciabatta, Queso Crema, Pollo Crispy, Lechuga, Panceta Ahumada, Huevo y Mayo de la Casa.",
+      "price": 19000,
+      "category": "Ciabattas"
+    },
+    {
+      "sku": "MK-CIABATTA-DE-POLLO-CRISPY",
+      "name": "Ciabatta de Pollo Crispy",
+      "description": "Pan de Ciabatta, Queso Crema, Pollo Crispy, Lechuga, Panceta Ahumada, Huevo y Mayo de la Casa.",
+      "price": 35000,
+      "category": "Ciabattas"
+    },
+    {
+      "sku": "MK-FOCACCIA-STRACCIATELLA",
+      "name": "Focaccia Stracciatella",
+      "description": "Pan de Foccacia, rúcula, jamón crudo, queso stracciatella, pesto y mayo de la casa.",
+      "price": 30000,
+      "category": "Focaccias"
+    },
+    {
+      "sku": "MK-MEDIA-FOCACCIA-STRACCIATELLA",
+      "name": "Media Focaccia Stracciatella",
+      "description": "Pan de Foccacia, rúcula, jamón crudo, queso stracciatella, pesto y mayo de la casa.",
+      "price": 18000,
+      "category": "Focaccias"
+    },
+    {
+      "sku": "MK-MEDIA-FOCACCIA-IBERICA",
+      "name": "Media Focaccia Ibérica",
+      "description": "Pan de Foccacia, queso crema, queso tybo, jamón crudo, rúcula, tomate, pesto y mayo de la casa.",
+      "price": 12000,
+      "category": "Focaccias"
+    },
+    {
+      "sku": "MK-FOCACCIA-IBERICA",
+      "name": "Focaccia Ibérica",
+      "description": "Pan de Foccacia, queso crema, queso tybo, jamón crudo, rúcula, tomate, pesto y mayo de la casa.",
+      "price": 25000,
+      "category": "Focaccias"
+    },
+    {
+      "sku": "MK-MEDIA-FOCACCIA-ESPANOLA",
+      "name": "Media Focaccia Española",
+      "description": "Pan de Focaccia, queso crema, queso pategras, queso tybo, salame español, tomate, rúcula.",
+      "price": 13000,
+      "category": "Focaccias"
+    },
+    {
+      "sku": "MK-FOCACCIA-ESPANOLA",
+      "name": "Focaccia Española",
+      "description": "Pan de Focaccia, queso crema, queso pategras, queso tybo, salame español, tomate, rúcula.",
+      "price": 22000,
+      "category": "Focaccias"
+    },
+    {
+      "sku": "MK-MEDIA-FOCACCIA-VEGETARIANA",
+      "name": "Media Focaccia Vegetariana",
+      "description": "Pan de Focaccia, queso crema, cebolla de verdeo, rúcula, huevo, repollo morado, palta, tomate.",
+      "price": 20000,
+      "category": "Focaccias"
+    },
+    {
+      "sku": "MK-FOCACCIA-VEGETARIANA",
+      "name": "Focaccia Vegetariana",
+      "description": "Pan de Focaccia, queso crema, cebolla de verdeo, rúcula, huevo, repollo morado, palta, tomate.",
+      "price": 12000,
+      "category": "Focaccias"
+    },
+    {
+      "sku": "MK-MEDIA-FOCACCIA-ESTILO-CAESAR",
+      "name": "Media Focaccia Estilo Caesar",
+      "description": "Pan de Focaccia, queso crema, queso pategras, ajo, aderezo Caesar, rúcula, pollo.",
+      "price": 13000,
+      "category": "Focaccias"
+    },
+    {
+      "sku": "MK-FOCACCIA-ESTILO-CAESAR",
+      "name": "Focaccia Estilo Caesar",
+      "description": "Pan de Focaccia, queso crema, queso pategras, ajo, aderezo Caesar, rúcula, pollo.",
+      "price": 22000,
+      "category": "Focaccias"
+    },
+    {
+      "sku": "MK-MEDIA-FOCACCIA-ARGENTA",
+      "name": "Media Focaccia Argenta",
+      "description": "Pan de Foccacia, queso crema, queso tybo, milanesa de peceto, tomate, lechuga, huevo y mayo de la casa.",
+      "price": 15000,
+      "category": "Focaccias"
+    },
+    {
+      "sku": "MK-FOCACCIA-ARGENTA",
+      "name": "Focaccia Argenta",
+      "description": "Pan de Foccacia, queso crema, queso tybo, milanesa de peceto, tomate, lechuga, huevo y mayo de la casa.",
+      "price": 26500,
+      "category": "Focaccias"
+    },
+    {
+      "sku": "MK-MEDIA-FOCACCIA-DE-MORTADELA-AL-PISTACH",
+      "name": "Media Focaccia de Mortadela al Pistacho",
+      "description": "Pan de Focaccia, queso crema, queso pategras, rúcula, tomate, mortadela con pistacho, mayo de la casa.",
+      "price": 15000,
+      "category": "Focaccias"
+    },
+    {
+      "sku": "MK-FOCACCIA-DE-MORTADELA-AL-PISTACHO",
+      "name": "Focaccia de Mortadela al Pistacho",
+      "description": "Pan de Focaccia, queso crema, queso pategras, rúcula, tomate, mortadela con pistacho, mayo de la casa.",
+      "price": 25000,
+      "category": "Focaccias"
+    },
+    {
+      "sku": "MK-MEDIA-FOCACCIA-DE-POLLO-CRISPY",
+      "name": "Media Focaccia de Pollo Crispy",
+      "description": "Pan de Foccacia, queso crema, queso patagrás, rúcula, tomate, panceta, huevo y mayo de la casa.",
+      "price": 14000,
+      "category": "Focaccias"
+    },
+    {
+      "sku": "MK-FOCACCIA-DE-POLLO-CRISPY",
+      "name": "Focaccia de Pollo Crispy",
+      "description": "Pan de Foccacia, queso crema, queso patagrás, rúcula, tomate, panceta, huevo y mayo de la casa.",
+      "price": 25000,
+      "category": "Focaccias"
+    },
+    {
+      "sku": "MK-SANDWICH-AMERICANO",
+      "name": "Sandwich Americano",
+      "description": "Pan de Molde, queso crema, queso tybo, jamón cocido, tomate, lechuga y mayo de la casa.",
+      "price": 9500,
+      "category": "Sándwiches y Lomos"
+    },
+    {
+      "sku": "MK-SANDWICH-AMERICANO-DE-CARNE-DESMECHADA",
+      "name": "Sandwich Americano de Carne Desmechada",
+      "description": "Pan de molde, queso crema, carne desmechada, queso tybo, tomate, palta y mayo de la casa.",
+      "price": 14500,
+      "category": "Sándwiches y Lomos"
+    },
+    {
+      "sku": "MK-SANDWICH-AMERICANO-DE-POLLO-CRISPY",
+      "name": "Sandwich Americano de Pollo Crispy",
+      "description": "Pan de molde, queso crema, pollo crispy, tomate, panceta, huevo y mayo de la casa.",
+      "price": 13000,
+      "category": "Sándwiches y Lomos"
+    },
+    {
+      "sku": "MK-SANDWICH-AMERICANO-ESPANOL",
+      "name": "Sandwich Americano Español",
+      "description": "Pan de molde, queso crema, salame español, rúcula, tomate y mayo de la casa.",
+      "price": 11000,
+      "category": "Sándwiches y Lomos"
+    },
+    {
+      "sku": "MK-SANDWICH-AMERICANO-PARA-COMPARTIR",
+      "name": "Sandwich Americano para compartir",
+      "description": "Sándwich Americano, Sándwich Americano de Carne Desmechada, Sándwich Americano de Pollo Crispy y Sándwich Americano Español.",
+      "price": 43000,
+      "category": "Sándwiches y Lomos"
+    },
+    {
+      "sku": "MK-SANDWICH-AMERICANO-VEGGIE",
+      "name": "Sandwich Americano Veggie",
+      "description": "Pan de Molde, queso crema, queso tybo, queso azul, palta, tomate, rúcula y mayo de la casa.",
+      "price": 10500,
+      "category": "Sándwiches y Lomos"
+    },
+    {
+      "sku": "MK-LOMO-TRIPLE-B",
+      "name": "Lomo Triple B",
+      "description": "Pan de Lomo (30cm), lomo, lechuga, tomate, queso tybo, jamón cocido, huevo y mayo de la casa.",
+      "price": 27000,
+      "category": "Sándwiches y Lomos"
+    },
+    {
+      "sku": "MK-LOMO-TRIPLE-B-INDIVIDUAL",
+      "name": "Lomo Triple B Individual",
+      "description": "Pan de Lomo (15cm), lomo, lechuga, tomate, queso tybo, jamón cocido, huevo y mayo de la casa.",
+      "price": 15000,
+      "category": "Sándwiches y Lomos"
+    },
+    {
+      "sku": "MK-BRUNCHEMOS",
+      "name": "Brunchemos",
+      "description": "4 Tostadas de pan de masa madre, huevos revuelto, palta en trozos, tomate cherry, jamón crudo, chía y dip de queso crema.",
+      "price": 24000,
+      "category": "Brunch"
+    },
+    {
+      "sku": "MK-PLATO-FIT",
+      "name": "Plato fit",
+      "description": "2 Tostadas de pan de masa madre, queso crema, huevo, palta y jamón crudo.",
+      "price": 15000,
+      "category": "Brunch"
+    },
+    {
+      "sku": "MK-TOSTON-FIT",
+      "name": "Tostón Fit",
+      "description": "Pan de masa madre, queso crema, aceite de oliva, queso tybo, huevo, palta y tomate cherry.",
+      "price": 7500,
+      "category": "Brunch"
+    },
+    {
+      "sku": "MK-TOSTON-IBERICO",
+      "name": "Tostón Iberico",
+      "description": "Pan de masa madre, queso crema, aceite de oliva, queso tybo, jamón crudo, rúcula y tomate cherry.",
+      "price": 9000,
+      "category": "Brunch"
+    },
+    {
+      "sku": "MK-TOSTON-VEGGIE",
+      "name": "Tostón Veggie",
+      "description": "Pan de masa madre, aceite de oliva, queso crema, queso tybo, palta, tomate cherry, humus de remolacha y mix de semillas.",
+      "price": 7000,
+      "category": "Brunch"
+    },
+    {
+      "sku": "MK-TOSTON-CLASICO",
+      "name": "Tostón Clasico",
+      "description": "Pan de masa madre, queso crema, aceite de oliva, queso tybo y jamón cocido.",
+      "price": 6000,
+      "category": "Brunch"
+    },
+    {
+      "sku": "MK-BAGEL-IBERICO",
+      "name": "Bagel Ibérico",
+      "description": "Bagel con queso tybo, jamón crudo, rúcula y tomate.",
+      "price": 12000,
+      "category": "Brunch"
+    },
+    {
+      "sku": "MK-BAGEL-FIT",
+      "name": "Bagel Fit",
+      "description": "Bagel con queso tybo, jamón cocido, tomate, palta y huevo revuelto.",
+      "price": 12000,
+      "category": "Brunch"
+    },
+    {
+      "sku": "MK-TOSTON-ITALIANO",
+      "name": "Tostón Italiano",
+      "description": "Pan de campo, queso crema, aceite de oliva, jamón crudo, tomate cherry, queso Stracciatella y pesto.",
+      "price": 16000,
+      "category": "Brunch"
+    },
+    {
+      "sku": "MK-TOSTADO-DE-JAMON-Y-QUESO-TRIPLE",
+      "name": "Tostado de Jamon y Queso triple",
+      "description": "Tostado con 150gr de queso tybo y  150gr de jamón cocido.",
+      "price": 11000,
+      "category": "Brunch"
+    },
+    {
+      "sku": "MK-MEDIO-TOSTADO-DE-JAMON-Y-QUESO",
+      "name": "Medio Tostado de Jamon y Queso",
+      "description": "Medio Tostado con 100gr de queso tybo y 120gr de jamón cocido.",
+      "price": 6000,
+      "category": "Brunch"
+    },
+    {
+      "sku": "MK-TOSTON-BACON",
+      "name": "Toston Bacon",
+      "description": "Pan de campo, queso crema, aceite de oliva, queso tybo, huevo, palta, panceta ahumada, tomate cherry y mix de semillas.",
+      "price": 12500,
+      "category": "Brunch"
+    },
+    {
+      "sku": "MK-PLATO-GYM",
+      "name": "Plato Gym",
+      "description": "2 Tostadas de pan de masa madre, queso crema,  8 huevos, palta, jamón cocido y queso tybo.",
+      "price": 20000,
+      "category": "Brunch"
+    },
+    {
+      "sku": "MK-BATIDO-PROTEICO",
+      "name": "Batido Proteico",
+      "description": "Batido Proteico sabor mango, con leche o agua.",
+      "price": 6500,
+      "category": "Brunch"
+    },
+    {
+      "sku": "MK-YOGUR-GRIEGO-CON-FRUTAS-DE-ESTACION-EN",
+      "name": "Yogur Griego con Frutas de Estación (Endulzado)",
+      "description": "Copa de yogur griego con frutas de estación endulzado naturalmente.",
+      "price": 8500,
+      "category": "Brunch"
+    },
+    {
+      "sku": "MK-YOGUR-GRIEGO-CON-FRUTAS-DE-ESTACION-SI",
+      "name": "Yogur Griego con Frutas de Estación (Sin Endulzar)",
+      "description": "Copa de yogur griego con frutas de estación sin endulzar.",
+      "price": 8500,
+      "category": "Brunch"
+    },
+    {
+      "sku": "MK-TOSTADO-TRIPLE-DE-JAMON-CRUDO",
+      "name": "Tostado Triple de Jamón Crudo",
+      "description": "Tostado con 200gr de queso tybo y 200gr de jamón crudo.",
+      "price": 13000,
+      "category": "Brunch"
+    },
+    {
+      "sku": "MK-MEDIO-TOSTADO-DE-JAMON-CRUDO",
+      "name": "Medio Tostado de Jamón Crudo",
+      "description": "Medio Tostado con 100gr de queso tybo y 120gr de jamón crudo.",
+      "price": 7000,
+      "category": "Brunch"
+    },
+    {
+      "sku": "MK-COMBO-FIT",
+      "name": "Combo Fit",
+      "description": "2 Tostadas de pan de masa madre, queso crema, huevo, palta,  jamón crudo y 1 Infusión.",
+      "price": 18000,
+      "category": "Brunch"
+    },
+    {
+      "sku": "MK-COMBO-CLASICA",
+      "name": "Combo Clásica.",
+      "description": "Infusión + 2 medialunas/tortitas.",
+      "price": 6000,
+      "category": "Brunch"
+    },
+    {
+      "sku": "MK-COMBO-SUBMARINO",
+      "name": "Combo Submarino",
+      "description": "2 submarinos + 4 tostadas pan de masa madre, 4 fetas de jamón cocido, 4 fetas queso tybo y dip de queso crema.",
+      "price": 18000,
+      "category": "Brunch"
+    },
+    {
+      "sku": "MK-COMBO-BRUNCHEEMOS",
+      "name": "Combo Bruncheemos",
+      "description": "4 Tostadas de pan de masa madre, huevos revuelto, palta en trozos, tomate cherry, jamón crudo, chía, dip de queso crema y 2 infusiones.",
+      "price": 30000,
+      "category": "Brunch"
+    },
+    {
+      "sku": "MK-COMBO-GYM",
+      "name": "Combo Gym",
+      "description": "2 Tostadas de pan de masa madre, queso crema,  8 huevos, palta, jamón cocido, queso tybo y 1 infusión/batido proteico.",
+      "price": 24000,
+      "category": "Brunch"
+    },
+    {
+      "sku": "MK-YOGUR-GRIEGO-CON-CEREAL-Y-FRUTAS",
+      "name": "Yogur Griego con Cereal y Frutas",
+      "description": "Yogur griego, cereales, frutilla, arándanos, banana y manzana.",
+      "price": 10000,
+      "category": "Brunch"
+    },
+    {
+      "sku": "MK-PAPAS-DE-LA-RUA",
+      "name": "Papas De La Rúa",
+      "description": "Porción de 650gr de Papas Fritas tradicionales",
+      "price": 8000,
+      "category": "Papas Presidenciales"
+    },
+    {
+      "sku": "MK-PAPAS-DE-LA-RUA-1-2-PORCION",
+      "name": "Papas De La Rúa (1/2 Porción)",
+      "description": "Porción de 350gr de Papas Fritas Tradicionales",
+      "price": 6000,
+      "category": "Papas Presidenciales"
+    },
+    {
+      "sku": "MK-PAPAS-JUAN-DOMINGO-PERON",
+      "name": "Papas Juan Domingo Perón",
+      "description": "Porción de 650gr de Papas Fritas con Carne Desmechada, Mozzarella Gratinada y Verdeo.",
+      "price": 20000,
+      "category": "Papas Presidenciales"
+    },
+    {
+      "sku": "MK-PAPAS-JUAN-DOMINGO-PERON-1-2-PORCION",
+      "name": "Papas Juan Domingo Perón (1/2 Porción)",
+      "description": "Porción de 350gr de Papas Fritas con Carne Desmechada, Mozzarella Gratinada y Verdeo.",
+      "price": 13000,
+      "category": "Papas Presidenciales"
+    },
+    {
+      "sku": "MK-PAPAS-CARLOS-MENEM",
+      "name": "Papas Carlos Menem",
+      "description": "Porción de 650gr de Papas Fritas, Cheddar Cremoso, Panceta Ahumada y Verdeo",
+      "price": 18000,
+      "category": "Papas Presidenciales"
+    },
+    {
+      "sku": "MK-PAPAS-CARLOS-MENEM-1-2PORCION",
+      "name": "Papas Carlos Menem (1/2Porción)",
+      "description": "Porción de 350gr de Papas Fritas, Cheddar Cremoso, Panceta Ahumada y Verdeo",
+      "price": 11000,
+      "category": "Papas Presidenciales"
+    },
+    {
+      "sku": "MK-PAPAS-MILEI",
+      "name": "Papas Milei",
+      "description": "Porción de 650gr de Papas Fritas, Langostinos al Ajillo y Perejil.",
+      "price": 22000,
+      "category": "Papas Presidenciales"
+    },
+    {
+      "sku": "MK-PAPAS-MILEI-1-2-PORCION",
+      "name": "Papas Milei (1/2 Porción)",
+      "description": "Porción de 350gr de Papas Fritas, Langostinos al Ajillo y Perejil.",
+      "price": 14000,
+      "category": "Papas Presidenciales"
+    },
+    {
+      "sku": "MK-PAPAS-CRISTINA-KIRCHNER",
+      "name": "Papas Cristina Kirchner",
+      "description": "Porción de 650gr de Papas Fritas, Chorizo Salteado, Cebolla Caramelizada y Verdeo.",
+      "price": 20000,
+      "category": "Papas Presidenciales"
+    },
+    {
+      "sku": "MK-PAPAS-CRISTINA-KIRCHNER-1-2-PORCION",
+      "name": "Papas Cristina Kirchner (1/2 Porción)",
+      "description": "Porción de 350gr de Papas Fritas, Chorizo Salteado, Cebolla Caramelizada y Verdeo.",
+      "price": 12000,
+      "category": "Papas Presidenciales"
+    },
+    {
+      "sku": "MK-PAPAS-RAUL-ALFONSIN",
+      "name": "Papas Raúl Alfonsín",
+      "description": "Porción de 650gr de Papas Fritas, Cuatro Quesos Fundido y Orégano.",
+      "price": 18000,
+      "category": "Papas Presidenciales"
+    },
+    {
+      "sku": "MK-PAPAS-RAUL-ALFONSIN-1-2-PORCION",
+      "name": "Papas Raúl Alfonsín (1/2 Porción)",
+      "description": "Porción de 350gr de Papas Fritas, Cuatro Quesos Fundido y Orégano.",
+      "price": 11000,
+      "category": "Papas Presidenciales"
+    },
+    {
+      "sku": "MK-PAPAS-HIPOLITO-YRIGOYEN",
+      "name": "Papas Hipólito Yrigoyen",
+      "description": "Porción de 650gr de Papas Fritas, Pollo Crispy, Cebolla de Verdeo y Muzzarella Gratinada.",
+      "price": 20000,
+      "category": "Papas Presidenciales"
+    },
+    {
+      "sku": "MK-PAPAS-HIPOLITO-YRIGOYEN-1-2-PORCION",
+      "name": "Papas Hipólito Yrigoyen (1/2 Porción)",
+      "description": "Porción de 350gr de Papas Fritas, Pollo Crispy, Cebolla de Verdeo y Muzzarella Gratinada.",
+      "price": 12000,
+      "category": "Papas Presidenciales"
+    },
+    {
+      "sku": "MK-FRITAS-CLASICAS",
+      "name": "Fritas Clásicas",
+      "description": "Papas fritas doradas y crocantes.",
+      "price": 7000,
+      "category": "Papas Fritas"
+    },
+    {
+      "sku": "MK-FRITAS-CHEDDAR",
+      "name": "Fritas Cheddar",
+      "description": "Papas fritas cubiertas de salsa cheddar.",
+      "price": 11000,
+      "category": "Papas Fritas"
+    },
+    {
+      "sku": "MK-FRITAS-CHEDDAR-CARNE-DESMECHADA",
+      "name": "Fritas Cheddar + Carne desmechada",
+      "description": "Papas fritas con cheddar y carne desmechada.",
+      "price": 18000,
+      "category": "Papas Fritas"
+    },
+    {
+      "sku": "MK-FRITAS-MOZZARELLA-Y-JAMON-CRUDO",
+      "name": "Fritas Mozzarella y jamón crudo",
+      "description": "Papas fritas cubiertas de mozzarella y jamón crudo.",
+      "price": 14000,
+      "category": "Papas Fritas"
+    },
+    {
+      "sku": "MK-FRITAS-MOZZARELLA-Y-CARNE-DESMECHADA",
+      "name": "Fritas Mozzarella y Carne Desmechada",
+      "description": "Papas fritas cubiertas de mozzarella y carne desmechada.",
+      "price": 17000,
+      "category": "Papas Fritas"
+    },
+    {
+      "sku": "MK-FRITAS-CHEDDAR-Y-PANCETA",
+      "name": "Fritas Cheddar y Panceta",
+      "description": "Papas Fritas cubiertas de Cheddar y Panceta.",
+      "price": 14000,
+      "category": "Papas Fritas"
+    },
+    {
+      "sku": "MK-PAPAS-CON-MOZZARELLA",
+      "name": "Papas con Mozzarella",
+      "description": "Papas fritas cubiertas de mozzarella y mayo de la casa.",
+      "price": 10000,
+      "category": "Papas Fritas"
+    },
+    {
+      "sku": "MK-NUGGETS",
+      "name": "Nuggets",
+      "description": "500 gr de Nuggets de Pollo y mayo de la casa.",
+      "price": 10000,
+      "category": "Para Compartir"
+    },
+    {
+      "sku": "MK-TABLA-DE-FIAMBRES",
+      "name": "Tabla de fiambres",
+      "description": "Queso tybo, jamón cocido, jamón crudo, salame español, queso azul, tomate cherry, aceitunas, tostadas de pan de masa madre y mayo de la casa.",
+      "price": 28000,
+      "category": "Para Compartir"
+    },
+    {
+      "sku": "MK-PICADA-MAIKAI",
+      "name": "Picada Maikai",
+      "description": "Porcion de 400g de papas, con cheddar y carne desmechada, 6 bastones de mozzarella y porcion de 500g de  nuggets de pollo.",
+      "price": 45000,
+      "category": "Para Compartir"
+    },
+    {
+      "sku": "MK-BASTONES-DE-MOZZARELLA",
+      "name": "Bastones de Mozzarella",
+      "description": "6 Bastones de mozzarella y mayos de la casa.",
+      "price": 14000,
+      "category": "Para Compartir"
+    },
+    {
+      "sku": "MK-NUGGETS-CON-CHEDDAR-Y-PANCETA",
+      "name": "Nuggets con Cheddar y Panceta",
+      "description": "500gr de Nuggets de Pollo con queso Cheddar y Panceta Ahumada.",
+      "price": 19000,
+      "category": "Para Compartir"
+    },
+    {
+      "sku": "MK-BALDE-DE-MINI-BURGERS",
+      "name": "Balde de Mini Burgers",
+      "description": "6 Mini Burgers con panceta, cheddar, salsa de la casa y papas crinkle.",
+      "price": 28000,
+      "category": "Para Compartir"
+    },
+    {
+      "sku": "MK-TORTITA-CHESSE",
+      "name": "Tortita Chesse",
+      "description": "Tortita con queso gratinado.",
+      "price": 2000,
+      "category": "Panadería"
+    },
+    {
+      "sku": "MK-CROISSANT",
+      "name": "Croissant",
+      "description": "Croissant de Manteca.",
+      "price": 3000,
+      "category": "Panadería"
+    },
+    {
+      "sku": "MK-CROISSANT-CLASICO",
+      "name": "Croissant Clasico",
+      "description": "Croissant de manteca, queso crema, queso tybo, jamón cocido.",
+      "price": 7500,
+      "category": "Panadería"
+    },
+    {
+      "sku": "MK-CROISSANT-COMPLETO",
+      "name": "Croissant Completo",
+      "description": "Croissant de Manteca, dulce de leche, frutillas, crema chantilly, azúcar impalpable, salsa a elección.",
+      "price": 9000,
+      "category": "Panadería"
+    },
+    {
+      "sku": "MK-CROISSANT-ESPANOL",
+      "name": "Croissant Español",
+      "description": "Croissant de Manteca, queso crema, queso tybo, salame español.",
+      "price": 9000,
+      "category": "Panadería"
+    },
+    {
+      "sku": "MK-CROISSANT-FRUTILLA-Y-CHANTILLY",
+      "name": "Croissant Frutilla y Chantilly",
+      "description": "Croissant de manteca, crema chantilly, frutillas, azúcar impalpable, salsa a elección.",
+      "price": 8000,
+      "category": "Panadería"
+    },
+    {
+      "sku": "MK-CROISSANT-MEX-PALTA-Y-TOMATE",
+      "name": "Croissant Mex (palta y tomate)",
+      "description": "Croissant de manteca, queso crema, queso tybo, jamón cocido, palta, aceite de oliva.",
+      "price": 8500,
+      "category": "Panadería"
+    },
+    {
+      "sku": "MK-CROISSANT-NUTELLA",
+      "name": "Croissant Nutella",
+      "description": "Croissant de Manteca, nutella, banana, azúcar impalpable, salsa a elección.",
+      "price": 8000,
+      "category": "Panadería"
+    },
+    {
+      "sku": "MK-CROISSANT-OREO",
+      "name": "Croissant Oreo",
+      "description": null,
+      "price": 10500,
+      "category": "Panadería"
+    },
+    {
+      "sku": "MK-CROISSANT-SUPER-KINDER",
+      "name": "Croissant Super Kinder",
+      "description": null,
+      "price": 12000,
+      "category": "Panadería"
+    },
+    {
+      "sku": "MK-TORTITA-DE-JAMON-Y-QUESO",
+      "name": "Tortita de Jamon y Queso",
+      "description": "Tortita con queso tybo y jamón cocido.",
+      "price": 2500,
+      "category": "Panadería"
+    },
+    {
+      "sku": "MK-TOSTADA-DE-JAMON-CRUDO-Y-QUESO",
+      "name": "Tostada de Jamon Crudo y Queso",
+      "description": "4 Tostadas pan de masa madre, queso crema, queso tybo, jamón crudo.",
+      "price": 12500,
+      "category": "Panadería"
+    },
+    {
+      "sku": "MK-TOSTADAS-DE-CAMPO-2-DIPP",
+      "name": "Tostadas de Campo (2 dipp)",
+      "description": "4 Tostadas pan de masa madre, queso crema, dulce de leche/dulce de membrillo.",
+      "price": 7500,
+      "category": "Panadería"
+    },
+    {
+      "sku": "MK-TOSTADAS-JAMON-Y-QUESO",
+      "name": "Tostadas (jamón y queso)",
+      "description": "4 Tostadas pan de masa madre, queso crema, queso tybo, jamón cocido.",
+      "price": 11000,
+      "category": "Panadería"
+    },
+    {
+      "sku": "MK-COOKIE-DE-CHOCOLATE",
+      "name": "Cookie de Chocolate",
+      "description": "Galleta artesanal con chips de chocolate.",
+      "price": 5000,
+      "category": "Panadería"
+    },
+    {
+      "sku": "MK-PORCION-DE-BUDIN",
+      "name": "Porción de budin",
+      "description": "Rebanada de budín casero.",
+      "price": 2000,
+      "category": "Panadería"
+    },
+    {
+      "sku": "MK-FROLA-DE-MEMBRILLO",
+      "name": "Frola de membrillo",
+      "description": "Clásica tarta de membrillo.",
+      "price": 5500,
+      "category": "Panadería"
+    },
+    {
+      "sku": "MK-CROISSANT-FIT",
+      "name": "Croissant Fit",
+      "description": "Croissant integral y saludable.",
+      "price": 8500,
+      "category": "Panadería"
+    },
+    {
+      "sku": "MK-CROISSANT-IBERICO",
+      "name": "Croissant Ibérico",
+      "description": "Croissant relleno de jamón ibérico.",
+      "price": 10500,
+      "category": "Panadería"
+    },
+    {
+      "sku": "MK-CROISSANT-VEGGIE",
+      "name": "Croissant Veggie",
+      "description": "Croissant de manteca, queso crema, queso tybo, queso azul, tomate, rúcula y palta.",
+      "price": 8500,
+      "category": "Panadería"
+    },
+    {
+      "sku": "MK-CROISSANT-DULCE-CREMA-CHANTILLY-Y-FRUT",
+      "name": "Croissant Dulce (crema chantilly y frutillas)",
+      "description": "Croissant relleno con crema chantilly y frutillas.",
+      "price": 8000,
+      "category": "Panadería"
+    },
+    {
+      "sku": "MK-CROISSANT-DULCE-DE-LECHE",
+      "name": "Croissant Dulce de leche",
+      "description": "Croissant relleno de dulce de leche.",
+      "price": 6500,
+      "category": "Panadería"
+    },
+    {
+      "sku": "MK-CROISSANT-NUTELLA-KINDER",
+      "name": "Croissant Nutella-kinder",
+      "description": "Croissant relleno de Nutella y Kinder.",
+      "price": 10500,
+      "category": "Panadería"
+    },
+    {
+      "sku": "MK-MAFALDA",
+      "name": "Mafalda",
+      "description": "Pan sándwich tierno tipo mafalda.",
+      "price": 2500,
+      "category": "Panadería"
+    },
+    {
+      "sku": "MK-MEDIALUNA",
+      "name": "Medialuna",
+      "description": "Croissant argentino, dulce y glaseado.",
+      "price": 900,
+      "category": "Panadería"
+    },
+    {
+      "sku": "MK-TORTITA",
+      "name": "Tortita",
+      "description": "Pan suave y esponjoso.",
+      "price": 700,
+      "category": "Panadería"
+    },
+    {
+      "sku": "MK-COOKIE-DE-CHOCOLATE-AGUILA-KINDER",
+      "name": "Cookie De Chocolate Aguila/kinder",
+      "description": "Galleta artesanal con chips de chocolate  y barrita Aguila/kinder.",
+      "price": 6000,
+      "category": "Panadería"
+    },
+    {
+      "sku": "MK-COOKIE-DE-CHOCOLATE-SIMPLE",
+      "name": "Cookie de Chocolate Simple",
+      "description": "Galleta con ganache de chocolate y decoración con chocolate semi-amargo.",
+      "price": 5500,
+      "category": "Postres"
+    },
+    {
+      "sku": "MK-COOKIE-DE-CHOCOLATE-KINDER",
+      "name": "Cookie de Chocolate Kinder",
+      "description": "Galleta con ganache de chocolate y decoración con chocolate semi-amargo y barrita Kinder.",
+      "price": 6000,
+      "category": "Postres"
+    },
+    {
+      "sku": "MK-COOKIE-DE-CHOCOLATE-AGUILA",
+      "name": "Cookie De Chocolate Aguila",
+      "description": "Galleta con ganache de chocolate, decoración con chocolate semi-amargo y barrita Aguila.",
+      "price": 6000,
+      "category": "Postres"
+    },
+    {
+      "sku": "MK-BROWNIE-DE-CHOCOLATE",
+      "name": "Brownie de Chocolate",
+      "description": "Brownie de chocolate con copos de Dulce de Leche y decoración de Crema Chantilly con frutilla/chips de chocolate.",
+      "price": 4500,
+      "category": "Postres"
+    },
+    {
+      "sku": "MK-TARTA-CABSHA",
+      "name": "Tarta Cabsha",
+      "description": "Tarta con ganache de chocolate, decoración de dulce de leche y chocolate semi-amargo.",
+      "price": 7000,
+      "category": "Postres"
+    },
+    {
+      "sku": "MK-PASTAFLORA",
+      "name": "Pastaflora",
+      "description": "Pastaflora con dulce de membrillo.",
+      "price": 5500,
+      "category": "Postres"
+    },
+    {
+      "sku": "MK-TARTA-DE-COCO",
+      "name": "Tarta de Coco",
+      "description": "Tarta con relleno de dulce de leche y decoración de coco.",
+      "price": 6000,
+      "category": "Postres"
+    },
+    {
+      "sku": "MK-ALFAJOR-DE-CHOCOLATE",
+      "name": "Alfajor de Chocolate",
+      "description": "Alfajor de Chocolate con relleno de Dulce de Leche.",
+      "price": 5000,
+      "category": "Postres"
+    },
+    {
+      "sku": "MK-TORTA-CARROT-CAKE",
+      "name": "Torta Carrot Cake",
+      "description": "Porción de Bizcochuelo húmedo de zanahoria con un toque de canela y nueces, relleno y cubierto con suave frosting de queso crema.",
+      "price": 7000,
+      "category": "Postres"
+    },
+    {
+      "sku": "MK-BALDE-DE-MINI-COOKIES",
+      "name": "Balde de Mini Cookies",
+      "description": "12 mini galletas con chips de chocolate y 1 dip de nutella.",
+      "price": 9000,
+      "category": "Postres"
+    },
+    {
+      "sku": "MK-LEMON-PIE",
+      "name": "Lemon Pie",
+      "description": "Porción de tarta con una suave crema de límon, elaborada sobre una base de crocante de galletas.",
+      "price": 6000,
+      "category": "Postres"
+    },
+    {
+      "sku": "MK-CAFE-DUBAI",
+      "name": "Café Dubai",
+      "description": "Café brasilero de especialidad, leche condensada, pasta de pistacho, leche espumada, crema chantilly y chocolate amargo en escamas.",
+      "price": 8000,
+      "category": "Cafés"
+    },
+    {
+      "sku": "MK-ESPRESSO-SIMPLE",
+      "name": "Espresso Simple",
+      "description": "30ml de café de especialidad.",
+      "price": 3800,
+      "category": "Cafés"
+    },
+    {
+      "sku": "MK-DOPPIO",
+      "name": "Doppio",
+      "description": "60ml de café de especialidad.",
+      "price": 4000,
+      "category": "Cafés"
+    },
+    {
+      "sku": "MK-AMERICANO-CHICO",
+      "name": "Americano chico",
+      "description": "60ml de café de especialidad con agua.",
+      "price": 4200,
+      "category": "Cafés"
+    },
+    {
+      "sku": "MK-AMERICANO-MEDIANO",
+      "name": "Americano Mediano",
+      "description": "60ml de café de especialidad con agua.",
+      "price": 4400,
+      "category": "Cafés"
+    },
+    {
+      "sku": "MK-FLAT-WHITE-CHICO",
+      "name": "Flat White chico",
+      "description": "Café de especialidad y leche espumada.",
+      "price": 4400,
+      "category": "Cafés"
+    },
+    {
+      "sku": "MK-FLAT-WHITE-GRANDE",
+      "name": "Flat White grande",
+      "description": "Café de especialidad y leche espumada.",
+      "price": 5000,
+      "category": "Cafés"
+    },
+    {
+      "sku": "MK-FLAT-KINDER",
+      "name": "Flat Kinder",
+      "description": "Espresso doble con abundante leche vaporizada y medio huevo Kinder.",
+      "price": 6500,
+      "category": "Cafés"
+    },
+    {
+      "sku": "MK-LATTE-CHICO",
+      "name": "Latte chico",
+      "description": "Espresso con abundante leche vaporizada, suave y cremoso.",
+      "price": 4400,
+      "category": "Cafés"
+    },
+    {
+      "sku": "MK-LATTE-GRANDE",
+      "name": "Latte grande",
+      "description": "Espresso con abundante leche vaporizada, suave y cremoso.",
+      "price": 5000,
+      "category": "Cafés"
+    },
+    {
+      "sku": "MK-MOKKA",
+      "name": "Mokka",
+      "description": "Café brasilero de especialidad, salsa de chocolate, leche espumada, barra de chocolate Águila y salsa de chocolate.",
+      "price": 6500,
+      "category": "Cafés"
+    },
+    {
+      "sku": "MK-CARAMEL-LATTE-CHICO",
+      "name": "Caramel latte chico",
+      "description": "Café brasilero de especialidad, syrup de caramelo y leche espumada.",
+      "price": 5500,
+      "category": "Cafés"
+    },
+    {
+      "sku": "MK-CARAMEL-LATTE-GRANDE",
+      "name": "Caramel latte grande",
+      "description": "Café brasilero de especialidad, syrup de caramelo y leche espumada.",
+      "price": 6500,
+      "category": "Cafés"
+    },
+    {
+      "sku": "MK-VAINILLA-LATTE-GRANDE",
+      "name": "Vainilla Latte grande",
+      "description": "Café brasilero de especialidad, syrup de vainilla y leche espumada.",
+      "price": 6500,
+      "category": "Cafés"
+    },
+    {
+      "sku": "MK-VAINILLA-LATTE-CHICO",
+      "name": "Vainilla Latte chico",
+      "description": "Café brasilero de especialidad, syrup de vainilla y leche espumada.",
+      "price": 5500,
+      "category": "Cafés"
+    },
+    {
+      "sku": "MK-SUBMARINO",
+      "name": "Submarino",
+      "description": "Leche espumada con chocolate en barra Águila.",
+      "price": 4500,
+      "category": "Cafés"
+    },
+    {
+      "sku": "MK-CAPU-ARGENTINO",
+      "name": "Capu Argentino",
+      "description": "Café brasilero de especialidad, leche condensada, leche espumada, abundante espuma de leche con cacao y canela.",
+      "price": 6500,
+      "category": "Cafés"
+    },
+    {
+      "sku": "MK-CAPU-ITALIANO",
+      "name": "Capu Italiano",
+      "description": "Café brasilero de especialidad, leche espumada y abundante espuma de leche.",
+      "price": 5000,
+      "category": "Cafés"
+    },
+    {
+      "sku": "MK-CAPUCCINO-DE-AVELLANAS",
+      "name": "Capuccino de Avellanas",
+      "description": "Café brasilero de especialidad, Nutella, syrup de avellanas, leche espumada y abundante espuma de leche.",
+      "price": 6500,
+      "category": "Cafés"
+    },
+    {
+      "sku": "MK-CAPUCCINO-DE-VAINILLA",
+      "name": "Capuccino de Vainilla",
+      "description": "Café brasilero de especialidad, syrup de vainilla, leche espumada y abundante espuma de leche.",
+      "price": 5500,
+      "category": "Cafés"
+    },
+    {
+      "sku": "MK-ICE-CARAMEL-COFFE",
+      "name": "Ice Caramel Coffe",
+      "description": "Café, leche condensada, leche, hielo, crema chantilly, salsa a elección.",
+      "price": 7500,
+      "category": "Ice Coffee y Frappé"
+    },
+    {
+      "sku": "MK-ICE-VAINILLA-COFFE",
+      "name": "Ice Vainilla Coffe",
+      "description": "Café, leche espumada, syrup de vainilla, hielo, salsa a elección.",
+      "price": 5500,
+      "category": "Ice Coffee y Frappé"
+    },
+    {
+      "sku": "MK-ICE-TONIC-COFFE",
+      "name": "Ice Tonic Coffe",
+      "description": "Café, agua tonica, hielo, naranja.",
+      "price": 4500,
+      "category": "Ice Coffee y Frappé"
+    },
+    {
+      "sku": "MK-ICE-KINDER-COFFE",
+      "name": "Ice Kinder coffe",
+      "description": "Café, leche, hielo, crema chantilly, barrita Kinder, salsa a elección.",
+      "price": 7500,
+      "category": "Ice Coffee y Frappé"
+    },
+    {
+      "sku": "MK-ICE-OREO-COFFE",
+      "name": "Ice Oreo Coffe",
+      "description": "Café, leche, hielo, crema chantilly, galletas mini oreo, salsa a elección.",
+      "price": 7500,
+      "category": "Ice Coffee y Frappé"
+    },
+    {
+      "sku": "MK-ICE-AVELLANAS-COFFE",
+      "name": "Ice Avellanas Coffe",
+      "description": "Café, leche espumada, hielo, Nutella, syrup de avellanas, salsa a elección.",
+      "price": 6500,
+      "category": "Ice Coffee y Frappé"
+    },
+    {
+      "sku": "MK-FRAPPE-DE-DULCE-DE-LECHE",
+      "name": "Frappe de Dulce de Leche",
+      "description": "Batido de Café, leche, dulce de leche, azúcar, hielo, crema chantilly, salsa a elección.",
+      "price": 6500,
+      "category": "Ice Coffee y Frappé"
+    },
+    {
+      "sku": "MK-FRAPPE-DE-NUTELLA",
+      "name": "Frappe de Nutella",
+      "description": "Batido de Café, leche, Nutella, hielo, azúcar, crema chantilly, salsa a elección.",
+      "price": 7500,
+      "category": "Ice Coffee y Frappé"
+    },
+    {
+      "sku": "MK-FRAPPE-BASE-CRUNCH",
+      "name": "Frappe Base Crunch",
+      "description": "Batido de Café, leche, dulce de leche, azúcar, hielo, crema chantilly, salsa a elección. Presentación en un vaso supermilano, recubierto de chocolate semi-amargo.",
+      "price": 8500,
+      "category": "Ice Coffee y Frappé"
+    },
+    {
+      "sku": "MK-FRAPPE-KINDER",
+      "name": "Frappe Kinder",
+      "description": "Batido de Café, leche, dulce de leche, hielo, azúcar, crema chantilly, barrita Kinder, salsa a elección.",
+      "price": 7500,
+      "category": "Ice Coffee y Frappé"
+    },
+    {
+      "sku": "MK-FRAPPE-OREO",
+      "name": "Frappe Oreo",
+      "description": "Batido de Café, leche, dulce de leche/nutella, azúcar, hielo, crema chantilly, Mini Oreo, salsa a elección.",
+      "price": 11000,
+      "category": "Ice Coffee y Frappé"
+    },
+    {
+      "sku": "MK-ESCAMAS-DE-CHOCOLATE",
+      "name": "Escamas de Chocolate",
+      "description": "Chocolate Aguila rallado.",
+      "price": 600,
+      "category": "Agregados de Café"
+    },
+    {
+      "sku": "MK-CHOCOLATE-AGUILA",
+      "name": "Chocolate Aguila",
+      "description": "Barrita de Chocolate Aguila.",
+      "price": 10000,
+      "category": "Agregados de Café"
+    },
+    {
+      "sku": "MK-CACAO",
+      "name": "Cacao",
+      "description": "Cacao semi-amargo",
+      "price": 200,
+      "category": "Agregados de Café"
+    },
+    {
+      "sku": "MK-CANELA",
+      "name": "Canela",
+      "description": "Canela en polvo",
+      "price": 200,
+      "category": "Agregados de Café"
+    },
+    {
+      "sku": "MK-LECHE-CONDENSADA",
+      "name": "Leche Condensada",
+      "description": null,
+      "price": 800,
+      "category": "Agregados de Café"
+    },
+    {
+      "sku": "MK-CREMA-CHANTILLY",
+      "name": "Crema Chantilly",
+      "description": null,
+      "price": 1000,
+      "category": "Agregados de Café"
+    },
+    {
+      "sku": "MK-NUTELLA",
+      "name": "Nutella",
+      "description": null,
+      "price": 1400,
+      "category": "Agregados de Café"
+    },
+    {
+      "sku": "MK-BARRITA-KINDER",
+      "name": "Barrita Kinder",
+      "description": "Barra de chocolate Kinder.",
+      "price": 1200,
+      "category": "Agregados de Café"
+    },
+    {
+      "sku": "MK-HUEVO-KINDER",
+      "name": "Huevo Kinder",
+      "description": "Medio huevo de chocolate Kinder.",
+      "price": 1500,
+      "category": "Agregados de Café"
+    },
+    {
+      "sku": "MK-ROCKLETS",
+      "name": "Rocklets",
+      "description": null,
+      "price": 800,
+      "category": "Agregados de Café"
+    },
+    {
+      "sku": "MK-CROCANTE-DE-MANI",
+      "name": "Crocante de Maní",
+      "description": "Decorado de Crocantes de Mani",
+      "price": 400,
+      "category": "Agregados de Café"
+    },
+    {
+      "sku": "MK-LECHE-DE-ALMENDRA",
+      "name": "Leche de Almendra",
+      "description": null,
+      "price": 900,
+      "category": "Agregados de Café"
+    },
+    {
+      "sku": "MK-LECHE-DE-COCO",
+      "name": "Leche de Coco",
+      "description": null,
+      "price": 900,
+      "category": "Agregados de Café"
+    },
+    {
+      "sku": "MK-MINI-OREOS",
+      "name": "Mini Oreos",
+      "description": null,
+      "price": 800,
+      "category": "Agregados de Café"
+    },
+    {
+      "sku": "MK-SALSA-DE-CARAMELO",
+      "name": "Salsa de Caramelo",
+      "description": null,
+      "price": 100,
+      "category": "Agregados de Café"
+    },
+    {
+      "sku": "MK-SALSA-DE-DULCE-DE-LECHE",
+      "name": "Salsa de Dulce de Leche",
+      "description": null,
+      "price": 100,
+      "category": "Agregados de Café"
+    },
+    {
+      "sku": "MK-SALSA-DE-CHOCOLATE",
+      "name": "Salsa de Chocolate",
+      "description": null,
+      "price": 100,
+      "category": "Agregados de Café"
+    },
+    {
+      "sku": "MK-SALSA-DE-FRUTOS-ROJOS",
+      "name": "Salsa de Frutos Rojos",
+      "description": null,
+      "price": 100,
+      "category": "Agregados de Café"
+    },
+    {
+      "sku": "MK-APEROL-SPRIT",
+      "name": "Aperol Sprit",
+      "description": "Clásico aperitivo con Aperol, espumante y soda.",
+      "price": 7000,
+      "category": "Coctelería"
+    },
+    {
+      "sku": "MK-NEGRONI",
+      "name": "Negroni",
+      "description": "Cóctel clásico con gin, vermut y bitter.",
+      "price": 7000,
+      "category": "Coctelería"
+    },
+    {
+      "sku": "MK-VERMUT",
+      "name": "Vermut",
+      "description": "Aperitivo clásico a base de vino macerado.",
+      "price": 6000,
+      "category": "Coctelería"
+    },
+    {
+      "sku": "MK-FERNET-PINTA-COCA-TRADICIONAL-O-ZERO",
+      "name": "Fernet pinta (coca tradicional o zero)",
+      "description": "Fernet con cola, en pinta.",
+      "price": 6500,
+      "category": "Coctelería"
+    },
+    {
+      "sku": "MK-FERNET-PINTA-LARGA-COCA-TRADICIONAL-O-",
+      "name": "Fernet pinta larga (coca tradicional o zero)",
+      "description": "Fernet con cola, en pinta larga.",
+      "price": 8000,
+      "category": "Coctelería"
+    },
+    {
+      "sku": "MK-FERNET-BOTELLA-COCA-1-5",
+      "name": "Fernet Botella + Coca 1.5",
+      "description": "Botella de Fernet para compartir.",
+      "price": 45000,
+      "category": "Coctelería"
+    },
+    {
+      "sku": "MK-GIN-TONIC-DE-FRUTILLA",
+      "name": "Gin Tonic de Frutilla",
+      "description": "Gin con tónica y mix de frutos rojos.",
+      "price": 8000,
+      "category": "Coctelería"
+    },
+    {
+      "sku": "MK-GIN-TONIC-DE-NARANJA",
+      "name": "Gin Tonic de Naranja",
+      "description": "Gin con tónica y rodajas de naranja.",
+      "price": 8000,
+      "category": "Coctelería"
+    },
+    {
+      "sku": "MK-GIN-TONIC-DE-POMELO",
+      "name": "Gin Tonic de Pomelo",
+      "description": "Gin con tónica y rodajas de pomelo.",
+      "price": 8000,
+      "category": "Coctelería"
+    },
+    {
+      "sku": "MK-MOJITO",
+      "name": "Mojito",
+      "description": "Cóctel refrescante de ron, menta y lima.",
+      "price": 7000,
+      "category": "Coctelería"
+    },
+    {
+      "sku": "MK-MOJITO-MALIBU",
+      "name": "Mojito Malibu",
+      "description": "Variante del mojito con ron Malibu.",
+      "price": 7500,
+      "category": "Coctelería"
+    },
+    {
+      "sku": "MK-VODKA-SKY",
+      "name": "Vodka Sky",
+      "description": null,
+      "price": 6000,
+      "category": "Coctelería"
+    },
+    {
+      "sku": "MK-VODKA-ABSOLUT",
+      "name": "Vodka Absolut",
+      "description": null,
+      "price": 7500,
+      "category": "Coctelería"
+    },
+    {
+      "sku": "MK-CAMPARI",
+      "name": "Campari",
+      "description": null,
+      "price": 6000,
+      "category": "Coctelería"
+    },
+    {
+      "sku": "MK-JAGGER",
+      "name": "Jagger",
+      "description": "Trago de Jägermeister, intenso y herbal.",
+      "price": 12000,
+      "category": "Coctelería"
+    },
+    {
+      "sku": "MK-ESPRESSO-MAIKAI",
+      "name": "Espresso Maikai",
+      "description": "Gin tonic de limon y espresso de Café.",
+      "price": 9000,
+      "category": "Coctelería"
+    },
+    {
+      "sku": "MK-ESPRESSO-MARTINI",
+      "name": "Espresso Martini",
+      "description": "Trago de autor con café, baileys, licor de café y canela.",
+      "price": 8000,
+      "category": "Coctelería"
+    },
+    {
+      "sku": "MK-BUDWEISER-1L",
+      "name": "Budweiser 1L",
+      "description": "Cerveza rubia americana en botella de 1L.",
+      "price": 7000,
+      "category": "Cervezas y Vinos"
+    },
+    {
+      "sku": "MK-CORONA-330ML",
+      "name": "Corona 330ml",
+      "description": "Cerveza mexicana en botella de 330ml.",
+      "price": 5000,
+      "category": "Cervezas y Vinos"
+    },
+    {
+      "sku": "MK-CORONA-710ML",
+      "name": "Corona 710ml",
+      "description": "Cerveza mexicana en botella de 710ml.",
+      "price": 11000,
+      "category": "Cervezas y Vinos"
+    },
+    {
+      "sku": "MK-PATAGONIA-24-7-730ML",
+      "name": "Patagonia 24.7 730ml",
+      "description": "Cerveza artesanal ligera, botella de 730ml.",
+      "price": 8500,
+      "category": "Cervezas y Vinos"
+    },
+    {
+      "sku": "MK-HEINEKEN",
+      "name": "Heineken",
+      "description": "Cerveza IPA artesanal, botella de 730ml.",
+      "price": 12000,
+      "category": "Cervezas y Vinos"
+    },
+    {
+      "sku": "MK-STELLA-ARTOIS-1L",
+      "name": "Stella artois 1L",
+      "description": "Cerveza belga en botella de 1L.",
+      "price": 12000,
+      "category": "Cervezas y Vinos"
+    },
+    {
+      "sku": "MK-CERVEZA-TIRADA-PINTA-HONEY-500ML",
+      "name": "Cerveza tirada pinta Honey 500ml",
+      "description": null,
+      "price": 5500,
+      "category": "Cervezas y Vinos"
+    },
+    {
+      "sku": "MK-CERVEZA-TIRADA-PINTA-LARGA-HONEY",
+      "name": "Cerveza tirada pinta larga Honey",
+      "description": null,
+      "price": 7500,
+      "category": "Cervezas y Vinos"
+    },
+    {
+      "sku": "MK-ANCESTRAL-AMERICAN-IPA",
+      "name": "Ancestral American Ipa",
+      "description": null,
+      "price": 6500,
+      "category": "Cervezas y Vinos"
+    },
+    {
+      "sku": "MK-STELLA-ARTOIS-PURE-GOLD",
+      "name": "Stella Artois Pure Gold",
+      "description": "Cerveza sin tacc",
+      "price": 6500,
+      "category": "Cervezas y Vinos"
+    },
+    {
+      "sku": "MK-VINO-TERCER-TIEMPO-BLANCO-DULCE-NATURA",
+      "name": "Vino Tercer Tiempo Blanco Dulce Natural",
+      "description": null,
+      "price": 16000,
+      "category": "Cervezas y Vinos"
+    },
+    {
+      "sku": "MK-PEPSI-500ML",
+      "name": "Pepsi 500ml",
+      "description": "Gaseosa refrescante en botella de 500ml.",
+      "price": 4000,
+      "category": "Sin Alcohol"
+    },
+    {
+      "sku": "MK-PEPSI-1-5L",
+      "name": "Pepsi 1.5L",
+      "description": "Gaseosa refrescante en botella de 1.5L.",
+      "price": 6000,
+      "category": "Sin Alcohol"
+    },
+    {
+      "sku": "MK-7UP-500ML",
+      "name": "7up 500ml",
+      "description": "Gaseosa lima-limón en botella de 500ml.",
+      "price": 4000,
+      "category": "Sin Alcohol"
+    },
+    {
+      "sku": "MK-7UP-1-5L",
+      "name": "7up 1.5L",
+      "description": "Gaseosa lima-limón en botella de 1.5L.",
+      "price": 6500,
+      "category": "Sin Alcohol"
+    },
+    {
+      "sku": "MK-COCA-COLA-1-5L",
+      "name": "Coca Cola 1.5L",
+      "description": null,
+      "price": 7000,
+      "category": "Sin Alcohol"
+    },
+    {
+      "sku": "MK-COCA-COLA-ZERO-1-5L",
+      "name": "Coca Cola Zero 1.5L",
+      "description": null,
+      "price": 7000,
+      "category": "Sin Alcohol"
+    },
+    {
+      "sku": "MK-COCA-COLA-500ML",
+      "name": "Coca Cola 500ml",
+      "description": null,
+      "price": 4500,
+      "category": "Sin Alcohol"
+    },
+    {
+      "sku": "MK-COCA-COLA-ZERO-500ML",
+      "name": "Coca Cola Zero 500ml",
+      "description": null,
+      "price": 4500,
+      "category": "Sin Alcohol"
+    },
+    {
+      "sku": "MK-FANTA-500ML",
+      "name": "Fanta 500ml",
+      "description": null,
+      "price": 4500,
+      "category": "Sin Alcohol"
+    },
+    {
+      "sku": "MK-JUGO-DE-NARANJA",
+      "name": "Jugo de naranja",
+      "description": "Jugo natural y refrescante.",
+      "price": 3500,
+      "category": "Sin Alcohol"
+    },
+    {
+      "sku": "MK-JUGO-DE-LIMONADA",
+      "name": "Jugo de limonada",
+      "description": "Limonada fresca y cítrica.",
+      "price": 3500,
+      "category": "Sin Alcohol"
+    },
+    {
+      "sku": "MK-JARRA-DE-JUGO-DE-NARANJA",
+      "name": "Jarra de jugo de naranja",
+      "description": "Jarra de jugo natural para compartir.",
+      "price": 8000,
+      "category": "Sin Alcohol"
+    },
+    {
+      "sku": "MK-JARRA-DE-JUGO-DE-LIMONADA",
+      "name": "Jarra de jugo de limonada",
+      "description": "Jarra de limonada fresca para compartir.",
+      "price": 8000,
+      "category": "Sin Alcohol"
+    },
+    {
+      "sku": "MK-PASO-DE-LOS-TOROS-1-5L-TONICA",
+      "name": "Paso de los Toros 1.5L Tónica",
+      "description": "Agua tónica en botella de 1.5L.",
+      "price": 6500,
+      "category": "Sin Alcohol"
+    },
+    {
+      "sku": "MK-SMOOTHIE-MIX-1",
+      "name": "Smoothie Mix 1",
+      "description": "Smoothie de Sandía y Melón.",
+      "price": 4500,
+      "category": "Sin Alcohol"
+    },
+    {
+      "sku": "MK-SMOOTHIE-MIX-2",
+      "name": "Smoothie Mix 2",
+      "description": "Smoothie de Frutillas, arándanos y cerezas.",
+      "price": 5000,
+      "category": "Sin Alcohol"
+    },
+    {
+      "sku": "MK-SMOOTHIE-MIX-3",
+      "name": "Smoothie Mix 3",
+      "description": "Smoothie de Durazno, damasco y mango.",
+      "price": 5000,
+      "category": "Sin Alcohol"
+    },
+    {
+      "sku": "MK-SMOOTHIE-MIX-4",
+      "name": "Smoothie Mix 4",
+      "description": "Smoothie de Arándanos, banana y leche de coco.",
+      "price": 5000,
+      "category": "Sin Alcohol"
+    }
+  ]
+}

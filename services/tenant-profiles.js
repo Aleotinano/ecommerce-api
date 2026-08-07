@@ -23,6 +23,7 @@ import { createError } from "../helpers/error.js";
 
 /**
  * @typedef {object} TenantProfile
+ * @property {string}   storeMode                 'SHOP' (se compra) | 'MENU' (se lee)
  * @property {string[]} paymentMethodsEnabled     valores de `OrderPaymentMethod`
  * @property {string[]} fulfillmentMethodsEnabled valores de `FulfillmentMethod`
  * @property {boolean}  depositEnabled
@@ -41,6 +42,7 @@ export const TENANT_PROFILES = {
    * formas de entrega y no cobra seña. No hace falta un perfil a medida.
    */
   estandar: {
+    storeMode: "SHOP",
     paymentMethodsEnabled: ["CASH", "TRANSFER", "MIXED"],
     fulfillmentMethodsEnabled: ["DELIVERY", "PICKUP"],
     depositEnabled: false,
@@ -53,6 +55,7 @@ export const TENANT_PROFILES = {
    * registrado solo cuando la orden pasa a COMPLETED.
    */
   contraentrega: {
+    storeMode: "SHOP",
     paymentMethodsEnabled: ["CASH"],
     fulfillmentMethodsEnabled: ["DELIVERY"],
     depositEnabled: false,
@@ -65,9 +68,32 @@ export const TENANT_PROFILES = {
    * rubro.
    */
   "produccion-por-sena": {
+    storeMode: "SHOP",
     paymentMethodsEnabled: ["CASH", "TRANSFER", "MIXED"],
     fulfillmentMethodsEnabled: ["DELIVERY", "PICKUP"],
     depositEnabled: true,
+    depositPercentage: 50,
+  },
+
+  /**
+   * El catálogo se LEE, no se compra: carta de restaurante o de cafetería. El
+   * pedido se cierra por fuera del sistema (WhatsApp, mostrador), así que el
+   * storefront no monta carrito y apaga `/checkout`.
+   *
+   * Los métodos de pago y entrega quedan poblados como en `estandar`, y no
+   * vacíos: en este modo no nacen órdenes, así que las listas no gobiernan nada,
+   * y dejarlas vacías obligaría a `OrderModel.create` a distinguir "sin métodos
+   * habilitados" de "no vende" — dos motivos distintos para el mismo rechazo. El
+   * campo que dice qué es este tenant es `storeMode`, uno solo.
+   *
+   * Si un cliente de carta después empieza a vender online, el cambio es pasarlo
+   * a `estandar`: no hay nada más que deshacer.
+   */
+  carta: {
+    storeMode: "MENU",
+    paymentMethodsEnabled: ["CASH", "TRANSFER", "MIXED"],
+    fulfillmentMethodsEnabled: ["DELIVERY", "PICKUP"],
+    depositEnabled: false,
     depositPercentage: 50,
   },
 };

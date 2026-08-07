@@ -19,8 +19,18 @@ const validation = {
   resendVerification: validate({ body: resendVerificationSchema }),
 };
 
-usersRouter.post("/register", registerLimiter, validation.register, usersController.register);
-usersRouter.post("/login", loginLimiter, validation.login, usersController.login);
+usersRouter.post(
+  "/register",
+  registerLimiter,
+  validation.register,
+  usersController.register,
+);
+usersRouter.post(
+  "/login",
+  loginLimiter,
+  validation.login,
+  usersController.login,
+);
 usersRouter.post("/logout", usersController.logout);
 usersRouter.get("/me", verifyToken, usersController.me);
 
