@@ -1,6 +1,7 @@
 import { OrderModel } from "../services/orders.js";
 import { OrderReceiptModel } from "../services/order-receipts.js";
 import { evaluateOrder } from "../services/order-state.js";
+import { getStatusMeta } from "../services/order-status.js";
 import { buildOrderWhatsappLink } from "../lib/whatsapp-link.js";
 import {
   cleanupUploadedReceipt,
@@ -344,7 +345,9 @@ export class OrderController {
       };
 
       return res.json({
-        message: `Orden ${statusMessages[status]} exitosamente`,
+        // Del catálogo, no de una tabla local: el texto de un estado se escribe
+        // una sola vez (services/order-status.js).
+        message: `Orden ${getStatusMeta(status).admin.message} exitosamente`,
         order: {
           id: order.id,
           status: order.status,

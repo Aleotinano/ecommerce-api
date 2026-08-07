@@ -49,7 +49,7 @@ function draft(tenantId, variant, extra = {}) {
 describe("la revisión destraba y avanza", () => {
   it("con los datos completos, revisar deja la orden en PROCESSING sola", async () => {
     const order = await draft(shopco.id, shopcoVariant);
-    expect(order.status).toBe("PENDING");
+    expect(order.status).toBe("NEW");
 
     const reviewed = await OrderModel.reviewOrder({
       tenantId: shopco.id,
@@ -76,7 +76,7 @@ describe("la revisión destraba y avanza", () => {
       fulfillment: { fulfillmentMethod: "DELIVERY", paymentMethod: "CASH" },
     });
 
-    expect(reviewed.status).toBe("PENDING");
+    expect(reviewed.status).toBe("NEW");
 
     const { cookie } = await loginAs(app, { email: "admin@shopco.com" });
     const res = await request(app).get("/orders/all").set("Cookie", cookie);
@@ -98,7 +98,7 @@ describe("la confirmación del cobro destraba y avanza", () => {
       reviewedById: acmeAdminId,
       fulfillment: { fulfillmentMethod: "PICKUP", paymentMethod: "CASH" },
     });
-    expect(reviewed.status).toBe("PENDING");
+    expect(reviewed.status).toBe("NEW");
 
     const confirmed = await OrderModel.confirmDeposit({
       tenantId: acme.id,
@@ -151,7 +151,7 @@ describe("la confirmación del cobro destraba y avanza", () => {
       reviewedById: shopcoAdmin.id,
       fulfillment: { fulfillmentMethod: "PICKUP", paymentMethod: "TRANSFER" },
     });
-    expect(reviewed.status).toBe("PENDING");
+    expect(reviewed.status).toBe("NEW");
 
     const confirmed = await OrderModel.confirmTransfer({
       tenantId: shopco.id,
@@ -190,7 +190,7 @@ describe("la confirmación del cobro destraba y avanza", () => {
 });
 
 describe("lo que NO se automatiza", () => {
-  it("crear no es empezar a producir: una orden ADMIN completa nace PENDING", async () => {
+  it("crear no es empezar a producir: una orden ADMIN completa nace NEW", async () => {
     const customer = shopco.users.find((u) => u.role === "CUSTOMER");
 
     await CartModel.add({
@@ -201,7 +201,7 @@ describe("lo que NO se automatiza", () => {
     });
 
     // Origen ADMIN, sin seña y con entrega y pago definidos: no le falta nada
-    // para producirse. Aun así nace PENDING — cargar un pedido en el mostrador
+    // para producirse. Aun así nace NEW — cargar un pedido en el mostrador
     // no significa ponerse a hacerlo, y esa decisión sigue siendo de quien
     // atiende.
     const order = await OrderModel.create({
@@ -211,7 +211,7 @@ describe("lo que NO se automatiza", () => {
       paymentMethod: "CASH",
     });
 
-    expect(order.status).toBe("PENDING");
+    expect(order.status).toBe("NEW");
     expect(evaluateOrder(order).canProduce).toBe(true);
   });
 });
@@ -270,7 +270,7 @@ describe("READY, el paso nuevo", () => {
     const res = await request(app).get(`/orders/${order.id}`).set("Cookie", cookie);
 
     const timeline = res.body.order.timeline;
-    expect(timeline[0]).toMatchObject({ estado: "PENDING", automatico: false });
+    expect(timeline[0]).toMatchObject({ estado: "NEW", automatico: false });
     expect(timeline.at(-1)).toMatchObject({ estado: "PROCESSING", automatico: true });
   });
 });

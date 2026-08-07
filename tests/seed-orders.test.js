@@ -25,7 +25,7 @@ beforeAll(async () => {
     userId: customerId,
     reviewerId: acme.users.find((u) => u.role === "ADMIN").id,
     orders: [
-      { status: "PENDING", daysAgo: 1, paymentMethod: "CASH", items: [{ sku: SKU, quantity: 1 }] },
+      { status: "NEW", daysAgo: 1, paymentMethod: "CASH", items: [{ sku: SKU, quantity: 1 }] },
       {
         status: "PROCESSING",
         daysAgo: 3,
@@ -94,7 +94,7 @@ describe("órdenes de demo", () => {
         expect(order.paymentConfirmedAt).not.toBeNull();
       }
 
-      if (["PENDING", "CANCELLED"].includes(order.status)) {
+      if (["NEW", "CANCELLED"].includes(order.status)) {
         expect(paid(order), `orden ${order.id}`).toBe(0);
       }
 

@@ -123,7 +123,7 @@ describe("POST /store/orders — validación Zod", () => {
   });
 });
 
-describe("guard PENDING → PROCESSING: fulfillment/payment", () => {
+describe("guard NEW → PROCESSING: fulfillment/payment", () => {
   it("orden BOT revisada pero sin fulfillment/payment → FULFILLMENT_INCOMPLETE", async () => {
     const order = await OrderModel.createDraft({
       tenantId: acme.id,

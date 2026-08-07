@@ -144,7 +144,7 @@ describe("chat tools — gating de tools por auth", () => {
     const spy = vi
       .spyOn(OrderModel, "getUserOrderById")
       .mockResolvedValue({
-        status: "PENDING",
+        status: "NEW",
         total: 4500,
         createdAt: new Date(),
         orderItems: [{ quantity: 2, variant: { product: { name: "Remera básica" } } }],

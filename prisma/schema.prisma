@@ -566,7 +566,7 @@ model Order {
   id            Int                  @id @default(autoincrement())
   tenantId      Int
   userId        Int?
-  status        OrderStatus          @default(PENDING)
+  status        OrderStatus          @default(NEW)
   total         Float
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
@@ -1034,8 +1034,14 @@ enum SuggestionSource {
 // siendo válido): es el momento en que el pedido está terminado y se le avisa al
 // cliente, que hasta ahora quedaba tapado dentro de PROCESSING. El stock se sigue
 // descontando SOLO en COMPLETED. Transiciones válidas: services/order-state.js.
+//
+// `NEW` se llamó `PENDING` hasta 2026-07-31. Es lo que siempre fue —la bandeja de
+// entrada: nadie puede volver acá y el motor saca la orden sola en cuanto deja de
+// faltarle algo—, pero "pendiente" se leía como "trabada" y el panel terminaba
+// traduciéndolo a "Nueva" al mostrarlo. Los textos de cada estado (panel, cliente,
+// email) viven en un solo lugar: services/order-status.js.
 enum OrderStatus {
-  PENDING
+  NEW
   PROCESSING
   READY
   COMPLETED

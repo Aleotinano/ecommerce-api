@@ -36,15 +36,15 @@ export async function variantBySku(tenantId, sku) {
 // Secuencia de estados por los que pasó la orden hasta su estado final, para
 // poblar un timeline coherente de demo.
 export const STATUS_FLOW = {
-  PENDING: ["PENDING"],
-  PROCESSING: ["PENDING", "PROCESSING"],
-  READY: ["PENDING", "PROCESSING", "READY"],
-  COMPLETED: ["PENDING", "PROCESSING", "READY", "COMPLETED"],
-  CANCELLED: ["PENDING", "CANCELLED"],
+  NEW: ["NEW"],
+  PROCESSING: ["NEW", "PROCESSING"],
+  READY: ["NEW", "PROCESSING", "READY"],
+  COMPLETED: ["NEW", "PROCESSING", "READY", "COMPLETED"],
+  CANCELLED: ["NEW", "CANCELLED"],
 };
 
 export const STATUS_NOTE = {
-  PENDING: "Pedido creado",
+  NEW: "Pedido creado",
   PROCESSING: "Pedido en preparación",
   READY: "Pedido listo para entregar",
   COMPLETED: "Pedido completado",
@@ -52,7 +52,7 @@ export const STATUS_NOTE = {
 };
 
 export function buildStatusHistory({ status, userId, createdAt }) {
-  const flow = STATUS_FLOW[status] ?? ["PENDING"];
+  const flow = STATUS_FLOW[status] ?? ["NEW"];
   return flow.map((toStatus, index) => {
     // Cada transición ocurre algo después de la creación de la orden.
     const at = new Date(createdAt.getTime() + index * 60 * 60 * 1000);

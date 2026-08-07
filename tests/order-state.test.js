@@ -18,7 +18,7 @@ import {
 function orderReady(overrides = {}) {
   return {
     id: 1,
-    status: "PENDING",
+    status: "NEW",
     origin: "ADMIN",
     reviewedById: null,
     total: 10000,
@@ -351,7 +351,7 @@ describe("assertTransition", () => {
   it("no deja volver a un estado anterior", () => {
     expect(() => assertTransition(orderReady({ status: "READY" }), "PROCESSING"))
       .toThrowError(expect.objectContaining({ code: "INVALID_STATUS_TRANSITION" }));
-    expect(() => assertTransition(orderReady({ status: "PROCESSING" }), "PENDING"))
+    expect(() => assertTransition(orderReady({ status: "PROCESSING" }), "NEW"))
       .toThrowError(expect.objectContaining({ code: "INVALID_STATUS_TRANSITION" }));
   });
 
@@ -369,7 +369,7 @@ describe("assertTransition", () => {
   });
 
   it("siempre se puede cancelar una orden viva", () => {
-    for (const status of ["PENDING", "PROCESSING", "READY"]) {
+    for (const status of ["NEW", "PROCESSING", "READY"]) {
       expect(() => assertTransition(orderReady({ status }), "CANCELLED")).not.toThrow();
       expect(ORDER_TRANSITIONS[status]).toContain("CANCELLED");
     }

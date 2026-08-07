@@ -1,13 +1,17 @@
 ﻿import { ORDER_STATUS_KEYS } from "./constants.js";
+import { getStatusMeta } from "../order-status.js";
 import { getOrderUnits, isCompletedOrder } from "./order-helpers.js";
 import { round } from "./utils.js";
 
-const STATUS_META = {
-  COMPLETED: { label: "Completadas", color: "green" },
-  PENDING: { label: "Pendientes", color: "amber" },
-  PROCESSING: { label: "En proceso", color: "blue" },
-  READY: { label: "Listas", color: "teal" },
-  CANCELLED: { label: "Canceladas", color: "red" },
+// Acá queda SOLO el color: es un token de este panel, no del dominio (el listado
+// de órdenes pinta los mismos estados con otra paleta). El nombre sale del
+// catálogo de estados, que es donde vive el idioma del sistema.
+const STATUS_COLOR = {
+  NEW: "amber",
+  PROCESSING: "blue",
+  READY: "teal",
+  COMPLETED: "green",
+  CANCELLED: "red",
 };
 
 const CATEGORY_COLORS = ["red", "blue", "green", "orange", "gray"];
@@ -76,8 +80,8 @@ export const buildOrderStatusPanel = (orders) => {
     totalOrders: total,
     statuses: ORDER_STATUS_KEYS.map((status) => ({
       key: status,
-      label: STATUS_META[status].label,
-      color: STATUS_META[status].color,
+      label: getStatusMeta(status).admin.plural,
+      color: STATUS_COLOR[status] ?? "gray",
       count: counts[status] ?? 0,
       percentage: total > 0 ? round(((counts[status] ?? 0) / total) * 100) : 0,
     })),

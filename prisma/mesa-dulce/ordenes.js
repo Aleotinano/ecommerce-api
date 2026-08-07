@@ -8,6 +8,13 @@
 // `buildPaymentPlan` en seed-helpers.
 //   node prisma/mesa-dulce/ordenes.js
 //
+// NO SIRVE PARA PROBAR CAJA: las filas del libro se escriben directo con
+// `prisma.order.create`, salteándose `recordOrderPayments`, así que estas órdenes
+// nacen cobradas y la caja no se entera nunca — cero `CashMovement`, arqueo vacío.
+// Es deliberado: este seed puebla el tablero de órdenes y tiene que poder correr en
+// un tenant sin caja. Para caja está `prisma/seed-caja.js`, que cobra por los
+// services reales.
+//
 // No es estrictamente idempotente (una orden no tiene una clave de negocio
 // natural para dedup exacto) pero evita duplicar en un rerun accidental: si
 // el customer ya tiene órdenes de este seed, se salta por completo.
@@ -22,7 +29,7 @@ const TENANT_SLUG = "mesa-dulce";
 const ORDERS = [
   // Recién entrada, retira y paga en el local: no hay nada cobrado todavía.
   {
-    status: "PENDING",
+    status: "NEW",
     daysAgo: 1,
     paymentMethod: "CASH",
     fulfillmentMethod: "PICKUP",

@@ -26,7 +26,7 @@ import { roundMoney } from "../helpers/price.js";
  * (ORDER_ALREADY_*) porque el panel ya los distingue.
  */
 export const ORDER_TRANSITIONS = {
-  PENDING: ["PROCESSING", "READY", "COMPLETED", "CANCELLED"],
+  NEW: ["PROCESSING", "READY", "COMPLETED", "CANCELLED"],
   PROCESSING: ["READY", "COMPLETED", "CANCELLED"],
   READY: ["COMPLETED", "CANCELLED"],
   COMPLETED: [],
@@ -343,7 +343,7 @@ export function evaluateOrder(order, payments = order?.payments) {
     // cobrado empiece a prepararse es una consecuencia de las condiciones. Que
     // esté listo o entregado son hechos físicos que solo una persona sabe, así
     // que READY y COMPLETED siguen siendo manuales.
-    nextStatus: canProduce && order.status === "PENDING" ? "PROCESSING" : null,
+    nextStatus: canProduce && order.status === "NEW" ? "PROCESSING" : null,
   };
 }
 

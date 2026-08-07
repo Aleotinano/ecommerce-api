@@ -48,7 +48,7 @@ describe("createDraft (orden del bot)", () => {
 
     expect(order.origin).toBe("BOT");
     expect(order.userId).toBeNull();
-    expect(order.status).toBe("PENDING");
+    expect(order.status).toBe("NEW");
     expect(order.paymentStatus).toBe("PENDING");
     expect(order.reviewedById).toBeNull();
     expect(order.total).toBe(acmeVariant.price * 2);
@@ -71,7 +71,7 @@ describe("createDraft (orden del bot)", () => {
   });
 });
 
-describe("guard PENDING → PROCESSING", () => {
+describe("guard NEW → PROCESSING", () => {
   it("orden BOT sin revisar → ORDER_NOT_REVIEWED", async () => {
     const order = await OrderModel.createDraft({
       tenantId: acme.id,

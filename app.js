@@ -13,6 +13,7 @@ import { closeRedis } from "./lib/redis.js";
 
 // rutas
 import { ordersRouter } from "./routes/orders.js";
+import { orderStatusesRouter } from "./routes/order-statuses.js";
 import { productosRouter } from "./routes/productos.js";
 import { variantRouter } from "./routes/variants.js";
 import { roleRouter } from "./routes/role.js";
@@ -54,6 +55,7 @@ app.use(httpLogger);
 app.use(generalLimiter);
 
 app.use("/orders", ordersRouter);
+app.use("/order-statuses", orderStatusesRouter);
 app.use("/products", productosRouter);
 app.use("/variants", variantRouter);
 app.use("/categories", categoriesRouter);

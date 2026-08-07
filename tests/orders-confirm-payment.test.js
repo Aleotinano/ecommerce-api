@@ -56,7 +56,7 @@ describe("confirmPayment", () => {
     expect(paid.paymentConfirmedById).toBe(acmeAdminId);
     expect(paid.paymentConfirmedAt).not.toBeNull();
     // El eje logístico no se toca: sigue siendo independiente del pago.
-    expect(paid.status).toBe("PENDING");
+    expect(paid.status).toBe("NEW");
   });
 
   it("desde DEPOSIT_PAID cierra el saldo de una orden con seña", async () => {

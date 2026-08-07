@@ -139,7 +139,7 @@ describe("pedido por transferencia, con envío", () => {
       .set("Cookie", cookie)
       .send({});
 
-    expect(review.body.order.status).toBe("PENDING");
+    expect(review.body.order.status).toBe("NEW");
     expect(review.body.order.blockers.map((b) => b.code)).toEqual([
       "TRANSFER_NOT_CONFIRMED",
     ]);
@@ -187,7 +187,7 @@ describe("pedido por transferencia, con envío", () => {
       .send({ amount: 1000 });
 
     expect(parcial.status).toBe(200);
-    expect(parcial.body.order.status).toBe("PENDING");
+    expect(parcial.body.order.status).toBe("NEW");
     expect(parcial.body.order.blockers.map((b) => b.code)).toContain(
       "TRANSFER_NOT_CONFIRMED"
     );
@@ -270,7 +270,7 @@ describe("cancelar un pedido ya cobrado", () => {
       });
 
     expect(devolucion.status).toBe(201);
-    // Devuelta entera, la orden queda REFUNDED y no vuelve a PENDING: "se cobró y
+    // Devuelta entera, la orden queda REFUNDED y el pago no vuelve a PENDING: "se cobró y
     // se devolvió" tiene que poder distinguirse de "nunca se cobró".
     expect(devolucion.body.order.paymentStatus).toBe("REFUNDED");
 

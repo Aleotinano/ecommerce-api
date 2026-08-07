@@ -216,7 +216,7 @@ const ACME_ORDERS = [
   { status: "COMPLETED", daysAgo: 5, items: [{ sku: "TEE-STD-BLK-M", quantity: 1 }, { sku: "CAP-LA-BLK-U", quantity: 2 }] },
   { status: "COMPLETED", daysAgo: 12, items: [{ sku: "ZAP-SDE-BRN-41", quantity: 1 }] },
   { status: "PROCESSING", daysAgo: 2, items: [{ sku: "TEE-MID-CRM-L", quantity: 1 }, { sku: "TEE-PHO-GRY-M", quantity: 1 }] },
-  { status: "PENDING", daysAgo: 1, items: [{ sku: "ZAP-SKT-BLU-42", quantity: 1 }] },
+  { status: "NEW", daysAgo: 1, items: [{ sku: "ZAP-SKT-BLU-42", quantity: 1 }] },
   { status: "CANCELLED", daysAgo: 8, items: [{ sku: "CAP-SRF-CRM-U", quantity: 1 }] },
 ];
 

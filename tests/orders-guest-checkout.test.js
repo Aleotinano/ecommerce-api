@@ -83,7 +83,7 @@ describe("checkout de invitado", () => {
     const history = await prisma.orderStatusHistory.findFirst({
       where: { orderId: res.body.order.id },
     });
-    expect(history.toStatus).toBe("PENDING");
+    expect(history.toStatus).toBe("NEW");
     expect(history.changedById).toBeNull();
   });
 

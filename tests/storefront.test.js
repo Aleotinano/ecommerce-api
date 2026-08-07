@@ -191,7 +191,7 @@ describe("storefront cart and orders (authenticated)", () => {
       .send({ fulfillmentMethod: "PICKUP", paymentMethod: "CASH" });
 
     expect(res.status).toBe(201);
-    expect(res.body.order.status).toBe("PENDING");
+    expect(res.body.order.status).toBe("NEW");
   });
 
   it("GET /store/orders → 200 lista órdenes", async () => {

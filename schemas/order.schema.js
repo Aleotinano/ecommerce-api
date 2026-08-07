@@ -4,7 +4,7 @@ import { z } from "zod";
 // COMPLETED (ver services/order-state.js): un panel viejo que no lo ofrezca
 // sigue funcionando igual.
 const ORDER_STATUSES = [
-  "PENDING",
+  "NEW",
   "PROCESSING",
   "READY",
   "COMPLETED",

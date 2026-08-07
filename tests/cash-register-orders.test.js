@@ -152,7 +152,7 @@ describe("guard de caja abierta", () => {
     ).rejects.toMatchObject({ code: "CASH_SESSION_NOT_OPEN" });
 
     const despues = await prisma.order.findUnique({ where: { id: order.id } });
-    expect(despues.status).toBe("PENDING");
+    expect(despues.status).toBe("NEW");
   });
 
   it("completar una orden YA cobrada no exige turno: no hay nada que anotar", async () => {

@@ -27,6 +27,7 @@ import {
   pendingByChannel,
   PRODUCTION_STATUSES,
 } from "./order-state.js";
+import { getStatusMeta, ORDER_STATUS_CODES } from "./order-status.js";
 
 const log = logger.child({ module: "orders" });
 
@@ -582,7 +583,7 @@ function resolveContactPhone({ typed, stored, config, enforce, require: alwaysRe
 
 export const OrderModel = {
   /**
-   * Checkout: convierte el carrito del usuario en una orden PENDING.
+   * Checkout: convierte el carrito del usuario en una orden NEW.
    *
    * Los items NO los manda el cliente: se leen del carrito del server y se
    * pricean acá (`priceItems`). El cliente solo aporta cómo recibe el pedido y
@@ -747,7 +748,7 @@ export const OrderModel = {
           tenantId,
           userId: ownerId,
           total,
-          status: "PENDING",
+          status: "NEW",
           origin,
           fulfillmentMethod,
           addressText,
@@ -791,7 +792,7 @@ export const OrderModel = {
         data: {
           orderId: order.id,
           fromStatus: null,
-          toStatus: "PENDING",
+          toStatus: "NEW",
           note: "Pedido creado",
           // null si lo hizo un invitado: la columna lo admite y el "quién" ya
           // queda en contactName/contactPhone de la orden.
@@ -964,7 +965,11 @@ export const OrderModel = {
           orderId,
           fromStatus: order.status,
           toStatus: status,
-          note,
+          // Sin nota propia va la del catálogo (services/order-status.js). Antes
+          // ese default lo mandaba el panel en cada PATCH: una tabla de textos del
+          // dominio viviendo en el cliente, y que el bot y los scripts no tenían
+          // —sus transiciones quedaban con el timeline mudo.
+          note: note ?? getStatusMeta(status).historyNote,
           changedById,
           trigger,
         },
@@ -1117,10 +1122,10 @@ export const OrderModel = {
       throw createError("Orden no encontrada", "ORDER_NOT_FOUND", 404);
     }
 
-    if (order.status !== "PENDING") {
+    if (order.status !== "NEW") {
       throw createError(
-        "Solo se puede revisar una orden pendiente",
-        "ORDER_NOT_PENDING",
+        "Solo se puede revisar una orden nueva",
+        "ORDER_NOT_NEW",
         409
       );
     }
@@ -1672,7 +1677,7 @@ export const OrderModel = {
           tenantId,
           userId: null,
           origin: "BOT",
-          status: "PENDING",
+          status: "NEW",
           paymentStatus: "PENDING",
           total,
           contactPhone,
@@ -1689,7 +1694,7 @@ export const OrderModel = {
         data: {
           orderId: order.id,
           fromStatus: null,
-          toStatus: "PENDING",
+          toStatus: "NEW",
           note: "Pedido creado por el bot",
           changedById: null,
         },

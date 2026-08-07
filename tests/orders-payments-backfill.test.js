@@ -42,7 +42,7 @@ async function legacyOrder(data) {
     data: {
       tenantId: acme.id,
       total: 10000,
-      status: "PENDING",
+      status: "NEW",
       origin: "ADMIN",
       ...data,
     },
