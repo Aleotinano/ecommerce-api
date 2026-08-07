@@ -103,6 +103,14 @@ export async function seedTenants() {
   // ContentSuggestion referencia Product con FK RESTRICT: hay que limpiarla antes
   // de borrar productos o el reseed falla.
   await prisma.contentSuggestion.deleteMany();
+  // Las tres tablas de promos referencian Tenant con RESTRICT (y PromoProduct
+  // además Product). No las limpiaba nadie: una promo creada por un test
+  // —isolation-mutations— sobrevivía a la corrida entera y hacía fallar el
+  // `tenant.deleteMany()` de abajo en TODOS los archivos de la corrida siguiente.
+  // El síntoma era una suite que pasaba y a la vez dejaba la próxima rota.
+  await prisma.promoProduct.deleteMany();
+  await prisma.promoTier.deleteMany();
+  await prisma.promo.deleteMany();
   // Caja antes que Tenant: `deleteMany` no dispara el ON DELETE CASCADE de la FK
   // (mismo motivo que UserAddress más abajo), y los movimientos además referencian
   // etiquetas con FK Restrict, que ni con cascade se irían.
