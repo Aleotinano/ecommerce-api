@@ -207,8 +207,9 @@ describe("panel de caja", () => {
   });
 
   it("acumula las diferencias de arqueo y cuenta los turnos del día", async () => {
-    // Cierra el turno con faltante y abre otro: tres turnos en un día (mañana,
-    // tarde, noche) es la operación normal del cliente, no un error.
+    // Cierra el turno con faltante y sigue: tres turnos en un día (mañana, tarde,
+    // noche) es la operación normal del cliente, no un error. Cada cierre firma su
+    // arqueo y deja abierto el turno siguiente con lo contado.
     const abierto = await CashRegisterModel.getCurrent({ tenantId: acme.id });
     await CashRegisterModel.close({
       tenantId: acme.id,
@@ -216,14 +217,14 @@ describe("panel de caja", () => {
       closedById: adminId,
     });
 
-    await CashRegisterModel.open({ tenantId: acme.id, openingAmount: 0, openedById: adminId });
+    const segundo = await CashRegisterModel.getCurrent({ tenantId: acme.id });
     await CashRegisterModel.close({
       tenantId: acme.id,
-      countedCashAmount: 0,
+      // Sin movimientos nuevos: cuadra, así que la diferencia acumulada del día
+      // sigue siendo la del primer turno.
+      countedCashAmount: segundo.totals.expectedCashAmount,
       closedById: adminId,
     });
-
-    await CashRegisterModel.open({ tenantId: acme.id, openingAmount: 0, openedById: adminId });
 
     const { caja } = (await dashboard()).body.dashboard;
 

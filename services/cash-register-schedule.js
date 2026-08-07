@@ -112,6 +112,26 @@ export function shiftFor(now, schedule) {
 }
 
 /**
+ * Cuándo EMPEZÓ la ocurrencia del turno que contiene a `now`. Espejo de
+ * `shiftExpiry`: para un turno que cruza la medianoche, si ya estamos del otro lado
+ * (01:00 del turno 20–02) el inicio fue ayer a las 20:00.
+ *
+ * Sirve para distinguir dos ocurrencias del MISMO turno —el "Día" de ayer y el de
+ * hoy—, que es lo único que separa un turno colgado de uno vigente en un local que
+ * tiene un solo turno diario.
+ */
+export function shiftStart(now, shift) {
+  const start = new Date(now);
+  start.setHours(0, shift.from, 0, 0);
+
+  if (shift.overnight && minutesOfDay(now) < shift.to) {
+    start.setDate(start.getDate() - 1);
+  }
+
+  return start;
+}
+
+/**
  * Cuándo termina el turno que contiene a `now`. Para un turno que cruza la
  * medianoche, el fin cae al día siguiente **salvo** que ya estemos del otro lado de
  * la medianoche (a la 01:00 del turno 20–02, el fin es a las 02:00 de hoy).
@@ -128,6 +148,42 @@ export function shiftExpiry(now, shift) {
   }
 
   return end;
+}
+
+/**
+ * Cuándo arranca la PRÓXIMA ocurrencia de cualquier turno del horario. `null` sin
+ * horario cargado.
+ *
+ * Es lo que le pone vencimiento a una caja que quedó abierta fuera de hora —la que
+ * deja el cierre del día cuando se firma a las 20:05 y el turno terminaba 20:00—.
+ * Sin esto esa caja no vence nunca, `shouldAutoClose` no la puede levantar, y los
+ * cobros de mañana caen adentro del día de ayer, que es justo el bug que el cierre
+ * por ocurrencia vino a arreglar.
+ *
+ * Se mira turno por turno el arranque de hoy y el de mañana, y gana el primero que
+ * caiga después de `now`: son a lo sumo 12 fechas (`MAX_SHIFTS` × 2) y no hay caso
+ * raro de medianoche que resolver a mano.
+ */
+export function nextShiftStart(now, schedule) {
+  const shifts = parseSchedule(schedule);
+  let next = null;
+
+  for (const shift of shifts) {
+    const hoy = new Date(now);
+    hoy.setHours(0, shift.from, 0, 0);
+
+    const siguiente = new Date(hoy);
+    // `setDate` y no sumar 24 h en milisegundos: el día del cambio de hora, sumar
+    // milisegundos deja el arranque corrido 60 minutos.
+    siguiente.setDate(siguiente.getDate() + 1);
+
+    for (const start of [hoy, siguiente]) {
+      if (start.getTime() <= now.getTime()) continue;
+      if (!next || start.getTime() < next.getTime()) next = start;
+    }
+  }
+
+  return next;
 }
 
 /**
@@ -148,9 +204,15 @@ export function expiredByMinutes(session, now = new Date()) {
 
 /**
  * Si al sistema le corresponde cerrar este turno sin conteo: venció, ya pasó la
- * gracia, **y** el turno que corresponde ahora es otro. Sin esa última condición se
+ * gracia, **y** ya arrancó OTRA ocurrencia de turno. Sin esa última condición se
  * cerraría un turno solo por terminar el horario, aunque nadie fuera a abrir otro —
  * y ahí lo correcto es dejarlo abierto y avisar.
+ *
+ * "Otra ocurrencia" es lo que hay que mirar, y no solo la etiqueta: un local con un
+ * único turno diario ("Día" 09–20) tiene el mismo nombre todos los días, así que
+ * comparar etiquetas dejaba el turno de ayer abierto para siempre y los cobros de hoy
+ * caían adentro. Se compara contra el inicio de la ocurrencia vigente: si el turno
+ * abierto vencía antes de que esta empezara, es de una vuelta anterior.
  */
 export function shouldAutoClose(session, { now = new Date(), schedule } = {}) {
   if (expiredByMinutes(session, now) <= AUTO_CLOSE_GRACE_MINUTES) return false;
@@ -158,7 +220,11 @@ export function shouldAutoClose(session, { now = new Date(), schedule } = {}) {
   const actual = shiftFor(now, schedule);
   if (!actual) return false;
 
-  return actual.label !== session.label;
+  if (actual.label !== session.label) return true;
+
+  return (
+    new Date(session.expiresAt).getTime() <= shiftStart(now, actual).getTime()
+  );
 }
 
 /** Valida un horario ya normalizado; lanza con detalle para el PATCH de config. */

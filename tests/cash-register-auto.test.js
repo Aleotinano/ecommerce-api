@@ -135,12 +135,14 @@ describe("apertura automática", () => {
   it("abre con lo contado en el cierre anterior (el cajón arrastra)", async () => {
     await setSchedule(horarioVigente());
 
-    // Turno previo cerrado contando 7300.
+    // Turno previo cerrado contando 7300, y dejado cerrado a propósito: lo que se
+    // prueba acá es la apertura automática, no la continuación del cierre.
     await CashRegisterModel.open({ tenantId: acme.id, openingAmount: 0, openedById: adminId });
     await CashRegisterModel.close({
       tenantId: acme.id,
       countedCashAmount: 7300,
       closedById: adminId,
+      reopen: false,
     });
 
     const abierto = await CashRegisterModel.ensureScheduledSession({ tenantId: acme.id });
@@ -150,7 +152,7 @@ describe("apertura automática", () => {
     expect(abierto.openingNote).toContain("arrastre");
   });
 
-  it("un cierre SIN conteo no sirve de arrastre: el siguiente abre en 0", async () => {
+  it("un cierre SIN conteo arrastra el esperado: la plata siguió en el cajón", async () => {
     await setSchedule(horarioVigente());
 
     const previo = await CashRegisterModel.open({
@@ -166,7 +168,47 @@ describe("apertura automática", () => {
 
     const abierto = await CashRegisterModel.ensureScheduledSession({ tenantId: acme.id });
 
-    // Nadie contó ese cierre, así que no hay número en el que confiar.
+    // Nadie contó, pero el sistema sí sabe qué esperaba: saltear ese turno para
+    // buscar el último arqueo firmado borraba del saldo todo lo del medio.
+    expect(abierto.openingAmount).toBe(5000);
+  });
+
+  it("abrir a mano sin monto continúa la caja en vez de resetearla", async () => {
+    await setSchedule(null);
+
+    await CashRegisterModel.open({ tenantId: acme.id, openingAmount: 0, openedById: adminId });
+    await CashRegisterModel.close({
+      tenantId: acme.id,
+      countedCashAmount: 4200,
+      closedById: adminId,
+      reopen: false,
+    });
+
+    const abierto = await CashRegisterModel.open({
+      tenantId: acme.id,
+      openedById: adminId,
+    });
+
+    expect(abierto.openingAmount).toBe(4200);
+  });
+
+  it("abrir a mano con 0 explícito sí arranca el cajón vacío", async () => {
+    await setSchedule(null);
+
+    await CashRegisterModel.open({ tenantId: acme.id, openingAmount: 0, openedById: adminId });
+    await CashRegisterModel.close({
+      tenantId: acme.id,
+      countedCashAmount: 4200,
+      closedById: adminId,
+      reopen: false,
+    });
+
+    const abierto = await CashRegisterModel.open({
+      tenantId: acme.id,
+      openingAmount: 0,
+      openedById: adminId,
+    });
+
     expect(abierto.openingAmount).toBe(0);
   });
 
@@ -283,8 +325,8 @@ describe("vencimiento y cierre sin conteo", () => {
 
     expect(nuevo.id).not.toBe(viejo.id);
     expect(nuevo.trigger).toBe("AUTO");
-    // El arrastre no toma un cierre sin conteo.
-    expect(nuevo.openingAmount).toBe(0);
+    // La caja no se vacía porque nadie haya contado: se arrastra el esperado.
+    expect(nuevo.openingAmount).toBe(600);
   });
 
   it("un cobro con el turno vencido cae en el turno nuevo, no en el viejo", async () => {
@@ -380,6 +422,405 @@ describe("vencimiento y cierre sin conteo", () => {
     expect(campos.get("Arqueo")).toContain("SIN CONTEO");
     expect(campos.get("Efectivo esperado (ARS)")).toBe(2000);
     expect(campos.has("Diferencia (ARS)")).toBe(false);
+  });
+});
+
+// El caso de Mesa Dulce: un único turno diario. Comparar SOLO la etiqueta dejaba el
+// turno de ayer abierto para siempre —hoy el turno vigente se llama igual— y los
+// cobros del día caían adentro del de ayer. Los tests viejos no lo agarraban porque
+// todos forzaban `label: "Viejo"`.
+describe("un solo turno por día", () => {
+  it("el turno de ayer se cierra sin conteo y arranca el de hoy, con el mismo nombre", async () => {
+    await setSchedule([{ label: "Día", from: shiftAt(-1), to: shiftAt(1) }]);
+
+    const ayer = await CashRegisterModel.open({
+      tenantId: acme.id,
+      openingAmount: 1000,
+      openedById: adminId,
+    });
+
+    // La ocurrencia de AYER: mismo turno, misma etiqueta, vencida hace 23 horas.
+    await prisma.cashRegisterSession.update({
+      where: { id: ayer.id },
+      data: {
+        openedAt: new Date(Date.now() - 25 * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() - 23 * 60 * 60 * 1000),
+      },
+    });
+
+    const hoy = await CashRegisterModel.ensureScheduledSession({ tenantId: acme.id });
+    const cerrado = await prisma.cashRegisterSession.findUnique({ where: { id: ayer.id } });
+
+    expect(cerrado.status).toBe("CLOSED");
+    expect(cerrado.closedWithoutCount).toBe(true);
+
+    expect(hoy.id).not.toBe(ayer.id);
+    expect(hoy.label).toBe("Día");
+    expect(hoy.openingAmount).toBe(1000);
+  });
+
+  it("dentro de la MISMA ocurrencia no se cierra, aunque el vencimiento quedó viejo", async () => {
+    // Le editaron el horario al turno que ya estaba corriendo: su `expiresAt`
+    // materializado quedó atrás, pero sigue siendo el turno de hoy.
+    await setSchedule([{ label: "Día", from: shiftAt(-3), to: shiftAt(1) }]);
+
+    const turno = await CashRegisterModel.open({
+      tenantId: acme.id,
+      openingAmount: 0,
+      openedById: adminId,
+    });
+    await prisma.cashRegisterSession.update({
+      where: { id: turno.id },
+      data: { expiresAt: new Date(Date.now() - 2 * 60 * 60 * 1000) },
+    });
+
+    const mismo = await CashRegisterModel.ensureScheduledSession({ tenantId: acme.id });
+
+    expect(mismo.id).toBe(turno.id);
+    expect(mismo.status).toBe("OPEN");
+  });
+});
+
+// La caja lleva dos saldos: el cajón y la cuenta. Los dos arrastran de un turno al
+// siguiente — antes las transferencias empezaban en cero todos los días, aunque la
+// plata siguiera en el banco.
+describe("saldo de transferencias", () => {
+  const transferencia = async (type, amount) => {
+    const etiqueta = await prisma.cashCategory.findFirst({
+      where: { tenantId: acme.id, key: type === "INCOME" ? "aporte-cambio" : "insumos" },
+    });
+    return CashRegisterModel.addMovement({
+      tenantId: acme.id,
+      type,
+      channel: "TRANSFER",
+      amount,
+      categoryId: etiqueta.id,
+      createdById: adminId,
+    });
+  };
+
+  it("abrir sin montos arrastra los DOS saldos del cierre anterior", async () => {
+    await setSchedule(null);
+
+    await CashRegisterModel.open({
+      tenantId: acme.id,
+      openingAmount: 0,
+      openingTransferAmount: 0,
+      openedById: adminId,
+    });
+    await transferencia("INCOME", 9000);
+    await CashRegisterModel.close({
+      tenantId: acme.id,
+      countedCashAmount: 1500,
+      countedTransferAmount: 9000,
+      closedById: adminId,
+      reopen: false,
+    });
+
+    const abierto = await CashRegisterModel.open({
+      tenantId: acme.id,
+      openedById: adminId,
+    });
+
+    expect(abierto.openingAmount).toBe(1500);
+    expect(abierto.openingTransferAmount).toBe(9000);
+  });
+
+  it("cerrar contando los dos deja las dos diferencias y la caja sigue con lo contado", async () => {
+    await setSchedule(null);
+
+    await CashRegisterModel.open({
+      tenantId: acme.id,
+      openingAmount: 1000,
+      openingTransferAmount: 5000,
+      openedById: adminId,
+    });
+    await transferencia("INCOME", 2000);
+
+    const cerrado = await CashRegisterModel.close({
+      tenantId: acme.id,
+      countedCashAmount: 900,
+      countedTransferAmount: 7100,
+      closedById: adminId,
+    });
+
+    expect(cerrado.expectedTransferAmount).toBe(7000);
+    expect(cerrado.cashDifference).toBe(-100);
+    expect(cerrado.transferDifference).toBe(100);
+
+    expect(cerrado.nextSession.openingAmount).toBe(900);
+    expect(cerrado.nextSession.openingTransferAmount).toBe(7100);
+  });
+
+  it("sin contar el banco, el saldo sigue con el esperado y no hay diferencia firmada", async () => {
+    await setSchedule(null);
+
+    await CashRegisterModel.open({
+      tenantId: acme.id,
+      openingAmount: 0,
+      openingTransferAmount: 3000,
+      openedById: adminId,
+    });
+    await transferencia("INCOME", 1000);
+
+    const cerrado = await CashRegisterModel.close({
+      tenantId: acme.id,
+      countedCashAmount: 0,
+      closedById: adminId,
+    });
+
+    expect(cerrado.transferDifference).toBeNull();
+    expect(cerrado.countedTransferAmount).toBeNull();
+    expect(cerrado.nextSession.openingTransferAmount).toBe(4000);
+  });
+
+  it("un turno cerrado antes de esta columna arrastra su neto de transferencias", async () => {
+    // Retrocompat: los cierres viejos no tienen `expectedTransferAmount`, y lo más
+    // cercano que guardaron es el neto del turno.
+    await setSchedule(null);
+
+    const viejo = await CashRegisterModel.open({
+      tenantId: acme.id,
+      openingAmount: 0,
+      openedById: adminId,
+    });
+    await CashRegisterModel.close({
+      tenantId: acme.id,
+      countedCashAmount: 0,
+      closedById: adminId,
+      reopen: false,
+    });
+
+    // Se lo deja como lo dejaría una fila anterior a la migración.
+    await prisma.cashRegisterSession.update({
+      where: { id: viejo.id },
+      data: {
+        expectedTransferAmount: null,
+        countedTransferAmount: null,
+        transferTotal: 6500,
+      },
+    });
+
+    const abierto = await CashRegisterModel.open({
+      tenantId: acme.id,
+      openedById: adminId,
+    });
+
+    expect(abierto.openingTransferAmount).toBe(6500);
+  });
+});
+
+describe("cerrar el día deja la caja abierta", () => {
+  it("el turno siguiente arranca con lo contado, en horario y con etiqueta", async () => {
+    await setSchedule(horarioVigente());
+    await CashRegisterModel.open({ tenantId: acme.id, openingAmount: 0, openedById: adminId });
+
+    const cerrado = await CashRegisterModel.close({
+      tenantId: acme.id,
+      countedCashAmount: 5000,
+      closedById: adminId,
+    });
+
+    expect(cerrado.nextSession.openingAmount).toBe(5000);
+    expect(cerrado.nextSession.label).toBe("Actual");
+    expect(cerrado.nextSession.expiresAt).not.toBeNull();
+    expect(cerrado.nextSession.openingNote).toContain("Continúa");
+
+    // Una sola caja abierta: el arqueo no tendría sentido con dos.
+    expect(
+      await prisma.cashRegisterSession.count({
+        where: { tenantId: acme.id, status: "OPEN" },
+      })
+    ).toBe(1);
+  });
+
+  it("cerrando fuera de horario la caja sigue igual, y vence cuando arranca el próximo turno", async () => {
+    // Cerrar el día 20:05 cuando el turno terminaba 20:00. Si no reabriera, un cobro
+    // en efectivo a las 20:10 se rechaza; si reabriera sin vencimiento, los cobros de
+    // mañana caerían adentro de hoy.
+    await setSchedule([{ label: "Mañana", from: shiftAt(2), to: shiftAt(4) }]);
+    await CashRegisterModel.open({ tenantId: acme.id, openingAmount: 0, openedById: adminId });
+
+    const cerrado = await CashRegisterModel.close({
+      tenantId: acme.id,
+      countedCashAmount: 800,
+      closedById: adminId,
+    });
+
+    expect(cerrado.nextSession.openingAmount).toBe(800);
+    expect(cerrado.nextSession.label).toBeNull();
+    expect(cerrado.nextSession.expiresAt.getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it("`reopen: false` deja la caja cerrada", async () => {
+    await setSchedule(horarioVigente());
+    await CashRegisterModel.open({ tenantId: acme.id, openingAmount: 0, openedById: adminId });
+
+    const cerrado = await CashRegisterModel.close({
+      tenantId: acme.id,
+      countedCashAmount: 300,
+      closedById: adminId,
+      reopen: false,
+    });
+
+    expect(cerrado.nextSession).toBeNull();
+    expect(
+      await prisma.cashRegisterSession.count({
+        where: { tenantId: acme.id, status: "OPEN" },
+      })
+    ).toBe(0);
+  });
+
+  it("el cierre y su continuación son un solo hecho: dos cierres seguidos encadenan", async () => {
+    // Cierre, archivado y continuación viven en la misma transacción, así que la
+    // cadena no puede cortarse por la mitad: cada turno abre con lo que firmó el
+    // anterior, sin que nadie vuelva a declarar el fondo.
+    await setSchedule(horarioVigente());
+    await CashRegisterModel.open({ tenantId: acme.id, openingAmount: 0, openedById: adminId });
+
+    const primero = await CashRegisterModel.close({
+      tenantId: acme.id,
+      countedCashAmount: 2000,
+      closedById: adminId,
+    });
+    const segundo = await CashRegisterModel.close({
+      tenantId: acme.id,
+      countedCashAmount: 2000,
+      closedById: adminId,
+    });
+
+    expect(segundo.openingAmount).toBe(primero.nextSession.openingAmount);
+    expect(segundo.cashDifference).toBe(0);
+    expect(segundo.nextSession.openingAmount).toBe(2000);
+
+    const abiertas = await prisma.cashRegisterSession.count({
+      where: { tenantId: acme.id, status: "OPEN" },
+    });
+    expect(abiertas).toBe(1);
+  });
+});
+
+describe("caja chica y caja grande", () => {
+  // Lo que pidió el local: la plata se lleva todos los días y queda un fondo para
+  // arrancar mañana. Sin esto, la caja del día siguiente amanecía con plata que ya no
+  // está en el cajón.
+  it("retirar una parte deja la caja chica para el turno siguiente", async () => {
+    await setSchedule(horarioVigente());
+    await CashRegisterModel.open({ tenantId: acme.id, openingAmount: 0, openedById: adminId });
+
+    const cerrado = await CashRegisterModel.close({
+      tenantId: acme.id,
+      countedCashAmount: 50000,
+      withdrawnCashAmount: 40000,
+      closedById: adminId,
+    });
+
+    expect(cerrado.withdrawnCashAmount).toBe(40000);
+    expect(cerrado.pettyCashAmount).toBe(10000);
+    // El arqueo se firma con lo CONTADO: el retiro pasa después y no mueve la
+    // diferencia.
+    expect(cerrado.countedCashAmount).toBe(50000);
+    expect(cerrado.nextSession.openingAmount).toBe(10000);
+  });
+
+  it("llevarse todo deja la caja abierta en cero", async () => {
+    await setSchedule(horarioVigente());
+    await CashRegisterModel.open({ tenantId: acme.id, openingAmount: 0, openedById: adminId });
+
+    const cerrado = await CashRegisterModel.close({
+      tenantId: acme.id,
+      countedCashAmount: 7500,
+      withdrawnCashAmount: 7500,
+      closedById: adminId,
+    });
+
+    expect(cerrado.pettyCashAmount).toBe(0);
+    expect(cerrado.nextSession.openingAmount).toBe(0);
+  });
+
+  it("no se puede retirar más de lo contado", async () => {
+    await setSchedule(horarioVigente());
+    await CashRegisterModel.open({ tenantId: acme.id, openingAmount: 0, openedById: adminId });
+
+    await expect(
+      CashRegisterModel.close({
+        tenantId: acme.id,
+        countedCashAmount: 1000,
+        withdrawnCashAmount: 1200,
+        closedById: adminId,
+      })
+    ).rejects.toMatchObject({
+      code: "CASH_WITHDRAWAL_EXCEEDS_COUNT",
+      statusCode: 409,
+    });
+
+    // Y el turno sigue abierto: el 409 frena antes de firmar nada.
+    expect(
+      await prisma.cashRegisterSession.count({
+        where: { tenantId: acme.id, status: "OPEN" },
+      })
+    ).toBe(1);
+  });
+
+  it("sin declarar retiro arrastra todo, como antes", async () => {
+    await setSchedule(horarioVigente());
+    await CashRegisterModel.open({ tenantId: acme.id, openingAmount: 0, openedById: adminId });
+
+    const cerrado = await CashRegisterModel.close({
+      tenantId: acme.id,
+      countedCashAmount: 3200,
+      closedById: adminId,
+    });
+
+    expect(cerrado.withdrawnCashAmount).toBe(0);
+    expect(cerrado.pettyCashAmount).toBe(3200);
+    expect(cerrado.nextSession.openingAmount).toBe(3200);
+  });
+
+  it("abrir a mano después de un retiro arrastra la caja chica, no lo contado", async () => {
+    await setSchedule(null);
+    await CashRegisterModel.open({ tenantId: acme.id, openingAmount: 0, openedById: adminId });
+
+    await CashRegisterModel.close({
+      tenantId: acme.id,
+      countedCashAmount: 9000,
+      withdrawnCashAmount: 8000,
+      closedById: adminId,
+      // Cerrada de verdad: es el caso en que alguien la abre a mano al otro día.
+      reopen: false,
+    });
+
+    const abierta = await CashRegisterModel.open({
+      tenantId: acme.id,
+      openedById: adminId,
+    });
+
+    expect(abierta.openingAmount).toBe(1000);
+  });
+
+  it("un cierre sin conteo no tiene retiro ni caja chica", async () => {
+    await setSchedule(horarioVigente());
+    const turno = await CashRegisterModel.open({
+      tenantId: acme.id,
+      openingAmount: 4000,
+      openedById: adminId,
+    });
+
+    const cerrado = await CashRegisterModel.closeWithoutCount({
+      tenantId: acme.id,
+      sessionId: turno.id,
+      actorId: adminId,
+    });
+
+    // Nadie contó y nadie retiró: los dos en null, y el arrastre vuelve al esperado.
+    expect(cerrado.withdrawnCashAmount).toBeNull();
+    expect(cerrado.pettyCashAmount).toBeNull();
+
+    const abierta = await CashRegisterModel.open({
+      tenantId: acme.id,
+      openedById: adminId,
+    });
+    expect(abierta.openingAmount).toBe(4000);
   });
 });
 

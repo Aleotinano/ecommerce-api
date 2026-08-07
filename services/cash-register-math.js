@@ -56,9 +56,10 @@ export function signedAmount(movement) {
 /**
  * Resumen de una lista de movimientos.
  *
- * `cashNet` es lo único que mueve el arqueo: solo los movimientos en efectivo
- * están en el cajón. Las transferencias se acumulan aparte (`transferTotal`)
- * porque contarlas haría que la diferencia mienta siempre.
+ * `cashNet` y `transferTotal` van separados porque son dos lugares distintos donde
+ * está la plata: el cajón y la cuenta. Cada uno tiene su arqueo —se cuentan contra
+ * cosas distintas, billetes contra resumen del banco— y sumarlos en un solo número
+ * haría que ninguna de las dos diferencias signifique nada.
  *
  * `byCategory` cubre solo los movimientos etiquetados —los manuales, que son los
  * del local: sueldos, insumos, retiros—; los que vienen de una orden se leen en
@@ -109,23 +110,71 @@ export function summarizeMovements(movements = []) {
 }
 
 /**
- * El arqueo: qué debería haber en el cajón, qué dijo la persona que contó, y la
- * diferencia. Negativa = falta plata.
+ * Un cajón no puede deber plata: si el esperado da negativo, los egresos del turno
+ * superaron al efectivo, y en la vida real eso significa que **falta registrar un
+ * ingreso** (el clásico: el dueño paga un insumo de su bolsillo y no anota el
+ * `INCOME`).
+ *
+ * Es una advertencia y nada más: no bloquea el cierre ni corrige el número. Nada
+ * impide el egreso a propósito —bloquearlo sería peor que el problema—, pero hasta
+ * ahora el número salía negativo y nadie lo señalaba.
+ *
+ * Cero NO es negativo: una caja vacía cuadra perfecto.
+ */
+export function isExpectedNegative(expectedCashAmount) {
+  return Number(expectedCashAmount ?? 0) < 0;
+}
+
+/**
+ * El arqueo de los DOS saldos de la caja: qué debería haber en el cajón y en la
+ * cuenta, qué declaró la persona que contó, y las diferencias. Negativa = falta
+ * plata.
  *
  * No verifica nada: el software no gestiona dinero, registra lo que un humano
  * declaró. Su valor es mostrar el desvío, no impedirlo.
+ *
+ * Ojo con los dos números de transferencias, que se parecen y no son lo mismo:
+ * `transferTotal` es el NETO del turno (lo que se movió) y `expectedTransferAmount`
+ * es el SALDO (la apertura más ese neto). Sumarlos duplica plata.
+ *
+ * Contar el banco es opcional: sin `countedTransferAmount` la diferencia queda en
+ * `null` en vez de en 0 — el local que no lo mira al cerrar no firma un cuadre que
+ * nadie verificó, igual que un cierre sin conteo de efectivo.
  */
-export function buildArqueo({ openingAmount = 0, movements = [], countedCashAmount = null }) {
+export function buildArqueo({
+  openingAmount = 0,
+  openingTransferAmount = 0,
+  movements = [],
+  countedCashAmount = null,
+  countedTransferAmount = null,
+}) {
   const { cashNet, transferTotal } = summarizeMovements(movements);
+
   const expectedCashAmount = roundMoney(Number(openingAmount) + cashNet);
+  const expectedTransferAmount = roundMoney(
+    Number(openingTransferAmount) + transferTotal
+  );
 
   const counted =
     countedCashAmount == null ? null : roundMoney(Number(countedCashAmount));
+  const countedTransfer =
+    countedTransferAmount == null
+      ? null
+      : roundMoney(Number(countedTransferAmount));
 
   return {
     expectedCashAmount,
     countedCashAmount: counted,
     cashDifference: counted == null ? null : roundMoney(counted - expectedCashAmount),
     transferTotal,
+    expectedTransferAmount,
+    countedTransferAmount: countedTransfer,
+    transferDifference:
+      countedTransfer == null
+        ? null
+        : roundMoney(countedTransfer - expectedTransferAmount),
+    // Solo del efectivo: el aviso habla del cajón, que es lo que no puede deber
+    // plata sin que falte un ingreso sin registrar.
+    expectedNegative: isExpectedNegative(expectedCashAmount),
   };
 }

@@ -12,6 +12,7 @@
     "seed:stats": "node prisma/seed-stats.js",
     "seed:config": "node prisma/seed-tenant-config.js",
     "seed:catalog": "node prisma/seed-catalog.js",
+    "seed:caja": "node prisma/seed-caja.js",
     "seed:mesa-dulce": "node prisma/mesa-dulce/index.js",
     "seed:mesa-dulce:categorias": "node prisma/mesa-dulce/categorias.js",
     "seed:mesa-dulce:productos": "node prisma/mesa-dulce/productos.js",

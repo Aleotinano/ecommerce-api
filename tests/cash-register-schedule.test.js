@@ -5,9 +5,11 @@ import {
   expiredByMinutes,
   findScheduleOverlap,
   isExpired,
+  nextShiftStart,
   parseSchedule,
   shiftExpiry,
   shiftFor,
+  shiftStart,
   shouldAutoClose,
   toMinutes,
 } from "../services/cash-register-schedule.js";
@@ -216,5 +218,62 @@ describe("shouldAutoClose", () => {
     expect(
       shouldAutoClose({ status: "OPEN", label: null, expiresAt: null }, { now: at(23), schedule: TURNOS })
     ).toBe(false);
+  });
+});
+
+// El local que hace UN turno por día (el primer cliente con caja). Comparar solo la
+// etiqueta no alcanza: hoy el turno vigente se llama igual que el de ayer.
+describe("un solo turno diario", () => {
+  const DIA = [{ label: "Día", from: "09:00", to: "20:00" }];
+
+  it("shiftStart devuelve el arranque de la ocurrencia de hoy", () => {
+    const inicio = shiftStart(at(15), parseSchedule(DIA)[0]);
+
+    expect(inicio.getDate()).toBe(30);
+    expect(inicio.getHours()).toBe(9);
+  });
+
+  it("cierra el turno de AYER aunque se llame igual que el de hoy", () => {
+    const ayer = { status: "OPEN", label: "Día", expiresAt: at(20, 0, 29) };
+
+    expect(shouldAutoClose(ayer, { now: at(10, 0, 30), schedule: DIA })).toBe(true);
+  });
+
+  it("no cierra el turno de HOY con el vencimiento corrido", () => {
+    // Le editaron el horario mientras corría: venció a las 09:30 pero es la
+    // ocurrencia vigente, no la de ayer.
+    const hoy = { status: "OPEN", label: "Día", expiresAt: at(9, 30, 30) };
+
+    expect(shouldAutoClose(hoy, { now: at(11, 0, 30), schedule: DIA })).toBe(false);
+  });
+});
+
+describe("nextShiftStart", () => {
+  it("con tres turnos, el próximo arranque es el del turno que sigue", () => {
+    const proximo = nextShiftStart(at(9), TURNOS);
+
+    expect(proximo.getDate()).toBe(30);
+    expect(proximo.getHours()).toBe(14);
+  });
+
+  it("pasado el último turno del día, salta al primero de mañana", () => {
+    const proximo = nextShiftStart(at(21), TURNOS);
+
+    expect(proximo.getDate()).toBe(31);
+    expect(proximo.getHours()).toBe(8);
+  });
+
+  it("con un solo turno diario, cerrar 20:05 vence mañana a las 09", () => {
+    // Es lo que le pone vencimiento a la caja que queda abierta después del cierre
+    // del día: sin eso los cobros de mañana caerían en la caja de hoy.
+    const proximo = nextShiftStart(at(20, 5), [{ label: "Día", from: "09:00", to: "20:00" }]);
+
+    expect(proximo.getDate()).toBe(31);
+    expect(proximo.getHours()).toBe(9);
+  });
+
+  it("sin horario no hay próximo arranque", () => {
+    expect(nextShiftStart(at(12), null)).toBeNull();
+    expect(nextShiftStart(at(12), [])).toBeNull();
   });
 });

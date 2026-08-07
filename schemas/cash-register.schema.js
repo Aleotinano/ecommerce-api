@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { MANUAL_MOVEMENT_TYPES } from "../services/cash-register-math.js";
+import { dayBoundary } from "./date.schema.js";
 
 // La vía por la que se movió la plata. GATEWAY (MercadoPago) no entra: esa plata
 // nunca pasa por el cajón, y hay un CHECK en la base que además lo impide.
@@ -23,8 +24,16 @@ const note = z
   .optional();
 
 export const openCashSession = z.object({
-  // Puede ser 0: un local que arranca sin cambio en el cajón es un caso real.
-  openingAmount: money("El monto de apertura").min(0, "El monto de apertura no puede ser negativo"),
+  // Los dos saldos con los que arranca la caja, los dos opcionales: el que falte
+  // toma el arrastre del cierre anterior (la caja es continua, no arranca de cero
+  // cada día). `0` explícito sí arranca vacío — un local que empieza sin cambio en
+  // el cajón es un caso real.
+  openingAmount: money("El monto de apertura")
+    .min(0, "El monto de apertura no puede ser negativo")
+    .optional(),
+  openingTransferAmount: money("El saldo en transferencias")
+    .min(0, "El saldo en transferencias no puede ser negativo")
+    .optional(),
   note,
 });
 
@@ -33,6 +42,25 @@ export const closeCashSession = z.object({
     0,
     "El efectivo contado no puede ser negativo"
   ),
+  // Contar el banco es opcional: sin este número no se firma diferencia de
+  // transferencias (queda null, no 0) y el saldo continúa con el esperado.
+  countedTransferAmount: money("El saldo contado en transferencias")
+    .min(0, "El saldo en transferencias no puede ser negativo")
+    .nullable()
+    .optional(),
+  // La caja grande: lo que se retira del cajón al cerrar. Lo que queda —la caja
+  // chica— es con lo que abre el turno siguiente. Sin este monto no se retira nada y
+  // arrastra todo, que es como venía. Que no supere lo contado lo valida el servicio,
+  // que es donde están los dos números juntos.
+  withdrawnCashAmount: money("El retiro")
+    .min(0, "El retiro no puede ser negativo")
+    .optional(),
+  // Cerrar firma el arqueo y la caja SIGUE con la caja chica. `false` es la acción
+  // explícita de dejar la caja cerrada (fin de temporada), que mientras dure bloquea
+  // los cobros en efectivo.
+  reopen: z
+    .boolean({ invalid_type_error: "reopen debe ser booleano" })
+    .default(true),
   note,
 });
 
@@ -119,34 +147,6 @@ export const updateCashCategory = z
   .refine((data) => Object.values(data).some((value) => value !== undefined), {
     message: "No hay cambios para actualizar",
   });
-
-const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
-
-/**
- * Fecha de filtro que respeta el día que el usuario escribió.
- *
- * `z.coerce.date()` parsea `"2026-07-01"` como medianoche **UTC**, y con el server en
- * UTC−3 eso son las 21:00 del 30 de junio: "el Excel de julio" arrancaba un día antes
- * y —peor— `to=2026-07-31` dejaba afuera casi todo el 31. Un `YYYY-MM-DD` es un día
- * calendario, no un instante, así que se ancla al **día local**: el `from` al arranque
- * y el `to` al final. Una fecha con hora explícita se respeta tal cual.
- */
-const dayBoundary = (edge, label) =>
-  z.preprocess(
-    (value) => {
-      if (typeof value !== "string") return value;
-
-      const match = DATE_ONLY.exec(value.trim());
-      if (!match) return value;
-
-      const [year, month, day] = match.slice(1).map(Number);
-
-      return edge === "end"
-        ? new Date(year, month - 1, day, 23, 59, 59, 999)
-        : new Date(year, month - 1, day, 0, 0, 0, 0);
-    },
-    z.coerce.date({ invalid_type_error: `La fecha ${label} es inválida` }).optional()
-  );
 
 export const cashSessionQuery = z.object({
   from: dayBoundary("start", "desde"),

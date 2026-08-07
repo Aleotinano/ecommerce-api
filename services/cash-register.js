@@ -5,6 +5,7 @@ import {
   CASH_MOVEMENT_SIGN,
   MANUAL_MOVEMENT_TYPES,
   buildArqueo,
+  isExpectedNegative,
   summarizeMovements,
 } from "./cash-register-math.js";
 import {
@@ -16,10 +17,12 @@ import {
 import {
   expiredByMinutes,
   isExpired,
+  nextShiftStart,
   shiftExpiry,
   shiftFor,
   shouldAutoClose,
 } from "./cash-register-schedule.js";
+import { archiveTerminalOrders, summarizeArchivable } from "./order-archive.js";
 
 /**
  * Caja registradora: el turno de caja física del local.
@@ -52,7 +55,11 @@ export const DEFAULT_CASH_CATEGORIES = [
   { key: "servicios", label: "Servicios", applies: "EXPENSE", position: 3 },
   { key: "retiro", label: "Retiro de caja", applies: "EXPENSE", position: 4 },
   { key: "aporte-cambio", label: "Aporte de cambio", applies: "INCOME", position: 5 },
-  { key: "ajuste", label: "Ajuste", applies: "BOTH", position: 6 },
+  // El turno se abre en 0 y el fondo del cajón entra como un ingreso etiquetado:
+  // así la plata de la apertura tiene motivo y aparece en el resumen por etiqueta,
+  // en vez de quedar escondida en el `openingAmount` de la sesión.
+  { key: "apertura", label: "Apertura", applies: "INCOME", position: 6 },
+  { key: "ajuste", label: "Ajuste", applies: "BOTH", position: 7 },
 ];
 
 /**
@@ -112,6 +119,28 @@ async function ensureSystemCategories(tenantId, client = prisma) {
 
 const MOVEMENT_INCLUDE = {
   include: { category: { select: CATEGORY_FIELDS } },
+};
+
+/**
+ * Las órdenes que el turno se llevó al cerrar, tal como se listan en su ficha.
+ *
+ * `select` acotado a propósito: esto es una lista de lectura —"qué se vendió ese
+ * día"—, no el detalle. Para eso está `GET /orders/:id`, que no filtra por
+ * `archivedAt` y sigue abriendo una orden archivada entera.
+ *
+ * Se busca por `Order.cashSessionId` y NO por `CashMovement.orderId`: el movimiento
+ * existe solo si hubo un cobro por el cajón, así que una cancelada, una de
+ * MercadoPago (`GATEWAY` se saltea a propósito) o una entregada sin cobrar se
+ * caerían del historial justo cuando son las que hay que mirar.
+ */
+const SESSION_ORDER_SELECT = {
+  id: true,
+  status: true,
+  total: true,
+  paymentStatus: true,
+  createdAt: true,
+  contactName: true,
+  user: { select: { id: true, username: true } },
 };
 
 /**
@@ -182,21 +211,113 @@ export function hasCashChannels(entries = []) {
 }
 
 /**
- * Con cuánto abre el turno siguiente: **lo que se contó al cerrar el anterior**.
- * El cajón arrastra, así que el fondo no se declara de nuevo cada vez.
+ * Con cuánto abre el turno siguiente: **con lo que quedó al cerrar el anterior**, en
+ * el cajón y en la cuenta. La caja es una sola y continua —la fuente de todo el
+ * capital del local—, así que los saldos no se declaran de nuevo cada vez.
  *
- * Un cierre sin conteo (`closedWithoutCount`) no sirve como base —nadie contó— y
- * tampoco un tenant que recién empieza: en los dos casos abre en 0 y quien llega lo
- * corrige con un ingreso manual.
+ * Se mira el ÚLTIMO turno cerrado, contara o no. Cuando nadie contó
+ * (`closedWithoutCount`) se arrastra el **esperado**, que el sistema sí calculó: la
+ * plata siguió físicamente ahí, y saltear ese turno para buscar el último arqueo
+ * firmado —que puede ser de días atrás— borraba del saldo todo lo que pasó en el
+ * medio. El turno queda marcado igual como cerrado sin contar; lo que no se hace es
+ * mentir sobre el saldo.
+ *
+ * En transferencias hay un fallback más: los turnos cerrados ANTES de que existiera
+ * el saldo de transferencias no tienen `expectedTransferAmount`, y ahí lo más
+ * parecido que hay es su neto del turno (`transferTotal`).
+ *
+ * Un tenant que recién empieza no tiene ningún cierre: ahí sí abre en 0.
+ *
+ * @returns {Promise<{cash: number, transfer: number}>}
  */
 async function carryOverAmount(tenantId, client = prisma) {
   const ultima = await client.cashRegisterSession.findFirst({
-    where: { tenantId, status: "CLOSED", countedCashAmount: { not: null } },
+    where: { tenantId, status: "CLOSED" },
     orderBy: { closedAt: "desc" },
-    select: { countedCashAmount: true },
+    select: {
+      pettyCashAmount: true,
+      countedCashAmount: true,
+      expectedCashAmount: true,
+      countedTransferAmount: true,
+      expectedTransferAmount: true,
+      transferTotal: true,
+    },
   });
 
-  return roundMoney(Number(ultima?.countedCashAmount ?? 0));
+  return {
+    // La caja chica manda: es la plata que QUEDÓ en el cajón. Lo contado incluye lo
+    // que la persona se llevó, así que arrastrarlo ofrecería plata que ya no está.
+    // El fallback cubre los cierres anteriores a que existiera el retiro.
+    cash: roundMoney(
+      Number(
+        ultima?.pettyCashAmount ??
+          ultima?.countedCashAmount ??
+          ultima?.expectedCashAmount ??
+          0
+      )
+    ),
+    transfer: roundMoney(
+      Number(
+        ultima?.countedTransferAmount ??
+          ultima?.expectedTransferAmount ??
+          ultima?.transferTotal ??
+          0
+      )
+    ),
+  };
+}
+
+/**
+ * Crea la sesión abierta del tenant, materializando el turno del horario que le
+ * corresponde al momento en que se abre.
+ *
+ * `label` y `expiresAt` quedan CONGELADOS acá a propósito: editar el horario mañana
+ * no puede mover el vencimiento de un turno que ya está corriendo.
+ *
+ * Fuera de horario —lo típico al cerrar el día 20:05 cuando el turno terminaba
+ * 20:00— la caja se abre igual, sin etiqueta, y vence cuando arranca el próximo
+ * turno. Abrir igual es deliberado: con la caja cerrada el backend bloquea los cobros
+ * en efectivo, y una caja que nadie reabre frena la venta. El vencimiento es lo que
+ * después deja que `shouldAutoClose` la levante en vez de dejarla juntando días.
+ */
+function createSession(
+  client,
+  {
+    tenantId,
+    openingAmount,
+    openingTransferAmount = 0,
+    openedById,
+    now,
+    schedule,
+    trigger,
+    note,
+  }
+) {
+  const turno = shiftFor(now, schedule);
+
+  return client.cashRegisterSession.create({
+    data: {
+      tenantId,
+      openingAmount: roundMoney(Number(openingAmount)),
+      openingTransferAmount: roundMoney(Number(openingTransferAmount)),
+      openedById,
+      openedAt: now,
+      trigger,
+      label: turno?.label ?? null,
+      expiresAt: turno ? shiftExpiry(now, turno) : nextShiftStart(now, schedule),
+      openingNote: note,
+    },
+  });
+}
+
+/** El horario de turnos del tenant. `null` = sin horario: la caja es 100% a mano. */
+async function getSchedule(tenantId, client = prisma) {
+  const config = await client.tenantConfig.findUnique({
+    where: { tenantId },
+    select: { cashSchedule: true },
+  });
+
+  return config?.cashSchedule ?? null;
 }
 
 export const CashRegisterModel = {
@@ -226,12 +347,29 @@ export const CashRegisterModel = {
 
     if (!session) return null;
 
+    const [orders, ordersToClose] = await Promise.all([
+      // Normalmente vacío: el turno abierto todavía no archivó nada. Se llena si
+      // alguien archivó una orden a mano durante el turno.
+      prisma.order.findMany({
+        where: { tenantId, cashSessionId: session.id },
+        select: SESSION_ORDER_SELECT,
+        orderBy: { createdAt: "asc" },
+      }),
+      // Qué se va a llevar el cierre. Va acá y no solo en la respuesta del POST
+      // porque el formulario lo muestra ANTES de firmar: "3 órdenes quedan abiertas"
+      // es la última chance de notar que un pedido nunca se marcó entregado.
+      summarizeArchivable(prisma, { tenantId }),
+    ]);
+
     return {
       ...session,
       vencido: isExpired(session),
       vencidoHaceMinutos: expiredByMinutes(session),
+      orders,
+      ordersToClose,
       totals: buildArqueo({
         openingAmount: session.openingAmount,
+        openingTransferAmount: session.openingTransferAmount,
         movements: session.movements,
       }),
     };
@@ -279,22 +417,18 @@ export const CashRegisterModel = {
     const turno = shiftFor(now, schedule);
     if (!turno) return null;
 
-    const openingAmount = await carryOverAmount(tenantId);
+    const arrastre = await carryOverAmount(tenantId);
 
     try {
-      return await prisma.cashRegisterSession.create({
-        data: {
-          tenantId,
-          openingAmount,
-          openedById: actorId,
-          openedAt: now,
-          trigger: "AUTO",
-          label: turno.label,
-          // Materializado: editar el horario mañana no puede mover el vencimiento de
-          // un turno que ya está corriendo.
-          expiresAt: shiftExpiry(now, turno),
-          openingNote: `Apertura automática (${turno.label}), arrastre del cierre anterior`,
-        },
+      return await createSession(prisma, {
+        tenantId,
+        openingAmount: arrastre.cash,
+        openingTransferAmount: arrastre.transfer,
+        openedById: actorId,
+        now,
+        schedule,
+        trigger: "AUTO",
+        note: `Apertura automática (${turno.label}), arrastre del cierre anterior`,
       });
     } catch (error) {
       // Dos cobros simultáneos entrando al mismo turno: el índice único parcial deja
@@ -311,6 +445,10 @@ export const CashRegisterModel = {
    * distintas, y un cierre en cero mentiría diciendo que cuadró.
    *
    * `expectedCashAmount`/`transferTotal` sí se guardan: eso el sistema lo sabe.
+   *
+   * Archiva las órdenes terminales igual que el cierre con arqueo: un turno que se
+   * venció y nadie cerró terminó lo mismo, y si este camino no archivara, un local
+   * que nunca cierra la caja a mano no vería limpiarse el tablero jamás.
    */
   async closeWithoutCount({ tenantId, sessionId, actorId = null, note = null }) {
     return prisma.$transaction(async (tx) => {
@@ -328,26 +466,48 @@ export const CashRegisterModel = {
 
       const arqueo = buildArqueo({
         openingAmount: session.openingAmount,
+        openingTransferAmount: session.openingTransferAmount,
         movements,
       });
 
-      return tx.cashRegisterSession.update({
+      const closedAt = new Date();
+
+      const closed = await tx.cashRegisterSession.update({
         where: { id: session.id },
         data: {
           status: "CLOSED",
           closedById: actorId,
-          closedAt: new Date(),
+          closedAt,
           closingNote: note,
           closedWithoutCount: true,
+          // Lo que el sistema SÍ sabe, en los dos saldos. Lo contado queda en null:
+          // nadie contó ni el cajón ni el banco.
           expectedCashAmount: arqueo.expectedCashAmount,
           transferTotal: arqueo.transferTotal,
+          expectedTransferAmount: arqueo.expectedTransferAmount,
         },
       });
+
+      const archivedOrders = await archiveTerminalOrders(tx, {
+        tenantId,
+        sessionId: session.id,
+        actorId,
+        at: closedAt,
+      });
+
+      return { ...closed, archivedOrders };
     });
   },
 
   /**
-   * Abre el turno con el efectivo declarado.
+   * Abre el turno con los saldos declarados: el efectivo del cajón y lo que hay en
+   * la cuenta.
+   *
+   * **El saldo que no venga abre con el arrastre** del cierre anterior, igual que la
+   * apertura automática: la caja es continua, y una apertura a mano que arranca en 0
+   * borraba de un plumazo la plata que quedó. Mandar `0` explícito sigue siendo
+   * válido —un local que arranca con el cajón vacío es un caso real—, y el panel
+   * manda lo que muestran los campos.
    *
    * El 409 sale de dos lugares a propósito: el `findFirst` da el error lindo en el
    * caso normal, y el catch del índice único parcial
@@ -355,7 +515,13 @@ export const CashRegisterModel = {
    * simultáneos — que es justo el escenario donde dos turnos abiertos dejarían el
    * arqueo sin sentido.
    */
-  async open({ tenantId, openingAmount, note = null, openedById }) {
+  async open({
+    tenantId,
+    openingAmount,
+    openingTransferAmount,
+    note = null,
+    openedById,
+  }) {
     await assertEnabled(tenantId);
 
     const abierta = await findOpenSession(tenantId);
@@ -370,14 +536,24 @@ export const CashRegisterModel = {
       throw error;
     }
 
+    // Se lee el arrastre solo si falta alguno de los dos: es una query de más que no
+    // hace falta cuando el panel manda los dos montos (el caso normal).
+    const faltaAlguno =
+      openingAmount == null || openingTransferAmount == null;
+    const arrastre = faltaAlguno
+      ? await carryOverAmount(tenantId)
+      : { cash: 0, transfer: 0 };
+
     try {
-      return await prisma.cashRegisterSession.create({
-        data: {
-          tenantId,
-          openingAmount: roundMoney(Number(openingAmount)),
-          openingNote: note,
-          openedById,
-        },
+      return await createSession(prisma, {
+        tenantId,
+        openingAmount: openingAmount ?? arrastre.cash,
+        openingTransferAmount: openingTransferAmount ?? arrastre.transfer,
+        openedById,
+        now: new Date(),
+        schedule: await getSchedule(tenantId),
+        trigger: "MANUAL",
+        note,
       });
     } catch (error) {
       if (error.code === "P2002") {
@@ -392,14 +568,61 @@ export const CashRegisterModel = {
   },
 
   /**
-   * Cierra el turno con el efectivo contado a mano y guarda el arqueo.
+   * Cierra el turno con lo contado a mano y guarda el arqueo de los DOS saldos.
    *
-   * Los cuatro totales quedan como SNAPSHOT: no se recalculan nunca más (mismo
-   * criterio que `Order.depositAmount`). Si mañana se corrige un movimiento viejo,
-   * el arqueo de ayer tiene que seguir diciendo lo que dijo cuando se firmó.
+   * Los totales quedan como SNAPSHOT: no se recalculan nunca más (mismo criterio que
+   * `Order.depositAmount`). Si mañana se corrige un movimiento viejo, el arqueo de
+   * ayer tiene que seguir diciendo lo que dijo cuando se firmó.
+   *
+   * `countedTransferAmount` es OPCIONAL: contar el banco al cerrar no siempre pasa, y
+   * sin ese número la diferencia de transferencias queda en `null` —no en 0— para no
+   * firmar un cuadre que nadie verificó. El saldo igual continúa: la caja siguiente
+   * arrastra el esperado.
+   *
+   * **Cerrar el turno cierra el día también para las órdenes**: las terminales se
+   * archivan acá, en la misma transacción (ver services/order-archive.js). Las que
+   * siguen abiertas no se tocan y pasan al turno siguiente.
+   *
+   * **Y la caja sigue**: cerrar firma el arqueo y abre en el acto el turno siguiente,
+   * en la MISMA transacción (`reopen`, por defecto `true`). La caja del local es una
+   * sola y continua; dejarla cerrada esperando que alguien la vuelva a abrir significa
+   * bloquear los cobros en efectivo mientras tanto. Para el fin de temporada está
+   * `reopen: false`, la acción explícita de dejar la caja cerrada.
+   *
+   * **Con qué sigue**: con la CAJA CHICA, no con lo contado. `withdrawnCashAmount` es
+   * lo que la persona se lleva del cajón al cerrar (la "caja grande") y el resto queda
+   * para arrancar mañana. Sin retiro declarado los dos números coinciden y el
+   * comportamiento es el de siempre.
    */
-  async close({ tenantId, countedCashAmount, note = null, closedById }) {
+  async close({
+    tenantId,
+    countedCashAmount,
+    countedTransferAmount = null,
+    withdrawnCashAmount = 0,
+    note = null,
+    closedById,
+    reopen = true,
+  }) {
     await assertEnabled(tenantId);
+
+    // No se puede retirar más de lo que se contó: sería dejar el cajón en negativo por
+    // una cuenta mal hecha, no por un movimiento sin registrar (que es el único
+    // negativo que la caja acepta). Va antes de la transacción: es aritmética sobre lo
+    // que mandó el request, no depende de nada de la base.
+    const retirado = roundMoney(Number(withdrawnCashAmount ?? 0));
+    if (retirado > roundMoney(Number(countedCashAmount))) {
+      const error = createError(
+        "No podés retirar más de lo que contaste",
+        "CASH_WITHDRAWAL_EXCEEDS_COUNT",
+        409
+      );
+      error.details = { countedCashAmount, withdrawnCashAmount: retirado };
+      throw error;
+    }
+
+    // Fuera de la transacción: es una lectura de configuración y no queremos el
+    // roundtrip adentro. Lo único que decide es la etiqueta del turno que se abre.
+    const schedule = reopen ? await getSchedule(tenantId) : null;
 
     return prisma.$transaction(async (tx) => {
       const session = await requireOpenSession(tenantId, tx);
@@ -415,25 +638,73 @@ export const CashRegisterModel = {
 
       const arqueo = buildArqueo({
         openingAmount: session.openingAmount,
+        openingTransferAmount: session.openingTransferAmount,
         movements,
         countedCashAmount,
+        countedTransferAmount,
       });
+
+      const closedAt = new Date();
+
+      // La caja chica: lo que queda en el cajón después del retiro. Es el número que
+      // abre el turno siguiente, y el que va a arrastrar una apertura manual.
+      const pettyCashAmount = roundMoney(arqueo.countedCashAmount - retirado);
 
       const closed = await tx.cashRegisterSession.update({
         where: { id: session.id },
         data: {
           status: "CLOSED",
           closedById,
-          closedAt: new Date(),
+          closedAt,
           closingNote: note,
           countedCashAmount: arqueo.countedCashAmount,
+          withdrawnCashAmount: retirado,
+          pettyCashAmount,
           expectedCashAmount: arqueo.expectedCashAmount,
           cashDifference: arqueo.cashDifference,
           transferTotal: arqueo.transferTotal,
+          expectedTransferAmount: arqueo.expectedTransferAmount,
+          countedTransferAmount: arqueo.countedTransferAmount,
+          transferDifference: arqueo.transferDifference,
         },
       });
 
-      return { ...closed, totals: arqueo, summary: summarizeMovements(movements) };
+      // La misma hora que el arqueo: el sello de la orden y el del turno tienen que
+      // poder leerse juntos sin que uno diga 23:59:59 y el otro 00:00:00.
+      const archivedOrders = await archiveTerminalOrders(tx, {
+        tenantId,
+        sessionId: session.id,
+        actorId: closedById,
+        at: closedAt,
+      });
+
+      // Adentro de la transacción: si el archivado falla no puede quedar el turno
+      // cerrado sin su continuación (ni al revés, dos cajas abiertas).
+      const nextSession = reopen
+        ? await createSession(tx, {
+            tenantId,
+            // Con la caja chica y no con lo contado: lo retirado ya no está en el
+            // cajón. Sin retiro los dos números son el mismo, que es como venía.
+            openingAmount: pettyCashAmount,
+            // Lo contado si alguien miró el banco; si no, el esperado: el saldo
+            // continúa igual, lo que no hay es una diferencia firmada.
+            openingTransferAmount:
+              arqueo.countedTransferAmount ?? arqueo.expectedTransferAmount,
+            openedById: closedById,
+            now: closedAt,
+            schedule,
+            trigger: "MANUAL",
+            note: "Continúa el arqueo anterior",
+          })
+        : null;
+
+      return {
+        ...closed,
+        totals: arqueo,
+        summary: summarizeMovements(movements),
+        archivedOrders,
+        nextSession,
+      };
     });
   },
 
@@ -457,7 +728,17 @@ export const CashRegisterModel = {
     return { sessions, total, limit, offset };
   },
 
-  /** Un turno con sus movimientos. Cerrado devuelve el arqueo tal como se guardó. */
+  /**
+   * Un turno con sus movimientos y sus órdenes. Cerrado devuelve el arqueo tal como
+   * se guardó.
+   *
+   * `orders` son las que ese turno archivó al cerrar, y es la razón por la que el
+   * historial de órdenes se lee desde acá en vez de tener pantalla propia: "las
+   * órdenes del martes" es "el turno del martes".
+   *
+   * En un turno ABIERTO viene vacío —todavía no se archivó nada— y en su lugar va
+   * `ordersToClose`, que es la previsión de lo que se va a llevar el cierre.
+   */
   async getById({ tenantId, id }) {
     await assertEnabled(tenantId);
 
@@ -472,8 +753,21 @@ export const CashRegisterModel = {
       throw createError("Caja no encontrada", "CASH_SESSION_NOT_FOUND", 404);
     }
 
+    const [orders, ordersToClose] = await Promise.all([
+      prisma.order.findMany({
+        where: { tenantId, cashSessionId: session.id },
+        select: SESSION_ORDER_SELECT,
+        orderBy: { createdAt: "asc" },
+      }),
+      session.status === "OPEN"
+        ? summarizeArchivable(prisma, { tenantId })
+        : null,
+    ]);
+
     return {
       ...session,
+      orders,
+      ordersToClose,
       summary: summarizeMovements(session.movements),
       // Un turno abierto no tiene arqueo guardado: se calcula en vivo. Uno cerrado
       // devuelve el snapshot, no un recálculo.
@@ -481,6 +775,7 @@ export const CashRegisterModel = {
         session.status === "OPEN"
           ? buildArqueo({
               openingAmount: session.openingAmount,
+              openingTransferAmount: session.openingTransferAmount,
               movements: session.movements,
             })
           : {
@@ -488,6 +783,16 @@ export const CashRegisterModel = {
               countedCashAmount: session.countedCashAmount,
               cashDifference: session.cashDifference,
               transferTotal: session.transferTotal,
+              // Los turnos cerrados antes de que existiera el saldo de
+              // transferencias no tienen esperado: ahí lo más cercano es su neto.
+              expectedTransferAmount:
+                session.expectedTransferAmount ?? session.transferTotal,
+              countedTransferAmount: session.countedTransferAmount,
+              transferDifference: session.transferDifference,
+              // Derivado del snapshot, no guardado: el aviso tiene que seguir estando
+              // cuando alguien abre el turno en el historial y se pregunta por qué el
+              // esperado era negativo.
+              expectedNegative: isExpectedNegative(session.expectedCashAmount),
             },
     };
   },

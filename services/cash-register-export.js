@@ -2,6 +2,15 @@ import ExcelJS from "exceljs";
 
 import { roundMoney } from "../helpers/price.js";
 import {
+  MONEY_FORMAT,
+  DATETIME_FORMAT,
+  addField,
+  formatDay,
+  isoDay,
+  styleHeader,
+  toWallClock,
+} from "../helpers/xlsx.js";
+import {
   CASH_MOVEMENT_SIGN,
   signedAmount,
   summarizeMovements,
@@ -16,12 +25,10 @@ import {
  *
  * Este módulo NO toca la base: recibe el turno ya cargado y devuelve un buffer.
  * Toda la aritmética viene de `cash-register-math.js`, así que el Excel no puede
- * decir un número distinto al que muestra la API.
+ * decir un número distinto al que muestra la API. Los formatos de celda y la
+ * corrección de hora de pared salen de `helpers/xlsx.js`, que comparte con el
+ * export de órdenes.
  */
-
-// Negativos en rojo y con paréntesis no: con signo, que es como se lee un arqueo.
-const MONEY_FORMAT = '#,##0.00;[Red]-#,##0.00';
-const DATETIME_FORMAT = "dd/mm/yyyy hh:mm";
 
 const TYPE_LABELS = {
   ORDER_DEPOSIT: "Seña de orden",
@@ -36,50 +43,6 @@ const CHANNEL_LABELS = {
   TRANSFER: "Transferencia",
   GATEWAY: "MercadoPago",
 };
-
-/**
- * Postgres guarda UTC; **una celda de fecha de Excel es hora de pared**, sin zona.
- * Escribir el `Date` crudo hacía que un turno abierto a las 19:44 se imprimiera
- * "22:44", que en un arqueo del día es directamente un dato equivocado.
- *
- * Se corrige al huso del **servidor**, que es donde opera el negocio. No hay
- * timezone por tenant en el modelo todavía (es el mismo agujero que tiene
- * `services/stats` para definir "hoy"); cuando exista, entra por acá.
- */
-function toWallClock(value) {
-  if (value == null) return null;
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-}
-
-/** `dd/mm/aaaa` del día local, o `null`. Para encabezados, no para celdas de dato. */
-function formatDay(value) {
-  if (value == null) return null;
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`;
-}
-
-function styleHeader(row) {
-  row.font = { bold: true };
-  row.eachCell((cell) => {
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEFEFEF" } };
-    cell.border = { bottom: { style: "thin", color: { argb: "FFBFBFBF" } } };
-  });
-}
-
-/** Fila etiqueta/valor de la hoja de resumen del turno. */
-function addField(sheet, label, value, { money = false, date = false } = {}) {
-  const shown = date ? toWallClock(value) : value;
-  const row = sheet.addRow([label, shown ?? "—"]);
-  row.getCell(1).font = { bold: true };
-  if (money && typeof value === "number") row.getCell(2).numFmt = MONEY_FORMAT;
-  if (date && shown) row.getCell(2).numFmt = DATETIME_FORMAT;
-  return row;
-}
 
 /**
  * @param {object} p
@@ -120,16 +83,33 @@ export async function buildSessionWorkbook({
   );
   addField(turno, "Fecha de apertura", session.openedAt, { date: true });
   addField(turno, `Efectivo de apertura (${currency})`, session.openingAmount, { money: true });
+  addField(
+    turno,
+    `Transferencias de apertura (${currency})`,
+    session.openingTransferAmount,
+    { money: true }
+  );
   addField(turno, "Nota de apertura", session.openingNote);
   turno.addRow([]);
 
+  // Los dos saldos de la caja —el cajón y la cuenta— van con el mismo detalle: es la
+  // planilla que se manda al contador, y una caja con dos saldos que solo declara uno
+  // obliga a rehacer la cuenta a mano.
   if (abierto) {
     // Un turno abierto no tiene arqueo: tiene un esperado, que todavía se mueve.
     addField(turno, "Cierre", "el turno sigue abierto");
     addField(turno, `Efectivo esperado (${currency})`, session.totals?.expectedCashAmount, {
       money: true,
     });
-    addField(turno, `Transferencias (${currency})`, session.totals?.transferTotal, { money: true });
+    addField(
+      turno,
+      `Transferencias esperadas (${currency})`,
+      session.totals?.expectedTransferAmount,
+      { money: true }
+    );
+    addField(turno, `Movido por transferencia (${currency})`, session.totals?.transferTotal, {
+      money: true,
+    });
   } else if (session.closedWithoutCount) {
     // Turno que el sistema cerró porque venció y nadie lo cerró: hay esperado pero
     // NO hay arqueo. Decir "diferencia 0" acá sería mentir diciendo que cuadró.
@@ -140,7 +120,15 @@ export async function buildSessionWorkbook({
     const aviso = addField(turno, "Arqueo", "SIN CONTEO — nadie contó el efectivo");
     aviso.getCell(2).font = { bold: true, color: { argb: "FFC00000" } };
 
-    addField(turno, `Transferencias (${currency})`, session.transferTotal, { money: true });
+    addField(
+      turno,
+      `Transferencias esperadas (${currency})`,
+      session.expectedTransferAmount,
+      { money: true }
+    );
+    addField(turno, `Movido por transferencia (${currency})`, session.transferTotal, {
+      money: true,
+    });
     addField(turno, "Nota de cierre", session.closingNote);
   } else {
     addField(turno, "Cerró", quien(session.closedById));
@@ -155,7 +143,55 @@ export async function buildSessionWorkbook({
       color: { argb: (session.cashDifference ?? 0) < 0 ? "FFC00000" : "FF006100" },
     };
 
-    addField(turno, `Transferencias (${currency})`, session.transferTotal, { money: true });
+    // Qué pasó con lo contado: cuánto se llevaron y cuánto quedó para arrancar. Los
+    // turnos anteriores a estas columnas se saltean en vez de imprimir un 0, que
+    // diría "no se retiró nada".
+    if (session.pettyCashAmount != null) {
+      addField(turno, `Caja grande — retirado (${currency})`, session.withdrawnCashAmount ?? 0, {
+        money: true,
+      });
+      addField(
+        turno,
+        `Caja chica — queda para el turno siguiente (${currency})`,
+        session.pettyCashAmount,
+        { money: true }
+      );
+    }
+
+    addField(
+      turno,
+      `Transferencias esperadas (${currency})`,
+      session.expectedTransferAmount,
+      { money: true }
+    );
+
+    // Contar el banco es opcional: sin conteo no hay diferencia que mostrar, y un 0
+    // acá diría que cuadró.
+    if (session.countedTransferAmount == null) {
+      addField(turno, "Arqueo de transferencias", "SIN CONTEO");
+    } else {
+      addField(
+        turno,
+        `Transferencias contadas (${currency})`,
+        session.countedTransferAmount,
+        { money: true }
+      );
+
+      const difTransfer = addField(
+        turno,
+        `Diferencia en transferencias (${currency})`,
+        session.transferDifference,
+        { money: true }
+      );
+      difTransfer.getCell(2).font = {
+        bold: true,
+        color: { argb: (session.transferDifference ?? 0) < 0 ? "FFC00000" : "FF006100" },
+      };
+    }
+
+    addField(turno, `Movido por transferencia (${currency})`, session.transferTotal, {
+      money: true,
+    });
     addField(turno, "Nota de cierre", session.closingNote);
   }
 
@@ -289,7 +325,17 @@ export async function buildPeriodWorkbook({
     { header: `Esperado (${currency})`, key: "esperado", width: 14 },
     { header: `Contado (${currency})`, key: "contado", width: 14 },
     { header: `Diferencia (${currency})`, key: "diferencia", width: 14 },
-    { header: `Transferido (${currency})`, key: "transferido", width: 15 },
+    // Qué se llevaron y qué quedó. Van pegadas al efectivo —y no al final— porque se
+    // leen con lo contado: contado = retirado + caja chica.
+    { header: `Retirado (${currency})`, key: "retirado", width: 14 },
+    { header: `Caja chica (${currency})`, key: "cajaChica", width: 14 },
+    // El segundo saldo, con las mismas cuatro columnas: la caja lleva el cajón y la
+    // cuenta, y el contador necesita los dos para cerrar el mes.
+    { header: `Transf. inicial (${currency})`, key: "transferInicial", width: 15 },
+    { header: `Transf. esperada (${currency})`, key: "transferEsperado", width: 16 },
+    { header: `Transf. contada (${currency})`, key: "transferContado", width: 16 },
+    { header: `Transf. diferencia (${currency})`, key: "transferDiferencia", width: 17 },
+    { header: `Movido por transf. (${currency})`, key: "transferido", width: 17 },
     { header: "Movimientos", key: "movs", width: 12 },
   ];
   styleHeader(turnos.getRow(1));
@@ -309,13 +355,32 @@ export async function buildPeriodWorkbook({
       // "Sin conteo" en letras y no un 0: nadie contó esa plata.
       contado: sinConteo ? "SIN CONTEO" : session.countedCashAmount ?? "—",
       diferencia: sinConteo ? "—" : session.cashDifference ?? "—",
+      retirado: session.withdrawnCashAmount ?? "—",
+      cajaChica: session.pettyCashAmount ?? "—",
+      transferInicial: session.openingTransferAmount ?? 0,
+      transferEsperado: session.expectedTransferAmount ?? "—",
+      // Contar el banco es opcional, así que acá el guion es lo normal, no un error.
+      transferContado: session.countedTransferAmount ?? "—",
+      transferDiferencia: session.transferDifference ?? "—",
       transferido: session.transferTotal ?? "—",
       movs: session.movements?.length ?? 0,
     });
 
     row.getCell("abierto").numFmt = DATETIME_FORMAT;
     if (session.closedAt) row.getCell("cerrado").numFmt = DATETIME_FORMAT;
-    for (const key of ["inicial", "esperado", "contado", "diferencia", "transferido"]) {
+    for (const key of [
+      "inicial",
+      "esperado",
+      "contado",
+      "diferencia",
+      "retirado",
+      "cajaChica",
+      "transferInicial",
+      "transferEsperado",
+      "transferContado",
+      "transferDiferencia",
+      "transferido",
+    ]) {
       if (typeof row.getCell(key).value === "number") row.getCell(key).numFmt = MONEY_FORMAT;
     }
 
@@ -325,7 +390,9 @@ export async function buildPeriodWorkbook({
     }
   }
 
-  turnos.autoFilter = { from: "A1", to: "L1" };
+  // Todo el ancho, no hasta la L: el filtro venía tapando las columnas del final (con
+  // las del banco ya se quedaba corto, y ahora hay dos más).
+  turnos.autoFilter = { from: "A1", to: `${String.fromCharCode(64 + turnos.columns.length)}1` };
   turnos.views = [{ state: "frozen", ySplit: 1 }];
 
   // ── Hoja 2: todos los movimientos del período ───────────────────────────
@@ -424,17 +491,6 @@ export async function buildPeriodXlsx(params) {
 export function periodFileName({ from, to }) {
   const parte = (value) => (value ? isoDay(value) : "todo");
   return `caja-${parte(from)}_${parte(to)}.xlsx`;
-}
-
-/**
- * `YYYY-MM-DD` del día **local**, para nombres de archivo. Con `toISOString()` un
- * turno abierto a las 22:00 (01:00 UTC del día siguiente) se llamaba con la fecha de
- * mañana, y un rango `to=2026-07-31` terminaba en "2026-08-01".
- */
-function isoDay(value) {
-  const date = value instanceof Date ? value : new Date(value);
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
 /** `caja-turno-7-2026-07-29.xlsx` */

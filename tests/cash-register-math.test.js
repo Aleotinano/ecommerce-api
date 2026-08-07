@@ -6,6 +6,7 @@ import {
   CASH_MOVEMENT_SIGN,
   MANUAL_MOVEMENT_TYPES,
   buildArqueo,
+  isExpectedNegative,
   signedAmount,
   summarizeMovements,
 } from "../services/cash-register-math.js";
@@ -103,6 +104,40 @@ describe("buildArqueo", () => {
     expect(arqueo.cashDifference).toBe(-100);
   });
 
+  it("el saldo de transferencias tiene su propio arqueo, con la apertura adentro", () => {
+    const arqueo = buildArqueo({
+      openingAmount: 1000,
+      openingTransferAmount: 20_000,
+      movements: [
+        mov("ORDER_PAYMENT", 8000, { channel: "TRANSFER" }),
+        mov("EXPENSE", 3000, { channel: "TRANSFER" }),
+      ],
+      countedCashAmount: 1000,
+      countedTransferAmount: 25_000,
+    });
+
+    // `transferTotal` es el NETO del turno; `expectedTransferAmount`, el SALDO.
+    expect(arqueo.transferTotal).toBe(5000);
+    expect(arqueo.expectedTransferAmount).toBe(25_000);
+    expect(arqueo.countedTransferAmount).toBe(25_000);
+    expect(arqueo.transferDifference).toBe(0);
+    // Y el efectivo no se entera de nada de esto.
+    expect(arqueo.expectedCashAmount).toBe(1000);
+  });
+
+  it("sin contar el banco, la diferencia de transferencias es null y no 0", () => {
+    // 0 diría "cuadró", y nadie miró.
+    const arqueo = buildArqueo({
+      openingTransferAmount: 4000,
+      movements: [mov("ORDER_PAYMENT", 1000, { channel: "TRANSFER" })],
+      countedCashAmount: 0,
+    });
+
+    expect(arqueo.expectedTransferAmount).toBe(5000);
+    expect(arqueo.countedTransferAmount).toBeNull();
+    expect(arqueo.transferDifference).toBeNull();
+  });
+
   it("una transferencia no cambia el efectivo esperado", () => {
     const arqueo = buildArqueo({
       openingAmount: 1000,
@@ -132,6 +167,49 @@ describe("buildArqueo", () => {
 
     expect(arqueo.expectedCashAmount).toBe(0.3);
     expect(arqueo.cashDifference).toBe(0);
+  });
+});
+
+// Un cajón que debe plata es imposible en la vida real: si el esperado da negativo,
+// falta registrar un ingreso. Se avisa, no se impide — ver `isExpectedNegative`.
+describe("expectedNegative", () => {
+  it("un egreso mayor al efectivo del turno lo enciende, y la diferencia sigue saliendo bien", () => {
+    const arqueo = buildArqueo({
+      openingAmount: 1000,
+      movements: [mov("EXPENSE", 2500)],
+      countedCashAmount: 0,
+    });
+
+    expect(arqueo.expectedCashAmount).toBe(-1500);
+    expect(arqueo.expectedNegative).toBe(true);
+    expect(arqueo.cashDifference).toBe(1500);
+  });
+
+  it("cero no es negativo: una caja vacía cuadra", () => {
+    const arqueo = buildArqueo({
+      openingAmount: 1000,
+      movements: [mov("EXPENSE", 1000)],
+    });
+
+    expect(arqueo.expectedCashAmount).toBe(0);
+    expect(arqueo.expectedNegative).toBe(false);
+  });
+
+  it("una transferencia grande no lo enciende: no toca el efectivo", () => {
+    const arqueo = buildArqueo({
+      openingAmount: 100,
+      movements: [mov("ORDER_REFUND", 9000, { channel: "TRANSFER" })],
+    });
+
+    expect(arqueo.expectedCashAmount).toBe(100);
+    expect(arqueo.expectedNegative).toBe(false);
+    expect(arqueo.transferTotal).toBe(-9000);
+  });
+
+  it("el helper tolera el null de un turno cerrado sin `expectedCashAmount`", () => {
+    expect(isExpectedNegative(null)).toBe(false);
+    expect(isExpectedNegative(undefined)).toBe(false);
+    expect(isExpectedNegative(-0.01)).toBe(true);
   });
 });
 

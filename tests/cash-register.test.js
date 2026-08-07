@@ -202,16 +202,31 @@ describe("apertura y cierre", () => {
     });
   });
 
-  it("un turno cerrado no acepta movimientos nuevos", async () => {
-    // No hay caja abierta después del cierre anterior: el movimiento no tiene dónde
-    // caer, y no se puede backdatear a la sesión ya arqueada.
+  it("el cierre deja la caja abierta con lo contado: la plata del cajón sigue", async () => {
+    // Cerrar firma el arqueo del día, no vacía el cajón. La caja es una sola y
+    // continua, y dejarla cerrada bloquearía los cobros en efectivo hasta que
+    // alguien se acuerde de reabrirla.
+    const res = await request(app).get("/cash-register/current").set("Cookie", acmeCookie);
+
+    expect(res.body.session).not.toBeNull();
+    expect(res.body.session.openingAmount).toBe(3900);
+    expect(res.body.session.openingNote).toContain("Continúa");
+    expect(res.body.session.movements).toHaveLength(0);
+  });
+
+  it("un movimiento posterior cae en la caja nueva, no en el turno arqueado", async () => {
+    const arqueado = await prisma.cashRegisterSession.findFirst({
+      where: { tenantId: acme.id, status: "CLOSED" },
+      orderBy: { id: "desc" },
+    });
+
     const res = await request(app)
       .post("/cash-register/movements")
       .set("Cookie", acmeCookie)
       .send({ type: "EXPENSE", channel: "CASH", amount: 50, categoryId: insumos().id });
 
-    expect(res.status).toBe(409);
-    expect(res.body.error.code).toBe("CASH_SESSION_NOT_OPEN");
+    expect(res.status).toBe(201);
+    expect(res.body.movement.sessionId).not.toBe(arqueado.id);
   });
 
   it("el arqueo guardado es un snapshot: un movimiento posterior no lo recalcula", async () => {
@@ -239,6 +254,166 @@ describe("apertura y cierre", () => {
 
     expect(res.body.session.totals.expectedCashAmount).toBe(4000);
     expect(res.body.session.totals.cashDifference).toBe(-100);
+  });
+
+  it("con `reopen: false` la caja queda cerrada y el movimiento no tiene dónde caer", async () => {
+    // La acción explícita de dejar la caja cerrada (fin de temporada, o se llevan
+    // toda la plata). Ahí sí vuelve a valer el guard.
+    const abierta = await prisma.cashRegisterSession.findFirst({
+      where: { tenantId: acme.id, status: "OPEN" },
+    });
+
+    await request(app)
+      .post("/cash-register/close")
+      .set("Cookie", acmeCookie)
+      .send({ countedCashAmount: 3850, reopen: false })
+      .expect(200);
+
+    const current = await request(app).get("/cash-register/current").set("Cookie", acmeCookie);
+    expect(current.body.session).toBeNull();
+    expect(abierta).not.toBeNull();
+
+    const res = await request(app)
+      .post("/cash-register/movements")
+      .set("Cookie", acmeCookie)
+      .send({ type: "EXPENSE", channel: "CASH", amount: 50, categoryId: insumos().id });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe("CASH_SESSION_NOT_OPEN");
+  });
+
+  it("por HTTP se abre y se cierra declarando los dos saldos", async () => {
+    // El camino que usa el panel: los dos montos viajan en el body y vuelven en el
+    // arqueo, cada uno con su diferencia.
+    await resetSessions(acme.id);
+
+    await request(app)
+      .post("/cash-register/open")
+      .set("Cookie", acmeCookie)
+      .send({ openingAmount: 1000, openingTransferAmount: 20000 })
+      .expect(201);
+
+    const current = await request(app)
+      .get("/cash-register/current")
+      .set("Cookie", acmeCookie);
+
+    expect(current.body.session.openingTransferAmount).toBe(20000);
+    expect(current.body.session.totals.expectedTransferAmount).toBe(20000);
+
+    const cerrada = await request(app)
+      .post("/cash-register/close")
+      .set("Cookie", acmeCookie)
+      .send({ countedCashAmount: 1000, countedTransferAmount: 19500, reopen: false })
+      .expect(200);
+
+    expect(cerrada.body.session.transferDifference).toBe(-500);
+    expect(cerrada.body.session.cashDifference).toBe(0);
+  });
+
+  it("por HTTP el retiro deja la caja chica abierta y rechaza retirar de más", async () => {
+    await resetSessions(acme.id);
+
+    await request(app)
+      .post("/cash-register/open")
+      .set("Cookie", acmeCookie)
+      .send({ openingAmount: 12000 })
+      .expect(201);
+
+    const excesivo = await request(app)
+      .post("/cash-register/close")
+      .set("Cookie", acmeCookie)
+      .send({ countedCashAmount: 12000, withdrawnCashAmount: 12500 });
+
+    expect(excesivo.status).toBe(409);
+    expect(excesivo.body.error.code).toBe("CASH_WITHDRAWAL_EXCEEDS_COUNT");
+
+    const cerrada = await request(app)
+      .post("/cash-register/close")
+      .set("Cookie", acmeCookie)
+      .send({ countedCashAmount: 12000, withdrawnCashAmount: 10000 })
+      .expect(200);
+
+    expect(cerrada.body.session.pettyCashAmount).toBe(2000);
+    expect(cerrada.body.session.nextSession.openingAmount).toBe(2000);
+  });
+});
+
+// Nada impide un egreso mayor al efectivo del turno, y el caso legítimo (el dueño
+// paga un insumo de su bolsillo y no anota el ingreso) hace que bloquearlo sea peor
+// que el problema. Se avisa: el flag viaja, pero el cierre se firma igual.
+describe("aviso de efectivo negativo", () => {
+  beforeAll(async () => {
+    await resetSessions(acme.id);
+  });
+
+  it("un egreso mayor al efectivo deja el esperado negativo y lo señala en /current", async () => {
+    await request(app)
+      .post("/cash-register/open")
+      .set("Cookie", acmeCookie)
+      .send({ openingAmount: 1000 })
+      .expect(201);
+
+    await request(app)
+      .post("/cash-register/movements")
+      .set("Cookie", acmeCookie)
+      .send({
+        type: "EXPENSE",
+        channel: "CASH",
+        amount: 2500,
+        categoryId: insumos().id,
+        payee: "Proveedor",
+      })
+      .expect(201);
+
+    const current = await request(app)
+      .get("/cash-register/current")
+      .set("Cookie", acmeCookie);
+
+    expect(current.body.session.totals.expectedCashAmount).toBe(-1500);
+    expect(current.body.session.totals.expectedNegative).toBe(true);
+  });
+
+  it("el aviso no bloquea el cierre", async () => {
+    const cerrada = await request(app)
+      .post("/cash-register/close")
+      .set("Cookie", acmeCookie)
+      .send({ countedCashAmount: 0, note: "faltó registrar un ingreso" });
+
+    expect(cerrada.status).toBe(200);
+    expect(cerrada.body.session.totals.expectedNegative).toBe(true);
+    expect(cerrada.body.session.cashDifference).toBe(1500);
+  });
+
+  it("sigue avisando sobre el snapshot del turno cerrado", async () => {
+    // El flag es derivado, no una columna: tiene que reaparecer cuando alguien abre
+    // el turno en el historial y se pregunta por qué el esperado era negativo.
+    const cerrada = await prisma.cashRegisterSession.findFirst({
+      where: { tenantId: acme.id, status: "CLOSED" },
+      orderBy: { id: "desc" },
+    });
+
+    const res = await request(app)
+      .get(`/cash-register/${cerrada.id}`)
+      .set("Cookie", acmeCookie);
+
+    expect(res.body.session.totals.expectedCashAmount).toBe(-1500);
+    expect(res.body.session.totals.expectedNegative).toBe(true);
+  });
+
+  it("un turno normal no lo enciende", async () => {
+    await resetSessions(acme.id);
+
+    await request(app)
+      .post("/cash-register/open")
+      .set("Cookie", acmeCookie)
+      .send({ openingAmount: 1000 })
+      .expect(201);
+
+    const current = await request(app)
+      .get("/cash-register/current")
+      .set("Cookie", acmeCookie);
+
+    expect(current.body.session.totals.expectedNegative).toBe(false);
   });
 });
 

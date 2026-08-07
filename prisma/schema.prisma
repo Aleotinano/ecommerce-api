@@ -872,7 +872,16 @@ model CashRegisterSession {
   tenantId Int
   status   CashSessionStatus @default(OPEN)
 
+  // Los dos saldos con los que arranca el turno. Pueden ser NEGATIVOS: no porque
+  // alguien los declare así (Zod lo rechaza) sino porque arrastran el cierre anterior,
+  // y un turno que terminó con el esperado en negativo —falta registrar un ingreso—
+  // tiene que seguir mostrando ese desvío en vez de que la caja lo redondee a 0.
   openingAmount Float // efectivo declarado al abrir
+  // La caja lleva DOS saldos continuos: el efectivo del cajón y lo que hay en la
+  // cuenta. El local piensa su caja con esas dos columnas. Default 0 por los turnos
+  // anteriores a que existiera este saldo (ahí las transferencias solo se acumulaban
+  // dentro de cada turno).
+  openingTransferAmount Float @default(0)
   // Nullable por la apertura automática: cuando la abre el horario no hay persona
   // detrás. En una apertura manual siempre está.
   openedById    Int?
@@ -908,7 +917,30 @@ model CashRegisterSession {
   countedCashAmount  Float? // lo que la persona contó a mano
   expectedCashAmount Float? // openingAmount + Σ movimientos CASH con signo
   cashDifference     Float? // contado − esperado (negativo = falta plata)
-  transferTotal      Float? // Σ movimientos TRANSFER — informativo, NO entra al arqueo
+  transferTotal      Float? // Σ movimientos TRANSFER del turno — el NETO, sin la apertura
+
+  // El efectivo contado se parte en dos al cerrar: lo que se lleva la persona y lo que
+  // deja en el cajón. La CAJA CHICA es la que abre el turno siguiente (`openingAmount`)
+  // y la que arrastra una apertura manual — no lo contado: en el local la plata se
+  // retira todos los días y queda un fondo para arrancar.
+  //
+  // `pettyCashAmount` es derivado (contado − retirado) pero se guarda igual: es parte
+  // del arqueo firmado, y recalcularlo mañana a partir de un snapshot sería recalcular
+  // un snapshot. Los dos quedan en null cuando nadie contó.
+  withdrawnCashAmount Float? // caja grande: lo que se retira
+  pettyCashAmount     Float? // caja chica: lo que queda
+
+  // El mismo arqueo, para el saldo de transferencias. `expectedTransferAmount` SÍ
+  // incluye la apertura (`openingTransferAmount` + `transferTotal`): son dos números
+  // distintos y confundirlos duplica plata.
+  //
+  // El conteo de transferencias es OPCIONAL: un local que no chequea el banco al
+  // cerrar deja `countedTransferAmount`/`transferDifference` en null en vez de firmar
+  // una diferencia que nadie miró. Por eso el CHECK de completitud del cierre no los
+  // exige (y los turnos anteriores a esta columna tampoco los tienen).
+  expectedTransferAmount Float?
+  countedTransferAmount  Float?
+  transferDifference     Float?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
