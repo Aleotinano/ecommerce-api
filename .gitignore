@@ -16,8 +16,15 @@ prisma/demo-catalog.js
 prisma/seed-catalog.js
 prisma/seed-stats.js
 
-# front guia
-front-md-guia
+# La documentación SÍ se versiona: describe el código de este repo y conviene que un
+# cambio de servicio y la corrección de su doc entren en el mismo commit. Estaba
+# ignorada, y sin historial nadie notó que las copias del frontend habían divergido.
+# Lo que no entra acá es el material de cliente (cotizaciones, reuniones, auditorías
+# comerciales): eso vive en el vault local, en `producto/`.
 
-docs/servicios/
+# Lo único que no entra del vault: el estado de la UI de Obsidian (qué paneles
+# quedaron abiertos, el zoom del grafo). Cambia cada vez que alguien lo abre y no
+# dice nada del contenido. El resto de `.obsidian/` sí, que es config compartible.
+docs/servicios/.obsidian/workspace.json
+
 .claude

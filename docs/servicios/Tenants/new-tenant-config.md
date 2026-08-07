@@ -1,0 +1,156 @@
+---
+tags: [tenants, onboarding, patrón]
+estado: vigente
+ultima-revision: 2026-08-04
+lado: backend
+---
+
+# Dar de alta un tenant nuevo
+
+> [!note] Para qué es este doc
+> El patrón de alta destilado de los tenants que ya pasamos por acá (mesa-dulce, cafe-sublime,
+> maikai). Es una receta, no una referencia: si algo de acá contradice al código, gana el código
+> — pero decilo en la próxima revisión.
+
+## 1. Los cuatro pasos
+
+```bash
+pnpm tenant:create --name "<Nombre>" --email <email-del-dueño> --profile <perfil>
+```
+
+Crea el tenant, su primer ADMIN y la fila de `TenantConfig` (sin esa fila, la pantalla de
+configuración tira 404). Llama a `UserModel.register({ trusted: true })` — el mismo service
+que usaba `POST /auth/register`, que hoy está apagado. La contraseña se genera al azar y se
+imprime **una sola vez**; si querés fijar una, va por `ADMIN_PASSWORD` en el entorno, nunca
+como argumento (los argumentos quedan en el historial del shell y en la lista de procesos).
+
+Después:
+
+2. **Carpeta `prisma/<slug>/`** con los scripts de datos: `categorias.js`, `productos.js`,
+   `config.js`, `index.js`. Idempotentes y corribles por separado.
+3. **Scripts en `package.json`**: `seed:<slug>` y uno por paso.
+4. **Verificar** (sección 8).
+
+> [!danger] `pnpm seed` no es para esto
+> `prisma/seed.js` arranca con un `TRUNCATE … RESTART IDENTITY CASCADE` de toda la base. Es el
+> seed de los tenants de demo (acme, shopco, mesa-dulce). **Un tenant real nunca vive ahí.**
+
+## 2. Elegir el perfil de flujo de venta
+
+Los cuatro de `services/tenant-profiles.js`. Se materializan en columnas al crear el tenant: el
+perfil es un punto de partida, no una indirección viva.
+
+| Perfil | Cuándo | Qué hace |
+| --- | --- | --- |
+| `estandar` | Default. Se compra online, se paga entero | Todo habilitado, sin seña |
+| `contraentrega` | El repartidor cobra al entregar | Solo CASH, solo DELIVERY |
+| `produccion-por-sena` | Producen a pedido y necesitan plata antes | Seña del 50% para pasar a producción |
+| `carta` | **Se lee, no se compra** — restó, cafetería | `storeMode: MENU`, sin carrito ni checkout |
+
+Las dos preguntas que lo deciden, en orden: **¿se compra o se lee?** (si se lee → `carta`, no
+mires nada más). **¿Producen a pedido?** (si sí → `produccion-por-sena`).
+
+Se corrige después con `node prisma/set-tenant-profile.js <slug> <perfil>`, y sin argumentos
+lista los perfiles y en qué flujo está cada tenant. No reescribe órdenes ya creadas.
+
+## 3. Reorganizar el catálogo que manda el cliente
+
+Suele llegar un dump JSON de su web actual. **No se carga como viene.** Las reglas, en el orden
+en que conviene aplicarlas:
+
+- **Buscar categorías espejo.** Una categoría cuyos productos ya existen todos, con el mismo
+  precio, en otras. En Maikai, "Almuerzos" (20 productos) era el espejo de Pastas + Ensaladas +
+  Menú Ejecutivo. Se descarta entera.
+- **Deduplicar por nombre normalizado** — NFD, sin acentos, sin puntuación, minúsculas. Sin eso,
+  "Bagel Ibérico" y "Bagel Iberico" entran los dos. Cuando el duplicado trae **precios
+  distintos**, no lo resuelve el algoritmo: hay que declarar cuál gana y anotarlo como dato a
+  confirmar con el cliente.
+- **Máximo 2 niveles** (raíz + hija). Es lo que usan todos los tenants y lo que el storefront
+  tiene probado.
+- **`position` explícita en todas**, por nivel: las raíces entre sí, y las hijas dentro de su
+  padre. Es lo único que gobierna el orden de la carta.
+- **Fusionar las categorías de 1–2 productos.** "Vinos" con un solo vino no es una sección.
+- **Un producto nunca cuelga de una raíz que tiene hijas.** O la raíz es hoja (Pastas, Brunch),
+  o todos sus productos están en alguna hija.
+
+La reorganización va **en código**, no editando el JSON a mano: `prisma/<slug>/build-menu.js`
+lee el dump crudo, aplica el mapa y escribe el `menu.json` que consumen los seeds. Así el
+criterio queda revisable y se puede volver a correr cuando llegue un dump nuevo. El `menu.json`
+resultante se commitea y **ese** es el que se edita a mano para un cambio de precio suelto.
+
+## 4. Las raíces salen de la home, no del dump
+
+La lección cara de Maikai: el catálogo se reorganizó dos veces porque la primera fue antes de
+ver el diseño de la landing.
+
+**Si la home abre con un grid de tiles de categoría, esos tiles SON las categorías raíz.**
+Primero se define cuántos entran en el grid, después se reparte el menú. Al revés se rehace.
+
+Corolario: las raíces necesitan `Categories.imageUrl` (la foto del tile) e `icon`. Si las fotos
+todavía no están, el seed las deja en `null` y se cargan aparte — pero conviene pedirlas en la
+misma conversación en que se pide el menú.
+
+## 5. Convención de SKU
+
+`<PREFIJO>-<SLUG-DEL-NOMBRE>` en mayúsculas, sin acentos. Por ejemplo `MK-CIABATTA-DE-MILANESA`.
+
+Derivado del **nombre**, nunca de un índice ni del orden del archivo: es lo que hace que
+reordenar el menú no cambie la identidad de un producto, y por lo tanto lo que hace que el seed
+pueda ser idempotente por SKU. Sufijo `-2` para las colisiones.
+
+## 6. Qué no inventar
+
+Stock, handles de redes sociales, composición de combos, horarios. Si el dato no vino, va `null`
+y queda anotado como pendiente. El precedente es [[mesa dulce demo]], donde 15 productos
+quedaron en `stock: 0` porque el stock real es un dato de negocio que no nos corresponde definir
+— y eso se anotó en vez de rellenarlo.
+
+En un tenant `carta` el stock no gobierna nada (no nacen órdenes), así que va `stock: 0` y
+`showOutOfStock: true`. Nadie lee un número inventado como si fuera real.
+
+## 7. Trampas verificadas
+
+- **`Categories` tiene `@@unique([tenantId, name])` — global, no por padre.** Dos "Clásicos"
+  bajo padres distintos NO entran. Es la que más rompe seeds de menús de restaurante, donde
+  "Clásicos" o "Especiales" aparece bajo varias secciones.
+- **En un `PRODUCTO` el precio vive en la variante `isDefault`**, y `Product.price` es `null`.
+  `Product.price` es exclusivo de `COMBO`.
+- **Usar `CategoryModel` / `ProductModel`, no `prisma.*` directo.** Si no, el cache de Redis
+  queda sucio. Y cerrar con `closeRedis()` o el script no termina nunca.
+- **`showOutOfStock: false` es el default** y esconde todo lo que esté en `stock: 0`. Un
+  catálogo entero en 0 con el default puesto se ve vacío.
+- **`storeMode: MENU` no lo aplica el backend.** No hay guard: `POST /orders` sigue funcionando.
+  El que apaga el carrito y `/checkout` es el storefront, leyendo el campo del
+  `GET /tenant-config/:tenantId` (que es público, `attachUser` y no `verifyToken`). Si el front
+  no lo lee, el tenant "carta" vende igual.
+- **En modo `MENU`, `paymentMethodsEnabled` y `fulfillmentMethodsEnabled` quedan poblados a
+  propósito.** No gobiernan nada ahí; el campo que define qué es el tenant es `storeMode`, uno
+  solo. Vaciarlos obligaría a `OrderModel.create` a distinguir "sin métodos habilitados" de "no
+  vende".
+- **`TenantConfig` no tiene campo de horarios de atención.** Hasta que la landing le dé un lugar
+  propio, el horario va embebido en `storeDescription` / `seoDescription`.
+- **El árbol de categorías se pide a `/store/categories/tree`**, no a `/store/categories` — ese
+  devuelve la lista plana, sin `children`, y ordenada por `position` global (o sea, mezclada).
+- **`/store/products` tiene `limit` máximo 100.** Para contar un catálogo grande hay que paginar.
+
+## 8. Checklist de verificación
+
+```bash
+pnpm <slug>:build-menu          # el resumen impreso tiene que dar los conteos esperados
+pnpm seed:<slug>                # primera corrida: crea
+pnpm seed:<slug>                # segunda: TODO "ya está al día". Si crea algo, no es idempotente
+node prisma/set-tenant-profile.js   # el tenant tiene que aparecer con el flujo correcto
+pnpm test
+```
+
+Y por HTTP, con `X-Tenant-Slug: <slug>`:
+
+- `GET /store/categories/tree` → las raíces en orden, con sus hijas.
+- `GET /store/products?categoryId=<id>` → precio y descripción de una categoría de muestra.
+- `GET /store/products?limit=100&offset=…` → el total del catálogo (confirma `showOutOfStock`).
+- `GET /tenant-config/<tenantId>` → contacto, branding y `storeMode`.
+
+## Ejemplo completo
+
+`prisma/maikai/` es la referencia más reciente y la más completa: dump crudo → `build-menu.js` →
+`menu.json` → seeds. Perfil `carta`, 8 raíces, 251 productos.

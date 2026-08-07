@@ -1,3 +1,7 @@
+---
+lado: backend
+---
+
 # ARCHITECTURE.md
 
 > Documento técnico generado a partir del código real del repositorio. No describe
@@ -15,7 +19,7 @@
 - **Node.js, ESM puro** (`"type": "module"` en `package.json`). Entry point: `app.js`
   (`"main": "app.js"`).
 - No hay build de TypeScript del backend: el código de runtime es `.js`. TypeScript está
-  como devDependency (hay `prisma.config.ts`, `lib/cloudinary.ts` y `tsx`), pero la app se
+  como devDependency (hay `prisma.config.ts` y `tsx`), pero la app se
   ejecuta con `node app.js`.
 
 ### Package manager
@@ -85,9 +89,9 @@ Fuente única de verdad: `schemas/env.schema.js` (validado con zod en `config.js
 | `STORE_APP_URL` | no | `http://localhost:3000` |
 | `PUBLIC_KEY` | **sí** | (MercadoPago public key) |
 | `ACCESS_TOKEN` | **sí** | (MercadoPago access token) |
-| `CLOUDINARY_CLOUD_NAME` | **sí** | leída directo por `lib/cloudinary.js` (ver §11) |
-| `CLOUDINARY_API_KEY` | **sí** | idem |
-| `CLOUDINARY_API_SECRET` | **sí** | idem |
+| `CLOUDINARY_CLOUD_NAME` | no | cuenta de la **plataforma**: la usa el tenant que no tenga la suya en `TenantConfig` (ver §11). Vacía = ese tenant no puede subir (`CLOUDINARY_NOT_CONFIGURED`), que es lo correcto si cada tienda tiene cuenta propia. Leída directo por `lib/cloudinary.js` |
+| `CLOUDINARY_API_KEY` | no | idem |
+| `CLOUDINARY_API_SECRET` | no | idem |
 | `CLOUDINARY_FOLDER` | no | `e-commerce-express` |
 | `ORIGINS` | no | CSV de orígenes CORS permitidos |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | no | SMTP nodemailer |
@@ -110,7 +114,7 @@ Fuente única de verdad: `schemas/env.schema.js` (validado con zod en `config.js
 | `WHATSAPP_ACCESS_TOKEN` | no | token global de fallback si el tenant no tiene el suyo en DB |
 | `WHATSAPP_PHONE_NUMBER_ID` | no | número de prueba en dev; en prod cada tenant tiene el suyo en `TenantConfig` |
 | `WHATSAPP_GRAPH_API_VERSION` | no | `v21.0` |
-| `WHATSAPP_TOKEN_ENC_KEY` | no | clave AES-256-GCM (32 bytes, hex o base64) para cifrar `TenantConfig.whatsappAccessToken` en reposo; sin ella no se guardan ni usan tokens de DB |
+| `SECRET_ENC_KEY` | no | clave AES-256-GCM (32 bytes, hex o base64) para cifrar los secretos per-tenant en reposo (`whatsappAccessToken`, credenciales de Cloudinary); sin ella no se guardan ni usan secretos de DB. `WHATSAPP_TOKEN_ENC_KEY` es el nombre viejo y sigue funcionando como fallback |
 
 Todas las variables de WhatsApp son opcionales: si faltan, el módulo queda inactivo y la app
 arranca igual (`schemas/env.schema.js`).
@@ -143,12 +147,13 @@ e-commerce-express-1/
 │   ├── chat/               # Agente de chat de tienda: index.js, tools.js, prompt.js, cost-guard.js
 │   ├── combos.js           # Archivo único (no carpeta): validateComboSelection, compartido por cart.js y orders.js
 │   ├── order-state.js      # Motor de estados de órdenes (puro): transiciones, blockers y avance automático
+│   ├── order-status.js     # Catálogo de estados (puro): el único lugar donde un estado tiene nombre (panel, cliente, email)
 │   ├── tenant-profiles.js  # Perfiles de flujo de venta (puro): kits de arranque de la config de venta
 │   ├── cash-register.js    # Caja: turno, movimientos, etiquetas + recordOrderPayments (enganche con el libro de cobros)
 │   ├── cash-register-math.js   # Aritmética del arqueo (puro): signos, resumen por etiqueta, diferencia
 │   ├── cash-register-export.js # El turno a .xlsx (exceljs); sin DB, recibe el turno y devuelve buffer
 │   └── cash-register-schedule.js # Turnos con horario (puro): qué turno es ahora, vencimiento, gracia
-├── lib/                    # Infra/integraciones: prisma, redis, cache, logger, mailer, cloudinary, tokens, slug, imageManager, crypto (AES-256-GCM), phone (normalización E.164), whatsapp-link (deep-link wa.me del pedido — módulo puro, NO es el bot)
+├── lib/                    # Infra/integraciones: prisma, redis, cache, logger, mailer, cloudinary (credenciales POR TENANT: `credentialsFor(tenantId)`, con fallback a la cuenta global de env), tokens, slug, imageManager (imágenes públicas de catálogo; las tres funciones reciben `tenantId`), crypto (AES-256-GCM), phone (normalización E.164), whatsapp-link (deep-link wa.me del pedido — módulo puro, NO es el bot)
 │   ├── storage/            # Puerto de archivos PRIVADOS (comprobantes): index.js (putFile/signedUrl/deleteFile), cloudinary.js (adaptador), constants.js. Distinto de imageManager, que sube imágenes públicas de catálogo
 │   └── llm/                # Cliente LLM: index.js, prompt.js, parse.js, fallback.js
 │       ├── providers/      # anthropic.js, gemini.js (fetch directo, sin SDK)
@@ -160,7 +165,7 @@ e-commerce-express-1/
 ├── scripts/                # Tareas de mantenimiento para el cron del HOST (no hay scheduler en el proceso): purge-receipts.js
 ├── prisma/
 │   ├── schema.prisma       # Modelo de datos
-│   ├── migrations/         # 50 migraciones SQL
+│   ├── migrations/         # 52 migraciones SQL
 │   ├── mesa-dulce/         # Seed del primer tenant real (categorias.js, productos.js, ordenes.js, index.js)
 │   └── seed*.js            # Seeds (base, stats, tenant-config, catalog) + scripts de migración de datos
 ├── generated/prisma/       # Cliente Prisma generado (output custom, fuera de node_modules)
@@ -268,9 +273,11 @@ contraparte manual del webhook de MercadoPago para tenants que cobran en efectiv
 - `SuggestionAngle`: `BEST_SELLER`, `NEW_ARRIVAL`, `LOW_STOCK`, `NO_RECENT_SALES`
 - `SuggestionStatus`: `SUGGESTED`, `USED`, `DISMISSED`
 - `SuggestionSource`: `AUTO`, `MANUAL`
-- `OrderStatus`: `PENDING`, `PROCESSING`, `READY`, `COMPLETED`, `CANCELLED` (`READY` = "listo para
+- `OrderStatus`: `NEW`, `PROCESSING`, `READY`, `COMPLETED`, `CANCELLED` (`READY` = "listo para
   retirar/enviar", paso **opcional**: `PROCESSING → COMPLETED` sigue valiendo). Transiciones y
-  precondiciones: `services/order-state.js`
+  precondiciones: `services/order-state.js`. `NEW` se llamó `PENDING` hasta 2026-07-31 (migración
+  `20260731120000_rename_order_status_new`, un `RENAME VALUE` sin backfill). **Los nombres visibles de
+  cada estado salen de `services/order-status.js`**, no de quien dibuja la pantalla
 - `StatusTrigger`: `MANUAL`, `AUTO`, `GATEWAY` — quién movió el estado en `OrderStatusHistory`:
   una persona, el motor al cumplirse las condiciones (`applyAutoAdvance`) o el webhook de MercadoPago
 - `PaymentStatus`: `PENDING`, `APPROVED`, `REJECTED`, `IN_PROCESS`, `REFUNDED`, `DEPOSIT_PAID`,
@@ -302,7 +309,7 @@ contraparte manual del webhook de MercadoPago para tenants que cobran en efectiv
 
 ### Migraciones
 
-49 migraciones en `prisma/migrations/` (cronológicas):
+52 migraciones en `prisma/migrations/` (cronológicas):
 
 `..._initial_multi_tenant`, `..._email_global_unique`, `..._email_verification`,
 `..._add_tenant_config`, `..._add_product_price`, `..._expand_roles_storefront`,
@@ -381,7 +388,12 @@ apertura automática no tiene persona detrás),
 reservadas `venta`/`devolucion` por tenant y les asigna los movimientos de orden que ya existían, que
 hasta acá entraban con `categoryId NULL` y dejaban las ventas afuera del eje de etiquetas),
 `20260730185126_order_receipts` (comprobantes de transferencia: tabla `OrderReceipt` + índices + FKs.
-Aditiva y sin backfill — no hay comprobantes previos que convertir).
+Aditiva y sin backfill — no hay comprobantes previos que convertir).,
+`20260731120000_rename_order_status_new` (`ALTER TYPE "OrderStatus" RENAME VALUE 'PENDING' TO
+'NEW'`. Renombrar una etiqueta de enum **conserva el OID**: las filas de `Order` y
+`OrderStatusHistory` no se tocan, el `@default` sigue siendo válido y la posición dentro del tipo no
+se mueve, así que un `ORDER BY status` ordena igual. Escrita a mano: para el diff automático de
+Prisma un rename es drop + create del tipo).
 
 ---
 
@@ -483,6 +495,17 @@ Convenciones de middleware citadas: `verifyToken` (cookie admin), `requireRole([
 | GET | `/auth/me` | `verifyToken` | `usersController.me` → `UserModel.me` |
 | GET | `/auth/verify-email` | `validate(query)` | `usersController.verifyEmail` → `UserModel.verifyEmail` |
 | POST | `/auth/resend-verification` | `validate(body)` | `usersController.resendVerification` → `UserModel.resendVerification` |
+
+### `/order-statuses` (público) — `routes/order-statuses.js`
+
+| Método | Ruta | Middleware | Handler |
+|---|---|---|---|
+| GET | `/order-statuses` | — | `listPublicStatuses` (`services/order-status.js`) — catálogo de estados: código, `position`, `isManual`, `transitions` y los textos de panel/cliente |
+
+> **La única ruta sin auth y sin tenant**, a propósito: es una tabla estática del sistema (no hay
+> adentro un dato de nadie) y la consumen los dos frontends — el storefront la necesita para
+> renderizar el pedido de un invitado, que no tiene token. Cachea con `max-age=3600`: solo cambia con
+> un deploy. Ver [[Órdenes]] §Catálogo de estados.
 
 ### `/orders` (admin) — `routes/orders.js`
 
@@ -613,8 +636,8 @@ rechaza.
 | Método | Ruta | Validación | Controller → Service |
 |---|---|---|---|
 | GET | `/cash-register/current` | — | `current` → `CashRegisterModel.getCurrent` (200 con `session: null` si no hay turno abierto) |
-| POST | `/cash-register/open` | `body: openCashSession` | `open` → `open` (409 `CASH_SESSION_ALREADY_OPEN`) |
-| POST | `/cash-register/close` | `body: closeCashSession` | `close` → `close` (devuelve el arqueo) |
+| POST | `/cash-register/open` | `body: openCashSession` | `open` → `open` (409 `CASH_SESSION_ALREADY_OPEN`; sin `openingAmount` abre con el arrastre del cierre anterior) |
+| POST | `/cash-register/close` | `body: closeCashSession` | `close` → `close` (devuelve el arqueo y, salvo `reopen: false`, la caja siguiente en `nextSession`) |
 | POST | `/cash-register/movements` | `body: createCashMovement` | `addMovement` → `addMovement` (solo `INCOME`/`EXPENSE`; etiqueta obligatoria) |
 | GET | `/cash-register/summary` | `query: cashSummaryQuery` | `summary` → `getSummary` (totales por etiqueta/tipo/vía en un rango) |
 | GET | `/cash-register/categories` | `query: cashCategoryQuery` | `listCategories` → `listCategories` |
@@ -830,10 +853,17 @@ más el `WHATSAPP_VERIFY_TOKEN` del handshake inicial.
   las órdenes** y exporta funciones, no un modelo: `ORDER_TRANSITIONS` (mapa declarativo),
   `evaluateOrder(order)` → `{ payment, blockers, canProduce, nextStatus }`, `assertTransition`,
   `assertCanProduce` y `applyAutoAdvance(tx, order)`. Todo es **puro** salvo la última, que corre
-  dentro de la transacción del caller y avanza `PENDING → PROCESSING` cuando la orden queda sin
+  dentro de la transacción del caller y avanza `NEW → PROCESSING` cuando la orden queda sin
   blockers. Lo consumen `services/orders.js` (`updateOrderStatus`, `reviewOrder`, las tres
   confirmaciones de cobro) y `controllers/orders.js` (para exponer `blockers`/`canProduce`/`payment`
   al panel). Ver [[Órdenes]] §Máquina de estados.
+- **Su vecino, `services/order-status.js`:** el **catálogo de estados**, también puro. Es el único
+  lugar donde un estado tiene **nombre** — antes esa tabla estaba escrita cinco veces (emails, toasts
+  del panel, etiquetas de stats, y una copia en cada frontend), así que agregar `READY` obligó a
+  tocar cinco archivos. Lo consumen `lib/mailer.js`, `controllers/orders.js`,
+  `services/stats/builders.js`, el default de `OrderStatusHistory.note` y —por
+  `GET /order-statuses`— los dos fronts. Los **colores** siguen en cada front a propósito: son clases
+  de Tailwind y tienen que existir en su CSS. Ver [[Órdenes]] §Catálogo de estados.
 - **Mismo patrón "modelo + módulo puro" en la caja:** `services/cash-register.js` exporta
   `CashRegisterModel` (turno, movimientos, resumen, catálogo de etiquetas) **más** la función
   `recordOrderPayments(tx, { tenantId, orderId, payments, actorId })`, que recibe el `tx` del caller y
@@ -1085,21 +1115,29 @@ docs asumen **Next.js**) debería consumir esta API:
   storefront acepta **Bearer o cookie** (`extractToken`). Existe `extractToken` en
   `middleware/auth.js` pero `verifyToken` no lo usa. Un cliente "admin" que mande Bearer no
   autenticará.
-- **Credenciales de Cloudinary fuera de `config.js`.** `env.schema` exige
-  `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET`, pero `DEFAULTS`
-  solo expone `CLOUDINARY_FOLDER`. `lib/cloudinary.js` lee las credenciales **directo de
-  `process.env`** (no pasa por `DEFAULTS`). Funciona, pero rompe la convención de "toda la
+- **Credenciales de Cloudinary fuera de `config.js`.** `env.schema` declara
+  `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` (opcionales desde
+  2026-07-30), pero `DEFAULTS` solo expone `CLOUDINARY_FOLDER`. `lib/cloudinary.js` las lee **directo
+  de `process.env`** (no pasa por `DEFAULTS`). Funciona, pero rompe la convención de "toda la
   config pasa por `config.js`".
-- **Cloudinary es un singleton global y el modelo de negocio pide una cuenta por cliente.**
-  `lib/cloudinary.js` llama `cloudinary.config()` con `process.env` **al importarse**: no hay ningún
-  camino por el que dos tenants usen cuentas distintas en el mismo proceso. Como el deploy es una
-  instancia multi-tenant única y la intención es que cada cliente de producción conecte **sus
-  propias** cuentas de servicios externos, esto es una restricción real, no teórica. El refactor está
-  acotado —8 call sites, todos vía `lib/imageManager.js`— pero arrastra secretos cifrados en reposo,
-  una factory con cache por `tenantId` y decidir qué pasa con un tenant sin credenciales cargadas.
-  Mitigación parcial ya hecha (2026-07-30): el puerto `lib/storage/` recibe `tenantId` en `putFile` y
-  guarda los comprobantes en `{folder}/tenants/{tenantId}/receipts`, así el día que se implemente el
-  cambio queda contenido en el adaptador y la separación de archivos ya existe.
+- **El email está apagado a propósito, y prenderlo hace más de lo que parece** (2026-07-31). No hay
+  `SMTP_HOST`, así que `lib/mailer.js` cae a `jsonTransport` y no sale nada: **WhatsApp es el canal
+  entre el tenant y su cliente**, y un segundo canal que nadie mira era trabajo para peor
+  experiencia. Lo que hay que saber antes de tocarlo: el módulo **no distingue** "plataforma → tenant"
+  de "tenant → su comprador", y sus dos únicos consumidores (`sendStatusEmail` en `services/orders.js`
+  y la verificación del registro del storefront) son **del segundo eje**. O sea que `SMTP_*` no es un
+  interruptor de "mail de la plataforma" sino de "mandarle mails a los compradores de todos los
+  tenants desde una sola dirección". Peor: `const autoVerify = !isSmtpConfigured()`
+  (`services/users.js:101`) acopla el envío con la verificación, así que un SMTP **a medias** (host y
+  puerto puestos, credenciales mal) apaga el auto-verify **y** no entrega el mail → nadie puede
+  registrarse ni entrar, con el error solo en el log. Acción = separar los dos ejes con el patrón de
+  [[Cloudinary por tenant]] antes de configurar nada, y recién ahí poner una cuenta nuestra en el env.
+- **Los assets viejos se quedan en la cuenta global y no se migran** (decisión de producto,
+  2026-07-30). Desde que existe cuenta de Cloudinary por tenant, un cliente que carga la suya sigue
+  teniendo en la cuenta compartida todo lo que subió antes. Está contemplado en los dos caminos donde
+  eso rompía en silencio —`deleteCloudinaryImage` reintenta contra la global, y `OrderReceipt.cloudName`
+  dice en qué cuenta quedó cada comprobante— pero el catálogo queda **partido entre dos cuentas** hasta
+  que alguien escriba la migración (descargar, resubir, actualizar `img`/`imgPublicId`).
 - **Los comprobantes de transferencia no se borran solos, y es intencional.** Existe
   `pnpm receipts:purge` (`scripts/purge-receipts.js`, default 12 meses) pero **no está enganchado a
   nada**: no hay scheduler en el proceso y tampoco se pide que se agregue al cron del host. Dos
@@ -1108,8 +1146,6 @@ docs asumen **Next.js**) debería consumir esta API:
   contable, no datos de terceros acumulados. El borrado es manual desde el panel (`DELETE`, solo
   `ADMIN`). El script queda como herramienta si algún cliente pide una política de retención. Lo que
   **no** hay que hacer es documentarlo como si borrara solo.
-- **Archivo duplicado de Cloudinary.** Conviven `lib/cloudinary.js` y `lib/cloudinary.ts`.
-  El runtime ESM usa el `.js`; el `.ts` no se ejecuta como parte de la app.
 - **`datasource db` sin `url` en el schema.** La conexión va por `@prisma/adapter-pg`
   (`lib/prisma.js`) con `DATABASE_URL`. El cliente se genera fuera de `node_modules`
   (`generated/prisma`), por lo que requiere `prisma generate` para existir.
