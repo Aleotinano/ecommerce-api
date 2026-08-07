@@ -14,6 +14,7 @@ import {
   orderReceiptCreate,
   orderReceiptParams,
   orderCreate,
+  orderExportQuery,
 } from "../schemas/order.schema.js";
 import { validateId } from "../schemas/id.schema.js";
 import { uploadReceipt, normalizeMultipartBody } from "../middleware/upload.js";
@@ -34,6 +35,7 @@ const validation = {
   receipt: validate({ body: orderReceiptCreate }),
   receiptParams: validate({ params: orderReceiptParams }),
   query: validate({ query: orderQuery }),
+  exportQuery: validate({ query: orderExportQuery }),
 };
 
 // Subida de comprobante: multer + verificación del contenido real del archivo, y
@@ -54,6 +56,26 @@ ordersRouter.get(
   requireRole(roleRequired),
   validation.query,
   OrderController.getUserOrders
+);
+
+// Cuántas órdenes hay por estado (encabezados del tablero del admin).
+// Va ANTES de "/:id": si no, la toma la ruta de detalle y muere en validateId.
+ordersRouter.get(
+  "/counts",
+  verifyToken,
+  requireRole(roleRequired),
+  validation.query,
+  OrderController.getStatusCounts
+);
+
+// Las órdenes del rango en una planilla ("el Excel de hoy"). Como `/counts`, va
+// ANTES de "/:id": si no, la toma la ruta de detalle y muere en validateId.
+ordersRouter.get(
+  "/export",
+  verifyToken,
+  requireRole(roleRequired),
+  validation.exportQuery,
+  OrderController.exportOrders
 );
 
 // Obtener una orden específica del usuario

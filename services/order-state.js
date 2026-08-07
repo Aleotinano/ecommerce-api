@@ -41,6 +41,21 @@ export const ORDER_TRANSITIONS = {
 export const PRODUCTION_STATUSES = ["PROCESSING", "READY", "COMPLETED"];
 
 /**
+ * Los estados de los que no se sale: la orden terminó, para bien o para mal.
+ *
+ * **Derivado**, no escrito a mano: un estado es terminal si no tiene a dónde ir.
+ * Poner `["COMPLETED", "CANCELLED"]` en una constante suelta sería una segunda copia
+ * de lo que ya dice `ORDER_TRANSITIONS`, y un estado terminal nuevo quedaría bien
+ * clasificado en un lado y mal en el otro. Es lo que decide qué se puede archivar
+ * (services/order-archive.js).
+ */
+export const TERMINAL_STATUSES = Object.freeze(
+  Object.keys(ORDER_TRANSITIONS).filter(
+    (status) => ORDER_TRANSITIONS[status].length === 0
+  )
+);
+
+/**
  * Signo de cada tipo de fila del libro de cobros. El monto guardado es siempre
  * positivo (`CHECK amount > 0`); el signo vive acá, en un solo lugar, para que no
  * exista la posibilidad de un cobro de −50 escrito por un caller distraído.

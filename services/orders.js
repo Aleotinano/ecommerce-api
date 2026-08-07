@@ -28,8 +28,64 @@ import {
   PRODUCTION_STATUSES,
 } from "./order-state.js";
 import { getStatusMeta, ORDER_STATUS_CODES } from "./order-status.js";
+import { buildOrdersXlsx, ordersFileName } from "./orders-export.js";
 
 const log = logger.child({ module: "orders" });
+
+/**
+ * El `where` del listado del backoffice, en un solo lugar: lo usan el listado
+ * (`getUserOrders`), el contador por estado (`getStatusCounts`) y la planilla
+ * (`getOrdersForExport`). Separarlos sería aceptar que una búsqueda muestre un
+ * conjunto de órdenes, cuente otro y exporte un tercero.
+ *
+ * `from`/`to` los manda solo el export: el listado y los contadores no filtran
+ * por fecha (ver `orderExportQuery` en schemas/order.schema.js).
+ *
+ * `includeArchived` es **false por defecto** a propósito: el tablero muestra el día
+ * en curso, y lo archivado es justamente lo que ya no tiene que estorbar ahí. La
+ * única que lo pide en `true` es la planilla — un reporte de un día que se saltee
+ * las órdenes archivadas de ese día sale vacío.
+ */
+function buildAdminOrdersWhere({
+  tenantId,
+  status,
+  search,
+  from,
+  to,
+  includeArchived = false,
+}) {
+  const where = { tenantId };
+
+  if (!includeArchived) {
+    where.archivedAt = null;
+  }
+
+  if (status) {
+    where.status = status;
+  }
+
+  if (from || to) {
+    where.createdAt = {
+      ...(from && { gte: from }),
+      ...(to && { lte: to }),
+    };
+  }
+
+  if (search) {
+    where.OR = [
+      { user: { username: { contains: search, mode: "insensitive" } } },
+      {
+        orderItems: {
+          some: {
+            product: { name: { contains: search, mode: "insensitive" } },
+          },
+        },
+      },
+    ];
+  }
+
+  return where;
+}
 
 // Solo trae las filas "padre" (líneas normales + línea de cada combo comprado)
 // con sus hijos anidados (componentes elegidos dentro de un combo, price=0 —
@@ -878,27 +934,8 @@ export const OrderModel = {
   },
 
   async getUserOrders({ tenantId, status, search, limit = 10, offset = 0 }) {
-    const where = { tenantId };
-
-    if (status) {
-      where.status = status;
-    }
-
-    if (search) {
-      where.OR = [
-        { user: { username: { contains: search, mode: "insensitive" } } },
-        {
-          orderItems: {
-            some: {
-              product: { name: { contains: search, mode: "insensitive" } },
-            },
-          },
-        },
-      ];
-    }
-
     return prisma.order.findMany({
-      where,
+      where: buildAdminOrdersWhere({ tenantId, status, search }),
       include: {
         user: {
           select: { id: true, username: true },
@@ -909,6 +946,108 @@ export const OrderModel = {
       take: limit,
       skip: offset,
     });
+  },
+
+  /**
+   * Las órdenes de un rango, enteras y sin paginar: la fuente de la planilla.
+   *
+   * Va en orden **cronológico** (al revés que el listado) porque un reporte se
+   * lee de la primera a la última, y trae el mismo `include` que el listado —el
+   * libro de cobros incluido— para que el motor pueda calcular cuánto entró de
+   * cada orden sin una segunda consulta.
+   *
+   * El tope es una red de contención, no una paginación: sin `from`/`to` esto
+   * es "toda la historia del tenant", y una planilla de cien mil filas no la
+   * abre nadie. En la práctica el admin pide un día.
+   */
+  async getOrdersForExport({ tenantId, status, search, from, to, limit = 5000 }) {
+    return prisma.order.findMany({
+      // Con las archivadas: la planilla es el día entero, y al cerrar el turno TODO
+      // lo terminal de ese día queda archivado. Sin esto, "el Excel de hoy" bajado
+      // después del cierre traería solo las órdenes que quedaron abiertas.
+      where: buildAdminOrdersWhere({
+        tenantId,
+        status,
+        search,
+        from,
+        to,
+        includeArchived: true,
+      }),
+      include: {
+        user: { select: { id: true, username: true, email: true } },
+        ...orderItemsInclude.include,
+      },
+      orderBy: { createdAt: "asc" },
+      take: limit,
+    });
+  },
+
+  /** La planilla del rango: las órdenes con su detalle, lista para descargar. */
+  async exportOrders({ tenantId, status, search, from, to }) {
+    const [orders, config] = await Promise.all([
+      this.getOrdersForExport({ tenantId, status, search, from, to }),
+      prisma.tenantConfig.findUnique({
+        where: { tenantId },
+        select: { storeName: true, currency: true },
+      }),
+    ]);
+
+    const buffer = await buildOrdersXlsx({
+      orders,
+      range: { from: from ?? null, to: to ?? null },
+      storeName: config?.storeName ?? null,
+      currency: config?.currency ?? "ARS",
+    });
+
+    return { buffer, filename: ordersFileName({ from, to }) };
+  },
+
+  /**
+   * Cuántas órdenes hay por estado, para los encabezados del tablero.
+   *
+   * Va aparte del listado y no como un total en su respuesta porque el tablero
+   * pide una tanda POR COLUMNA: el número de "Entregadas 50" no sale de contar
+   * lo que se trajo, sino de la base. Comparte el `where` con `getUserOrders`,
+   * así una búsqueda no puede filtrar las cards de una forma y contarlas de
+   * otra.
+   *
+   * Es también donde **rueda el día**. `ensureScheduledSession` es lo que cierra el
+   * turno vencido —y ese cierre es lo que archiva las órdenes terminales—, pero se
+   * resuelve en el momento y hasta acá solo lo llamaban `GET /cash-register/current`
+   * y el enganche de cobros. Un local que no entra a la pantalla de Caja nunca vería
+   * limpiarse el tablero. Este es el otro momento en que alguien "toca" el negocio.
+   *
+   * Va en los contadores y no en el listado porque el tablero pide los contadores
+   * UNA vez por carga y el listado una vez POR COLUMNA.
+   */
+  async getStatusCounts({ tenantId, search, actorId = null }) {
+    // En try/catch y no `await` pelado: un problema de caja no puede tumbar el
+    // listado de órdenes. Si el turno no rueda hoy, rueda en la próxima carga.
+    try {
+      await CashRegisterModel.ensureScheduledSession({ tenantId, actorId });
+    } catch (error) {
+      log.warn(
+        { err: error, tenantId },
+        "No se pudo resolver el turno de caja al contar órdenes"
+      );
+    }
+
+    const rows = await prisma.order.groupBy({
+      by: ["status"],
+      where: buildAdminOrdersWhere({ tenantId, search }),
+      _count: { _all: true },
+    });
+
+    // Todos los códigos presentes aunque no tengan filas: el front no tiene que
+    // defenderse de una clave faltante para pintar una columna vacía.
+    const counts = Object.fromEntries(
+      ORDER_STATUS_CODES.map((code) => [code, 0])
+    );
+    for (const row of rows) {
+      counts[row.status] = row._count._all;
+    }
+
+    return counts;
   },
 
   /**

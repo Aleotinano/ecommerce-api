@@ -639,7 +639,35 @@ model Order {
   // Snapshot del fragmento de conversación que originó la orden (Redis tiene TTL).
   creationContext String?
 
+  // Archivado: la orden sale del tablero, NO de la base. Es un filtro de
+  // visibilidad —el listado del backoffice excluye lo archivado por defecto— y no
+  // un borrado ni un estado: agregar `ARCHIVED` al enum habría roto el pipeline
+  // congelado de `ORDER_STATUS_CODES`, los contadores y la distribución de
+  // Estadísticas, que asumen que todo estado es un paso del flujo.
+  //
+  // Lo sella el CIERRE DEL TURNO DE CAJA y solo sobre estados terminales
+  // (COMPLETED/CANCELLED, ver ARCHIVABLE_STATUSES en services/orders.js). Una
+  // orden abierta no se archiva nunca: esconderla es exactamente cómo se pierde
+  // un pedido, y que se vea vieja en el tablero ES la alarma.
+  //
+  // Los tres campos viajan juntos (CHECK en la migración `20260801120000_order_archive`,
+  // no declarable acá): sin `archivedAt` no puede haber ni autor ni turno.
+  archivedAt   DateTime?
+  archivedById Int?
+
+  // Turno de caja que la archivó — el "día" al que pertenece. Es lo que hace que
+  // el historial de órdenes se pueda leer desde Caja (turno → sus órdenes) sin
+  // depender de `CashMovement.orderId`, que solo existe si hubo un cobro por el
+  // cajón: una cancelada, una de MercadoPago (GATEWAY se saltea) o una entregada
+  // sin cobrar no tienen movimiento y se caerían del historial.
+  //
+  // Sin FK a propósito, mismo criterio que `CashMovement.orderId`: es un hecho
+  // histórico y no puede arrastrar un cascade.
+  cashSessionId Int?
+
   @@index([tenantId])
+  @@index([tenantId, archivedAt])
+  @@index([tenantId, cashSessionId])
 }
 
 // Libro de cobros de la orden: UNA FILA POR COBRO. Es lo que permite responder

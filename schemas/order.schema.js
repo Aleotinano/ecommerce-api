@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { dayBoundary } from "./date.schema.js";
+
 // READY = "listo para retirar/enviar". Es un paso opcional entre PROCESSING y
 // COMPLETED (ver services/order-state.js): un panel viejo que no lo ofrezca
 // sigue funcionando igual.
@@ -318,14 +320,16 @@ export const orderPaymentCreate = z.object({
   note: paymentNote,
 });
 
+const orderStatusFilter = z
+  .enum(ORDER_STATUSES, {
+    errorMap: () => ({
+      message: `El status debe ser uno de: ${ORDER_STATUS_LIST}`,
+    }),
+  })
+  .optional();
+
 export const orderQuery = z.object({
-  status: z
-    .enum(ORDER_STATUSES, {
-      errorMap: () => ({
-        message: `El status debe ser uno de: ${ORDER_STATUS_LIST}`,
-      }),
-    })
-    .optional(),
+  status: orderStatusFilter,
   search: z.string().optional(),
   limit: z.coerce
     .number()
@@ -334,4 +338,19 @@ export const orderQuery = z.object({
     .max(100, "El límite máximo es 100")
     .default(10),
   offset: z.coerce.number().int().min(0).default(0),
+});
+
+/**
+ * El filtro de la planilla de órdenes. Es un schema propio y no `orderQuery`
+ * porque acepta un rango de fechas: agregárselo al del listado se lo daría
+ * también a `/orders/all` y `/orders/counts`, que no lo soportan y lo
+ * ignorarían en silencio.
+ *
+ * Sin paginación a propósito: la planilla es el período entero o no sirve.
+ */
+export const orderExportQuery = z.object({
+  status: orderStatusFilter,
+  search: z.string().optional(),
+  from: dayBoundary("start", "desde"),
+  to: dayBoundary("end", "hasta"),
 });

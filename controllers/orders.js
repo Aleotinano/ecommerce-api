@@ -3,6 +3,7 @@ import { OrderReceiptModel } from "../services/order-receipts.js";
 import { evaluateOrder } from "../services/order-state.js";
 import { getStatusMeta } from "../services/order-status.js";
 import { buildOrderWhatsappLink } from "../lib/whatsapp-link.js";
+import { sendXlsx } from "../helpers/xlsx.js";
 import {
   cleanupUploadedReceipt,
   getUploadedReceiptFile,
@@ -258,6 +259,47 @@ export class OrderController {
     }
   }
 
+  /**
+   * Cuántas órdenes hay por estado: los encabezados del tablero del admin.
+   * Respeta la misma búsqueda que el listado; `status`, `limit` y `offset` del
+   * query no aplican acá y se ignoran.
+   */
+  /**
+   * La planilla de órdenes del rango. El admin la pide para el día de hoy; el
+   * endpoint acepta cualquier `from`/`to` (y los mismos `status`/`search` del
+   * listado) porque el filtro es el del listado, no uno propio.
+   */
+  static async exportOrders(req, res, next) {
+    try {
+      const { buffer, filename } = await OrderModel.exportOrders({
+        tenantId: req.tenantId,
+        ...req.search,
+      });
+
+      return sendXlsx(res, buffer, filename);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getStatusCounts(req, res, next) {
+    try {
+      const { search } = req.search;
+
+      const counts = await OrderModel.getStatusCounts({
+        tenantId: req.tenantId,
+        search,
+        // Para el turno que se abra solo al pedir el tablero: queda registrado quién
+        // estaba mirando, igual que en `GET /cash-register/current`.
+        actorId: req.user?.id ?? null,
+      });
+
+      return res.json({ counts });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async getById(req, res, next) {
     try {
       const { id: userId, role } = req.user;
@@ -335,14 +377,6 @@ export class OrderController {
         changedById: req.user.id,
         note,
       });
-
-      const statusMessages = {
-        PROCESSING: "en preparación",
-        READY: "marcada como lista",
-        COMPLETED: "completada",
-        CANCELLED: "cancelada",
-        PENDING: "actualizada",
-      };
 
       return res.json({
         // Del catálogo, no de una tabla local: el texto de un estado se escribe
