@@ -6,8 +6,13 @@ export function errorHandler(err, req, res, next) {
   const code = err.code || "INTERNAL_ERROR";
   const isProd = DEFAULTS.NODE_ENV === "production";
 
+  // Un 4xx es el cliente pidiendo mal, no el server fallando: loguearlo en
+  // `error` iguala un 404 de una ruta inexistente con una caída de la base, y el
+  // resultado es que el nivel `error` deja de significar nada. Los 5xx —lo único
+  // que hay que salir a mirar— quedan solos en su nivel.
   const reqLog = req.log ?? logger;
-  reqLog.error(
+  const level = statusCode >= 500 ? "error" : "warn";
+  reqLog[level](
     {
       err,
       code,

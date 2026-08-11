@@ -1,0 +1,36 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://github.com/Aleotinano/ecommerce-api/.vex/redis-7-alpine",
+  "author": "Alejandro <alejandrootinano2@gmail.com>",
+  "role": "Maintainer",
+  "timestamp": "2026-08-07T10:00:00-03:00",
+  "version": 1,
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "CVE-2025-60876",
+        "description": "El applet wget de BusyBox acepta CR/LF crudos en el request-target, lo que permite partir la request-line e inyectar headers (request splitting)."
+      },
+      "timestamp": "2026-08-07T10:00:00-03:00",
+      "products": [
+        { "@id": "pkg:docker/redis@7-alpine" }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "El binario está presente (/usr/bin/wget -> /bin/busybox) pero nunca se ejecuta: el contenedor corre solo `redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru`, sin entrypoint script, sin healthcheck y sin cron. El componente vulnerable es el cliente HTTP, así que haría falta que algo dentro del contenedor invocara wget con una URL controlada por el atacante. Alpine no tiene parche disponible (busybox-1.37.0-r30 en edge sigue afectado), así que actualizar la imagen no lo resuelve."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-27456",
+        "description": "TOCTOU en el binario mount de util-linux: valida el path con privilegios del usuario y lo reabre como root sin revalidar, lo que permite a un usuario sin privilegios leer archivos protegidos."
+      },
+      "timestamp": "2026-08-07T10:00:00-03:00",
+      "products": [
+        { "@id": "pkg:docker/redis@7-alpine" }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "El fallo está en el binario `mount` de util-linux, que no está en la imagen. Lo único que instala la familia util-linux acá es /usr/bin/setpriv (subpaquete `setpriv`, agregado por el Dockerfile de redis porque busybox no alcanza); `apk info -L util-linux` no devuelve archivos y /bin/mount es un symlink a /bin/busybox. Scout lo reporta porque el subpaquete arrastra el origen `util-linux 2.40.4-r1`. Además el exploit exige el bit SUID en mount (la imagen no tiene ningún binario SUID: `find / -perm -4000` vuelve vacío) y una entrada `user,loop` en /etc/fstab (solo están las de cdrom/usbdisk por defecto de Alpine)."
+    }
+  ]
+}

@@ -39,7 +39,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    entrypoint: ["npx", "prisma", "migrate", "deploy"]
+    # La imagen no lleva gestor de paquetes (ver Dockerfile), así que se invoca
+    # el shim de Prisma directo en vez de `pnpm exec` / `npx`.
+    entrypoint: ["node_modules/.bin/prisma", "migrate", "deploy"]
     profiles: ["tools"]
 
   backend:

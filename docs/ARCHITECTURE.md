@@ -23,8 +23,16 @@ lado: backend
   ejecuta con `node app.js`.
 
 ### Package manager
-- **pnpm 10.24.0** (declarado en `package.json` → `"packageManager": "pnpm@10.24.0..."`).
-- Existe `pnpm-workspace.yaml` y `pnpm-lock.yaml`.
+- **pnpm 10.24.0** (declarado en `package.json` → `"packageManager": "pnpm@10.24.0..."`, pinneado
+  con hash).
+- Existe `pnpm-workspace.yaml` y `pnpm-lock.yaml`. No hay `package-lock.json` ni `yarn.lock`.
+- **pnpm-only, sin excepciones.** Nada de `npx`: para correr un binario de `node_modules/.bin` va
+  `pnpm exec <bin>` (ej. `pnpm exec prisma generate`), y para uno remoto `pnpm dlx`.
+- En Docker la regla es más fuerte: **la imagen de runtime no lleva ningún gestor de paquetes**.
+  La etapa `deps` usa `corepack enable pnpm` para instalar dependencias, pero la etapa `runtime`
+  invoca los binarios directo (`node_modules/.bin/prisma generate`) y borra npm, yarn y corepack de
+  la imagen base. El motivo está en §Infraestructura local: cualquier gestor que quede adentro
+  arrastra su propio árbol de dependencias bundleadas, y con él sus CVEs.
 
 ### Dependencias principales (de `package.json`)
 
@@ -55,7 +63,7 @@ lado: backend
 | `seed` | `node prisma/seed.js` | Seed base |
 | `seed:stats` | `node prisma/seed-stats.js` | Seed de datos para stats |
 | `seed:config` | `node prisma/seed-tenant-config.js` | Seed de `TenantConfig` (perfil de flujo + branding) |
-| — | `node prisma/set-tenant-profile.js <slug> <perfil>` | Aplica un perfil de flujo de venta a un tenant. Sin argumentos lista perfiles y el estado de cada tenant. **No** es un script de npm: es operación manual, no parte de ningún seed |
+| — | `node prisma/set-tenant-profile.js <slug> <perfil>` | Aplica un perfil de flujo de venta a un tenant. Sin argumentos lista perfiles y el estado de cada tenant. **No** es un script de pnpm: es operación manual, no parte de ningún seed |
 | — | `node prisma/set-cash-register.js <slug> on\|off` | Habilita o apaga el módulo de caja de un tenant (y siembra las 7 etiquetas por defecto al prenderlo). Sin argumentos lista el estado de cada tenant. Operación manual, como el anterior — **ojo**: prendido, cobrar sin turno abierto falla |
 | `seed:catalog` | `node prisma/seed-catalog.js` | Seed de catálogo |
 | `seed:mesa-dulce` | `node prisma/mesa-dulce/index.js` | Seed completo del primer tenant real (categorías + productos + órdenes) |
@@ -67,10 +75,71 @@ lado: backend
 > datos reales cargados.
 
 ### Infraestructura local
-- `docker-compose.yml` levanta **solo Redis** (`redis:7-alpine`, puerto `6379`, AOF
-  `--appendonly yes`, `--maxmemory 256mb --maxmemory-policy allkeys-lru`).
-- **PostgreSQL no está en el compose** → la base de datos es externa/manual (se conecta vía
-  `DATABASE_URL`).
+
+`docker-compose.yml` levanta cuatro servicios. Es un compose **de desarrollo**; el de producción
+es `docker-compose.prod.yml` y está documentado en [DEPLOY.md](DEPLOY.md) — no es un override de
+este, porque compose mergea las listas `ports:` y un override no puede despublicar un puerto.
+
+| Servicio | Imagen | Notas |
+|---|---|---|
+| `postgres` | `postgres:17-alpine` | Puerto `5432`, volumen `postgres_data`, healthcheck con `pg_isready`. Credenciales de dev (`ecommerce`/`ecommerce`) |
+| `redis` | `redis:7-alpine` | Puerto `6379`, volumen `redis_data`, AOF `--appendonly yes`, `--maxmemory 256mb --maxmemory-policy allkeys-lru`. **Sin password** |
+| `migrate` | build local | One-shot: `pnpm exec prisma migrate deploy` contra `postgres`. Está bajo el perfil `tools`, se corre a mano con `docker compose run --rm migrate` |
+| `backend` | build local (`Dockerfile`) | Puerto `3001`, `env_file: .env` con `PORT`/`DATABASE_URL`/`REDIS_URL` pisados por compose |
+
+> [!warning] `postgres` y `redis` publican sus puertos a `0.0.0.0`, y Redis no pide password.
+> Detrás del NAT de una máquina de desarrollo es tolerable. Si este compose alguna vez toca un
+> server con IP pública, hay que bindear a `127.0.0.1:` o directamente sacar el `ports:` — los
+> contenedores ya se hablan por la red de compose. Un Redis abierto es RCE directa
+> (`CONFIG SET dir` + escritura de `authorized_keys`).
+>
+> Eso es exactamente lo que hace `docker-compose.prod.yml`: sin `ports:` en ninguno de los dos,
+> `--requirepass` en Redis y el backend alcanzable sólo por Caddy. **Este compose no va a un
+> server**, es el motivo por el que existe el otro.
+
+#### CVEs de las imágenes (2026-08-07)
+
+Los tags son **flotantes** (`17-alpine`, `7-alpine`, `24-alpine`), así que la vía de parcheo es
+`docker compose pull` + `docker compose build --pull`. El criterio es: **lo que tiene fix se
+actualiza; lo que no tiene fix se evalúa y se documenta como excepción**, nunca se ignora en
+silencio.
+
+Las excepciones viven en [`.vex/`](../.vex/README.md) (OpenVEX, versionado en git). Hoy hay dos,
+las dos de `redis:7-alpine` y las dos **sin parche disponible en Alpine**, así que actualizar la
+imagen no las saca:
+
+- **CVE-2025-60876** (busybox, medium) — el applet `wget` acepta CR/LF crudos en el request-target
+  → request splitting. Es un fallo del **cliente** HTTP y el contenedor corre solo `redis-server`:
+  no hay entrypoint script, healthcheck ni cron que invoque `wget`. `not_affected` /
+  `vulnerable_code_not_in_execute_path`.
+- **CVE-2026-27456** (util-linux, medium) — TOCTOU en el binario `mount`, que **no está en la
+  imagen**: lo único que instala esa familia acá es `/usr/bin/setpriv` (el Dockerfile de redis lo
+  agrega porque busybox no alcanza), `/bin/mount` es un symlink a busybox, no hay ningún binario
+  SUID y `/etc/fstab` solo trae las entradas de cdrom/usbdisk de Alpine. `not_affected` /
+  `vulnerable_code_not_present`.
+
+**`node:24-alpine`: resuelto sacando los gestores de paquetes.** La imagen base arrastra 18 CVEs con
+fix (1 crítica, 6 altas) en cuatro paquetes —`tar`, `brace-expansion`, `undici`, `ip-address`— y los
+cuatro viven dentro del árbol de dependencias bundleadas de npm, que es el único código del
+ecosistema npm que hay en esa imagen. Como el proyecto es pnpm-only, el `Dockerfile` borra npm
+(y de paso yarn y corepack, que tampoco usa nadie).
+
+> [!important] Un gestor de paquetes no se reemplaza por otro: se saca.
+> El primer intento fue meter pnpm en la etapa `runtime` vía corepack, para que el servicio
+> `migrate` pudiera hacer `pnpm exec prisma migrate deploy`. Salió peor: el bundle de pnpm son
+> 20 MB en `/opt/corepack` y trae **su propio `tar` con una CVE crítica**, más 11 altas del propio
+> paquete `pnpm`. Cambiar el árbol de npm por el de pnpm no gana nada. La solución es invocar el
+> shim directo —`node_modules/.bin/prisma`, que es un script `#!/bin/sh` y no necesita que nada lo
+> resuelva— y dejar la imagen sin gestor alguno.
+
+Lo que queda en la imagen del backend son las CVEs de **nuestro** `node_modules`, y la mayor parte
+viene de las devDependencies que no deberían estar ahí (ver §11 GAPS / INCONSISTENCIAS).
+
+**`postgres:17-alpine`: pendiente, no resuelto.** Arrastra 39 CVEs con fix disponible (1 crítica, 16
+altas) en el `gosu` bundleado, todas de la stdlib de Go 1.24.6. Comparé digests y la imagen local
+**ya es la última del registry**, así que `docker compose pull` no las arregla: dependen de que
+upstream rebuildee. No hay excepción VEX porque no están evaluadas — es deuda abierta, no un riesgo
+descartado.
 
 ### Variables de entorno
 
@@ -87,13 +156,13 @@ Fuente única de verdad: `schemas/env.schema.js` (validado con zod en `config.js
 | `BASE_URL` | **sí** | URL |
 | `APP_URL` | no | cae a `BASE_URL` |
 | `STORE_APP_URL` | no | `http://localhost:3000` |
-| `PUBLIC_KEY` | **sí** | (MercadoPago public key) |
-| `ACCESS_TOKEN` | **sí** | (MercadoPago access token) |
+| `PUBLIC_KEY` | no | (MercadoPago public key) **No la lee ninguna línea del código**: se declara y se expone en `DEFAULTS`, nada más |
+| `ACCESS_TOKEN` | no | (MercadoPago access token) Vacío = módulo inactivo y la app arranca igual; el request que quiera crear una preferencia falla con `MERCADOPAGO_NOT_CONFIGURED` (503). Eran requeridas, y eso obligaba a inventar un token falso para deployar un tenant que sólo cobra en efectivo/transferencia — o sea, todos los de hoy |
 | `CLOUDINARY_CLOUD_NAME` | no | cuenta de la **plataforma**: la usa el tenant que no tenga la suya en `TenantConfig` (ver §11). Vacía = ese tenant no puede subir (`CLOUDINARY_NOT_CONFIGURED`), que es lo correcto si cada tienda tiene cuenta propia. Leída directo por `lib/cloudinary.js` |
 | `CLOUDINARY_API_KEY` | no | idem |
 | `CLOUDINARY_API_SECRET` | no | idem |
 | `CLOUDINARY_FOLDER` | no | `e-commerce-express` |
-| `ORIGINS` | no | CSV de orígenes CORS permitidos |
+| `ORIGINS` | **en prod** | CSV de orígenes CORS del **panel admin** (el storefront no depende de esto: `storeCors` acepta cualquier origen). Con `NODE_ENV=production` el arranque **falla** si falta: vacía no degrada, rechaza *todas* las requests del panel. La barra final se descarta al parsear — el header `Origin` nunca la lleva, así que `https://x.com/` no matchearía nunca |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | no | SMTP nodemailer |
 | `SMTP_SECURE` | no | `"true"`/`"false"` → boolean (default false) |
 | `MAIL_FROM` | no | `no-reply@localhost` |
@@ -132,7 +201,9 @@ e-commerce-express-1/
 ├── app.js                  # Bootstrap Express: middlewares globales + montaje de routers
 ├── config.js               # Carga/valida env (DEFAULTS); única fuente de config
 ├── prisma.config.ts        # Config de Prisma CLI
-├── docker-compose.yml      # Solo Redis
+├── docker-compose.yml      # postgres + redis + migrate (perfil `tools`) + backend
+├── Dockerfile              # Imagen del backend (multi-stage: deps → runtime, usuario `app`)
+├── .vex/                   # Excepciones VEX de Docker Scout (CVEs sin fix ya evaluadas)
 ├── vitest.config.js
 ├── routes/                 # Definición de endpoints (Router de Express) por feature
 │   ├── store/              # Sub-API "storefront" (auth, products, categories, cart, orders, addresses, config, mercadopago, chat, page)
@@ -411,9 +482,21 @@ Hay **dos mecanismos distintos** de resolución de tenant según la familia de r
 - `resolveTenantFromSlug` (`middleware/tenant.js`), montado globalmente en
   `routes/store/index.js` antes de las sub-rutas. Resuelve el **slug** desde:
   1. **Subdominio** del host (`extractSlugFromHost`): toma el primer label del hostname,
-     ignora hosts locales (`localhost`, `127.0.0.1`, `::1`, `0.0.0.0`) y subdominios
-     `www`/`api`/`app`; requiere ≥3 labels.
+     ignora hosts locales (`localhost`, `127.0.0.1`, `::1`, `0.0.0.0`), el **host de la
+     propia API** (se deriva de `BASE_URL`) y los subdominios `www`/`api`/`app`;
+     requiere ≥3 labels.
   2. Header **`X-Tenant-Slug`** (fallback).
+
+> [!important] El host de la API se descarta por `BASE_URL`, no por la lista de nombres
+> `IGNORED_SUBDOMAINS` son tres nombres, y **el subdominio le gana al header**: cualquier
+> dominio de ≥3 labels que no empiece con `www`/`api`/`app` se comía el slug. Un deploy en
+> `micomercio.duckdns.org` leía `micomercio` como tenant y **todo `/store/*` moría con
+> `TENANT_NOT_FOUND`** — catálogo, carrito, checkout y chat — mientras el panel admin
+> seguía andando, porque su tenant sale del token. Por eso se compara contra `BASE_URL`,
+> que ya es obligatoria y ya apunta al host de la API.
+>
+> Corolario para el deploy: **`BASE_URL` tiene que ser exactamente el host por el que
+> entran las requests**. Si no coinciden, vuelve el bug. Ver `tests/tenant-host-resolution.test.js`.
 - Con el slug busca el `Tenant` en DB (`select id, slug, name, isActive`); si no existe →
   404 `TENANT_NOT_FOUND`, si está inactivo → 403 `TENANT_INACTIVE`. Setea
   `req.tenantId`, `req.tenantSlug` y `req.tenant`.
@@ -511,7 +594,7 @@ Convenciones de middleware citadas: `verifyToken` (cookie admin), `requireRole([
 
 | Método | Ruta | Middleware | Controller → Service |
 |---|---|---|---|
-| POST | `/orders` | `verifyToken`, `validate(body: orderCreate)` | `OrderController.create` → `OrderModel.create` (`origin: ADMIN`) |
+| POST | `/orders` | `verifyToken`, `validate(body: orderCreate)` | `OrderController.create` → `OrderModel.create` (`origin: ADMIN`). Admite `items` — líneas explícitas del **mostrador**: cuando vienen, el carrito no se lee ni se vacía; el precio lo sigue resolviendo el server con `priceItems` |
 | GET | `/orders` | `verifyToken`, `validate(query)` | `OrderController.getAll` → `OrderModel.getAll` |
 | GET | `/orders/all` | `verifyToken`, `requireRole(["ADMIN","STAFF"])`, `validate(query)` | `OrderController.getUserOrders` → `OrderModel.getUserOrders` |
 | GET | `/orders/:id` | `verifyToken`, `validate(params)` | `OrderController.getById` → `OrderModel.getUserOrderById` |
@@ -766,7 +849,7 @@ la respuesta del `POST`.
 
 | Método | Ruta | Middleware | Controller → Service |
 |---|---|---|---|
-| POST | `/store/orders` | `optionalStoreAuth`, `resolveCartOwner`, `markStoreOrigin`, `validate(body: orderCreate)` | `OrderController.create` → `OrderModel.create` (`origin: STORE`; el 201 incluye el deep-link `wa.me` del pedido, armado con `lib/whatsapp-link.js`) |
+| POST | `/store/orders` | `rejectExplicitItems`, `optionalStoreAuth`, `resolveCartOwner`, `markStoreOrigin`, `validate(body: orderCreate)` | `OrderController.create` → `OrderModel.create` (`origin: STORE`; el 201 incluye el deep-link `wa.me` del pedido, armado con `lib/whatsapp-link.js`). Comparte el schema `orderCreate` con el backoffice, pero **acá `items` se rechaza**: `rejectExplicitItems` corta con `400 ITEMS_NOT_ALLOWED` antes de resolver carrito, así que por esta ruta las líneas salen siempre del carrito |
 | GET | `/store/orders` | `verifyStoreToken`, `validate(query)` | `OrderController.getAll` → `OrderModel.getAll` |
 | GET | `/store/orders/:id` | `verifyStoreToken`, `validate(params)` | `OrderController.getById` → `OrderModel.getUserOrderById` |
 
@@ -1110,6 +1193,14 @@ docs asumen **Next.js**) debería consumir esta API:
 - **Sin scoping de tenant automático.** No hay extensión/middleware de Prisma que filtre por
   `tenantId`. Cada query debe agregar `tenantId` a mano → si un método lo olvida, hay
   riesgo de fuga de datos entre tenants. Es una convención, no una garantía del ORM.
+  Sigue sin haber garantía, pero desde 2026-08-05 hay **red**: `tests/isolation.test.js`
+  cubre las lecturas y `tests/isolation-mutations.test.js` las escrituras del backoffice
+  (productos, variantes, categorías, promos, etiquetas de caja, órdenes, roles, imágenes
+  de sugerencias), chequeando en cada caso el código de error **y** que la fila del otro
+  tenant no se haya movido. Importa porque buena parte de esas escrituras son correctas
+  por *scoping transitivo* —un `findFirst({ id, tenantId })` que tira 404 y después un
+  `update` por `id` pelado—, así que reordenar esos dos statements rompe el aislamiento
+  en silencio.
 - **Asimetría de autenticación admin vs store.** El admin viaja por **cookie** y
   `verifyToken` **solo lee la cookie** (no acepta `Authorization: Bearer`), mientras que la
   storefront acepta **Bearer o cookie** (`extractToken`). Existe `extractToken` en
@@ -1149,8 +1240,11 @@ docs asumen **Next.js**) debería consumir esta API:
 - **`datasource db` sin `url` en el schema.** La conexión va por `@prisma/adapter-pg`
   (`lib/prisma.js`) con `DATABASE_URL`. El cliente se genera fuera de `node_modules`
   (`generated/prisma`), por lo que requiere `prisma generate` para existir.
-- **Postgres no está en `docker-compose.yml`** (solo Redis). El compose no levanta toda la
-  infra; la DB es externa/manual.
+- **La imagen de runtime instala las devDependencies.** `Dockerfile` corre
+  `pnpm install --frozen-lockfile` sin `--prod`, así que la imagen se lleva `eslint`, `vitest`,
+  `nodemon`, `typescript`, `tsx` y `standard`. Ojo: **no alcanza con agregar `--prod`**, porque
+  `@prisma/client` y `dotenv` están mal ubicados en `devDependencies` y son runtime real
+  (`app.js:1` hace `import "dotenv/config"`). Primero hay que moverlos a `dependencies`.
 - **`getToday` no consume cuota de LLM.** La sugerencia AUTO del día puede invocar al LLM
   sin pasar por `consumeLlmQuota`; el cost guard (`DAILY_LLM_LIMIT = 15`) solo aplica a
   `generateForProduct` y `refineProductCopy`.
@@ -1169,9 +1263,13 @@ docs asumen **Next.js**) debería consumir esta API:
   contadores de rate limit y cost-guards. Los `.env` no se commitean, así que en una
   máquina nueva hay que acordarse.
 - **`pnpm test` falla ~1 de cada 3 veces sin que falle ningún test** (flake del harness,
-  no del código). El síntoma es siempre `Test Files 48 passed (49)` + `Errors 1 error` +
+  no del código). El síntoma es siempre **un archivo menos del total** (hoy `Test Files
+  56 passed (57)`) + `Errors 1 error` +
   **ninguna línea `FAIL`**: es `Worker exited unexpectedly`, el fork se cae al desmontar
   y los resultados de un archivo entero quedan sin reportar, con exit code no cero.
+  **No siempre se cae el mismo archivo**: en dos corridas seguidas del 2026-08-07
+  faltaron 7 tests en una y 8 en la otra, así que no hay un archivo culpable al que
+  mirarle el `afterAll`.
   Antes de investigar, mirar si hay líneas `FAIL`; si no las hay, volver a correr.
   Cerrar el cliente de Redis por archivo (`setupFiles` + `afterAll`) se probó y **no lo
   arregla** — y ojo: importar `lib/redis.js` en el tope de un setup file rompe los tests

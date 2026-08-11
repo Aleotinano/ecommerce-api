@@ -1,8 +1,17 @@
 import { z } from "zod";
 
-export const envSchema = z.object({
+const envShape = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   PORT: z.coerce.number().int().positive().default(3001),
+
+  // Expresión `trust proxy` de Express: cantidad de proxies delante de la app
+  // ("1" detrás del Caddy del deploy), "true"/"false", o una lista de IPs/CIDRs.
+  // El default "0" es el correcto en local, donde no hay nadie adelante.
+  //
+  // Sin esto, detrás de un reverse proxy `req.ip` es la IP del proxy y los cinco
+  // rate limiters de middleware/rateLimit.js meten a TODOS los visitantes en el
+  // mismo balde. Ver docs/DEPLOY.md.
+  TRUST_PROXY: z.string().default("0"),
 
   DATABASE_URL: z.string().min(1),
   SECRET_JWT_KEY: z.string().min(1),
@@ -11,8 +20,18 @@ export const envSchema = z.object({
   APP_URL: z.string().url().optional(),
   STORE_APP_URL: z.string().url().optional(),
 
-  PUBLIC_KEY: z.string().min(1),
-  ACCESS_TOKEN: z.string().min(1),
+  // MercadoPago. OPCIONALES: la integración existe pero hoy no la usa ningún
+  // tenant — todos cobran en efectivo o por transferencia, que es un flujo
+  // enteramente manual (ver `paymentConfirmedById` en el schema de Prisma y
+  // MANUAL_CHANNELS en schemas/order.schema.js). Sin `ACCESS_TOKEN` el módulo
+  // queda inactivo y la app arranca igual; sólo falla el request que intente
+  // crear una preferencia, con `MERCADOPAGO_NOT_CONFIGURED` (503).
+  //
+  // Eran requeridas y eso obligaba a inventar un token falso para poder
+  // deployar. `PUBLIC_KEY` además no la lee nadie: se declara acá, se expone en
+  // DEFAULTS y no la consume ninguna línea del código.
+  PUBLIC_KEY: z.string().min(1).optional(),
+  ACCESS_TOKEN: z.string().min(1).optional(),
   // Cuenta de Cloudinary de la PLATAFORMA. Opcionales a propósito: cada cliente de
   // producción carga la suya en `TenantConfig` (ver lib/cloudinary.js), así que un
   // deploy donde todas las tiendas tienen cuenta propia no necesita ninguna acá — y
@@ -83,4 +102,25 @@ export const envSchema = z.object({
   // renombrarlo no puede exigir tocar el deploy.
   SECRET_ENC_KEY: z.string().optional(),
   WHATSAPP_TOKEN_ENC_KEY: z.string().optional(),
+});
+
+// En producción, `ORIGINS` vacía no degrada nada: **rechaza todas** las requests
+// del panel admin, porque fuera de dev no hay ningún origen permitido por default
+// (middleware/cors.js). Y hasta acá la app arrancaba igual, así que el síntoma era
+// un panel entero muerto con un error de CORS y ninguna pista de por qué.
+//
+// Fallar al arrancar es más ruidoso y mucho más barato de diagnosticar: el
+// contenedor no levanta y el mensaje dice exactamente qué falta. El storefront no
+// depende de esto (`storeCors` acepta cualquier origen, ver docs/DEPLOY.md).
+export const envSchema = envShape.superRefine((env, ctx) => {
+  if (env.NODE_ENV === "production" && !env.ORIGINS?.trim()) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["ORIGINS"],
+      message:
+        "ORIGINS es obligatoria con NODE_ENV=production: sin ella el panel admin " +
+        "rechaza todas las requests por CORS. Es un CSV de orígenes, " +
+        'ej. "https://panel.midominio.com".',
+    });
+  }
 });

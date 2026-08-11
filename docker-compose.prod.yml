@@ -1,0 +1,127 @@
+# Compose de PRODUCCIÓN. Pensado para una VM con IP pública (ver docs/DEPLOY.md).
+#
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# NO es un override de docker-compose.yml, y no puede serlo: compose MERGEA las
+# listas `ports:`, así que un archivo de override no tiene forma de despublicar un
+# puerto que el archivo base publica. Y despublicar `postgres` y `redis` es
+# justamente lo que cambia acá — el compose de dev los expone en 0.0.0.0 con
+# credenciales de dev y sin password en Redis, que detrás del NAT de una máquina
+# de desarrollo es tolerable y en una IP pública es una RCE servida.
+#
+# Todos los valores salen de `.env`, que en el server tiene los valores de
+# producción (mismo archivo que consume `env_file`, así que hay una sola fuente).
+
+name: ecommerce
+
+x-logging: &logging
+  # Sin esto los logs de json-file crecen sin techo y llenan el disco de la VM.
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ecommerce}
+      POSTGRES_USER: ${POSTGRES_USER:-ecommerce}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD en .env}
+    # Sin `ports:` a propósito: la DB se habla sólo por la red interna de compose.
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-ecommerce} -d ${POSTGRES_DB:-ecommerce}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+    logging: *logging
+
+  redis:
+    image: redis:7-alpine
+    # `--requirepass` es la segunda cerradura: tampoco publica puerto, pero si
+    # algún día alguien agrega un `ports:` sin pensarlo, un Redis abierto es RCE
+    # directa (CONFIG SET dir + escritura de authorized_keys).
+    # La password va dentro de REDIS_URL, así que generala en hex
+    # (`openssl rand -hex 24`): un `@` o un `/` rompen el parseo de la URL.
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --requirepass ${REDIS_PASSWORD:?falta REDIS_PASSWORD en .env}
+    volumes:
+      - redis_data:/data
+    restart: always
+    logging: *logging
+
+  # One-shot para aplicar migraciones. Correr ANTES de cada `up -d` que traiga
+  # migraciones nuevas:
+  #   docker compose -f docker-compose.prod.yml run --rm migrate
+  migrate:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-ecommerce}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ecommerce}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # La imagen no lleva gestor de paquetes (ver Dockerfile), así que se invoca
+    # el shim de Prisma directo en vez de `pnpm exec` / `npx`.
+    entrypoint: ["node_modules/.bin/prisma", "migrate", "deploy"]
+    profiles: ["tools"]
+    restart: "no"
+
+  backend:
+    build: .
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: "3001"
+      DATABASE_URL: postgres://${POSTGRES_USER:-ecommerce}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ecommerce}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      # Un solo salto adelante: Caddy. Ver app.js -> app.set("trust proxy").
+      TRUST_PROXY: "1"
+    # Sin `ports:`: el único que llega al backend es Caddy, por la red de compose.
+    expose:
+      - "3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: always
+    logging: *logging
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    environment:
+      DOMAIN: ${DOMAIN:?falta DOMAIN en .env}
+      ACME_EMAIL: ${ACME_EMAIL:?falta ACME_EMAIL en .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # `caddy_data` guarda los certificados y la cuenta ACME. Si se pierde, Caddy
+      # vuelve a pedir todo y Let's Encrypt rate-limitea a 5 certificados por
+      # dominio por semana: no borres este volumen para "empezar limpio".
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+    restart: always
+    logging: *logging
+
+volumes:
+  postgres_data:
+  redis_data:
+  caddy_data:
+  caddy_config:

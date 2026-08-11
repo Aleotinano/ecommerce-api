@@ -1,14 +1,20 @@
 .env
 .env.test
 node_modules
-pnpm-lock.yaml
 generated
 nota.md
 .vscode
 .agents
 ngrok.exe
-pnpm-workspace.yaml
 tmp
+
+# `pnpm-lock.yaml` y `pnpm-workspace.yaml` SE VERSIONAN. Estaban ignorados, y eso
+# rompía el deploy: el Dockerfile hace `COPY package.json pnpm-lock.yaml ./` +
+# `pnpm install --frozen-lockfile`, así que un `git clone` sin lockfile no puede
+# ni empezar a buildear. Además, un lockfile ausente vuelve `--frozen-lockfile`
+# decorativo: cada build resolvería versiones distintas.
+# Los backups de Postgres (scripts/backup-db.sh) sí quedan afuera.
+backups/
 
 # seeds prisma
 

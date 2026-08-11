@@ -1,5 +1,5 @@
 import prisma from "../lib/prisma.js";
-import { preference, payment } from "../config/mercadopago.js";
+import { getPreference, getPayment } from "../config/mercadopago.js";
 import { getBackUrls, getPaymentMethods } from "../helpers/mercadopago.js";
 import { createError } from "../helpers/error.js";
 import { DEFAULTS } from "../config.js";
@@ -76,6 +76,12 @@ export const mercadopagoModel = {
       notification_url: `${DEFAULTS.BASE_URL}/mercadopago/webhook`,
     };
 
+    // Fuera del try: adentro, el catch convierte CUALQUIER error en un 502
+    // PAYMENT_PROCESSING_ERROR, y eso enmascararía el MERCADOPAGO_NOT_CONFIGURED
+    // (503) —que no es un fallo del gateway sino de configuración— haciendo
+    // parecer que MercadoPago se cayó cuando en realidad nunca se configuró.
+    const preference = getPreference();
+
     try {
       const mpResponse = await preference.create({
         body: bodyMp,
@@ -102,7 +108,7 @@ export const mercadopagoModel = {
   },
 
   async getWebhook({ paymentId }) {
-    const paymentInfo = await payment.get({
+    const paymentInfo = await getPayment().get({
       id: paymentId,
     });
 

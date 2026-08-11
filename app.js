@@ -40,6 +40,12 @@ import { tenantAttributesRouter } from "./routes/tenant-attributes.js";
 const PORT = DEFAULTS.PORT || 3001;
 const app = express();
 
+// Cuántos proxies hay adelante (0 en local, 1 detrás del Caddy del deploy). Sin
+// esto `req.ip` es la IP del proxy y no la del visitante: los rate limiters
+// dejan de discriminar y un solo balde compartido tira 429 a toda la tienda.
+// Ver schemas/env.schema.js -> TRUST_PROXY y docs/DEPLOY.md.
+app.set("trust proxy", DEFAULTS.TRUST_PROXY);
+
 app.use(helmet());
 app.use(middleWare());
 

@@ -4,11 +4,34 @@ import { envSchema } from "./schemas/env.schema.js";
 
 const env = envSchema.parse(process.env);
 
+// Express acepta en `trust proxy` un número de saltos, un booleano o una lista de
+// IPs/CIDRs. La env var es siempre string, así que se devuelve al tipo que
+// corresponde: "2" -> 2, "true" -> true, "loopback" -> "loopback".
+// El header `Origin` que manda el browser NUNCA lleva barra final, así que un
+// `ORIGINS=https://panel.com/` no matchea nunca y el panel queda afuera sin decir
+// por qué. Se normaliza acá en vez de pedirle precisión al que escribe el .env.
+// El filtro de vacíos tolera comas colgadas y espacios sueltos en la lista.
+const parseOrigins = (raw) =>
+  raw
+    ? raw
+        .split(",")
+        .map((origin) => origin.trim().replace(/\/+$/, ""))
+        .filter(Boolean)
+    : [];
+
+const parseTrustProxy = (raw) => {
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  const hops = Number(raw);
+  return Number.isInteger(hops) && hops >= 0 ? hops : raw;
+};
+
 export const DEFAULTS = {
   PORT: env.PORT,
+  TRUST_PROXY: parseTrustProxy(env.TRUST_PROXY),
   SECRET_JWT_KEY: env.SECRET_JWT_KEY,
   NODE_ENV: env.NODE_ENV,
-  ORIGINS: env.ORIGINS ? env.ORIGINS.split(",").map((o) => o.trim()) : [],
+  ORIGINS: parseOrigins(env.ORIGINS),
   BASE_URL: env.BASE_URL,
   APP_URL: env.APP_URL || env.BASE_URL,
   STORE_APP_URL: env.STORE_APP_URL || "http://localhost:3000",
