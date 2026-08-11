@@ -2,6 +2,13 @@ import { z } from "zod";
 import { createVariant } from "./variant.schema.js";
 import { SUGGESTION_ANGLES } from "./content-suggestion.schema.js";
 
+// Tope de la descripción de un producto. 600 y no 400 porque hay cartas que meten la
+// ficha nutricional dentro de la descripción (Punto Healthy: "PROTEÍNA 24G | GRASA 3G
+// | ..."), y no existe todavía un campo propio para eso — ver
+// docs/servicios/Tenants/punto-healthy.md. La columna en Postgres es `text`: el límite
+// es de UI, no del modelo.
+const DESCRIPTION_MAX = 600;
+
 // Combos: una fila de la whitelist de productos permitidos dentro de un combo.
 export const comboOption = z.object({
   allowedProductId: z.coerce
@@ -72,7 +79,7 @@ export const createProduct = z
       .trim(),
     description: z
       .string({ invalid_type_error: "La descripción debe ser texto" })
-      .max(400, "La descripción es demasiado larga")
+      .max(DESCRIPTION_MAX, "La descripción es demasiado larga")
       .trim()
       .nullable()
       .optional(),
@@ -88,6 +95,14 @@ export const createProduct = z
     price: z.coerce
       .number({ invalid_type_error: "El precio debe ser un número" })
       .positive("El precio debe ser mayor a 0")
+      .optional(),
+    // Precio de lista para tachar ("antes $X"): el ahorro que se muestra es
+    // `compareAtPrice - price`. Solo COMBO, igual que `price`. Es un dato cargado
+    // (lo que costarían los componentes sueltos según la carta), no se recalcula.
+    compareAtPrice: z.coerce
+      .number({ invalid_type_error: "El precio de lista debe ser un número" })
+      .positive("El precio de lista debe ser mayor a 0")
+      .nullable()
       .optional(),
     // Solo aplica a PRODUCTO, junto con `price` (ver comentario de `price` arriba).
     stock: z.coerce
@@ -161,6 +176,17 @@ export const createProduct = z
           message: "El stock no aplica a combos",
         });
       }
+      if (
+        data.compareAtPrice != null &&
+        data.price !== undefined &&
+        data.compareAtPrice <= data.price
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["compareAtPrice"],
+          message: "El precio de lista tiene que ser mayor al precio del combo",
+        });
+      }
     } else {
       // PRODUCTO
       if (data.variants.length > 0 && (data.price !== undefined || data.stock !== undefined)) {
@@ -177,6 +203,13 @@ export const createProduct = z
           message: "price y stock van juntos",
         });
       }
+      if (data.compareAtPrice != null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["compareAtPrice"],
+          message: "El precio de lista solo aplica a combos",
+        });
+      }
     }
   });
 
@@ -190,7 +223,7 @@ export const updateProduct = z
       .optional(),
     description: z
       .string({ invalid_type_error: "La descripción debe ser texto" })
-      .max(400, "La descripción es demasiado larga")
+      .max(DESCRIPTION_MAX, "La descripción es demasiado larga")
       .trim()
       .nullable()
       .optional(),
@@ -203,6 +236,14 @@ export const updateProduct = z
     price: z.coerce
       .number({ invalid_type_error: "El precio debe ser un número" })
       .positive("El precio debe ser mayor a 0")
+      .optional(),
+    // Precio de lista para tachar ("antes $X"): el ahorro que se muestra es
+    // `compareAtPrice - price`. Solo COMBO, igual que `price`. Es un dato cargado
+    // (lo que costarían los componentes sueltos según la carta), no se recalcula.
+    compareAtPrice: z.coerce
+      .number({ invalid_type_error: "El precio de lista debe ser un número" })
+      .positive("El precio de lista debe ser mayor a 0")
+      .nullable()
       .optional(),
     img: z
       .string({ invalid_type_error: "La imagen debe ser texto" })
@@ -249,6 +290,13 @@ export const updateProduct = z
         code: z.ZodIssueCode.custom,
         path: ["price"],
         message: "El precio de un producto vive en cada variante, no a nivel producto",
+      });
+    }
+    if (data.type === "PRODUCTO" && data.compareAtPrice != null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["compareAtPrice"],
+        message: "El precio de lista solo aplica a combos",
       });
     }
     if (data.type === "COMBO" && Array.isArray(data.variants) && data.variants.length > 0) {

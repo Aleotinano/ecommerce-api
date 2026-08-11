@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { dayBoundary } from "./date.schema.js";
+import { comboSelectionEntry } from "./combo.schema.js";
 
 // READY = "listo para retirar/enviar". Es un paso opcional entre PROCESSING y
 // COMPLETED (ver services/order-state.js): un panel viejo que no lo ofrezca
@@ -172,8 +173,50 @@ const fulfillmentFields = {
     .optional(),
 };
 
-// Creación de orden desde el carrito: entrega/retiro + método de pago.
-// El total y las líneas los sigue resolviendo el server desde el carrito.
+// Una línea del pedido cuando lo arma el local (ver `items` acá abajo). Es la misma
+// forma que `priceItems` ya recibe del carrito: `comboSelection` describe UNA unidad
+// del combo y se multiplica por `quantity`.
+//
+// El PRECIO no entra nunca: lo resuelve el server (variante, promo, o precio fijo del
+// combo). Es lo que hace que una venta cargada a mano no pueda cobrarse a un precio
+// que no está en el catálogo.
+const orderCreateItem = z.object({
+  productId: z.coerce
+    .number({ invalid_type_error: "productId debe ser un número" })
+    .int("productId debe ser entero")
+    .positive("productId inválido"),
+  // Ausente en una línea de COMBO (no tiene variantes propias) y opcional en un
+  // PRODUCTO de una sola variante, donde el server resuelve la default.
+  variantId: z.coerce
+    .number({ invalid_type_error: "variantId debe ser un número" })
+    .int("variantId debe ser entero")
+    .positive("variantId inválido")
+    .optional(),
+  quantity: z.coerce
+    .number({ invalid_type_error: "quantity debe ser un número" })
+    .int("quantity debe ser entero")
+    .positive("quantity debe ser mayor a 0"),
+  note: z
+    .string()
+    .trim()
+    .max(300, "La nota de la línea no puede superar 300 caracteres")
+    .nullable()
+    .optional(),
+  comboSelection: z
+    .array(comboSelectionEntry)
+    .min(1, "La selección del combo no puede estar vacía")
+    .optional(),
+});
+
+// Creación de orden: entrega/retiro + método de pago.
+//
+// Las líneas salen del CARRITO del server salvo que vengan en `items`, que es como las
+// carga el mostrador del admin: una venta del local no pasa por ningún carrito. El
+// total lo resuelve el server en los dos casos.
+//
+// `items` solo lo honra la ruta de admin. En `/store/orders` se ignora (ver
+// OrderController.create): un cliente que pudiera mandar sus propias líneas se estaría
+// salteando el carrito que el resto del checkout da por cierto.
 export const orderCreate = z
   .object({
     fulfillmentMethod: z.enum(FULFILLMENT_METHODS, {
@@ -186,6 +229,10 @@ export const orderCreate = z
         message: "paymentMethod debe ser CASH, TRANSFER o MIXED",
       }),
     }),
+    items: z
+      .array(orderCreateItem)
+      .min(1, "items no puede estar vacío")
+      .optional(),
     ...fulfillmentFields,
   })
   .superRefine(checkFulfillmentConsistency);

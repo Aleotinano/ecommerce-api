@@ -19,10 +19,18 @@ pnpm tenant:create --name "<Nombre>" --email <email-del-dueño> --profile <perfi
 ```
 
 Crea el tenant, su primer ADMIN y la fila de `TenantConfig` (sin esa fila, la pantalla de
-configuración tira 404). Llama a `UserModel.register({ trusted: true })` — el mismo service
-que usaba `POST /auth/register`, que hoy está apagado. La contraseña se genera al azar y se
-imprime **una sola vez**; si querés fijar una, va por `ADMIN_PASSWORD` en el entorno, nunca
-como argumento (los argumentos quedan en el historial del shell y en la lista de procesos).
+configuración tira 404). Llama a `UserModel.register({ trusted: true })`, el mismo service
+que usa `POST /auth/register`. La contraseña se genera al azar y se imprime **una sola
+vez**; si querés fijar una, va por `ADMIN_PASSWORD` en el entorno, nunca como argumento
+(los argumentos quedan en el historial del shell y en la lista de procesos).
+
+> [!warning] "El registro está apagado" es una decisión de producto, no del código
+> Esta sección decía que `POST /auth/register` estaba apagado. **No lo está**: la ruta
+> sigue montada, con su rate limiter, y responde. Lo que hay es la decisión de que los
+> clientes compren sin cuenta y las credenciales de admin se entreguen a mano — el plan
+> está en [[Producción sin cuentas (propuesta)]] y su primer pendiente es justamente
+> cablear `customerAccountsEnabled`, que todavía no existe en el schema. Hasta entonces,
+> el alta por consola es una comodidad, no el único camino.
 
 Después:
 
@@ -152,5 +160,20 @@ Y por HTTP, con `X-Tenant-Slug: <slug>`:
 
 ## Ejemplo completo
 
-`prisma/maikai/` es la referencia más reciente y la más completa: dump crudo → `build-menu.js` →
-`menu.json` → seeds. Perfil `carta`, 8 raíces, 251 productos.
+[[maikai]] es la referencia más completa del lado de la CARTA: dump crudo → `build-menu.js` →
+`menu.json` → seeds, todo en `prisma/maikai/`. Perfil `carta`, 8 raíces, 251 productos. Su
+ficha tiene el detalle de qué se le hizo al menú del cliente y por qué.
+
+[[punto-healthy]] es la referencia del lado de la TIENDA y la más reciente (2026-08-10):
+mismo pipeline en `prisma/punto-healthy/`, pero perfil `estandar` y un catálogo que además
+tiene variantes (packs y sabores) y 11 combos. Mirala si el tenant nuevo vende: ahí están el
+criterio de stock inicial en modo SHOP, los dos patrones de whitelist de combo y cuál elegir,
+y las tres cosas de una carta que el modelo todavía no representa.
+
+> [!question] Quién está en cada modo, hoy
+> `node prisma/set-tenant-profile.js` sin argumentos lo lista. Al 2026-08-07: `maikai` y
+> `cafe-sublime` en carta; `acme`, `shopco`, `mesa-dulce` y **`shifu`** en tienda. Lo de
+> shifu conviene mirarlo: es el restaurante por reserva que motivó el modo `MENU` —así lo
+> cuenta la migración `20260804120000_tenant_store_mode`— y quedó en `SHOP`. Puede ser que
+> su front ya resuelva el asunto no montando el carrito, que es exactamente lo que este
+> campo vino a dejar de hacer a mano. A confirmar antes de tocarlo.

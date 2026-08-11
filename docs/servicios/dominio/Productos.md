@@ -16,9 +16,19 @@ como el storefront (`/store/products`, solo activos salvo `optionalStoreAuth` ad
 Fuente: `prisma/schema.prisma` (modelos `Product`, `ProductVariant`, enum `ProductType`).
 
 - **`Product`** — `tenantId`, `name`, `description?`, `price: Float?` (**exclusivo de COMBO** — para
-  PRODUCTO es siempre `null`, el precio vive en la variante default), `categoryId?`,
-  `img?`/`imgPublicId?` (Cloudinary), `isActive=true`, `createdAt`. Relación
-  `variants: ProductVariant[]`, `category?`, `contentSuggestions`, `cartItems`, `orderItems`.
+  PRODUCTO es siempre `null`, el precio vive en la variante default),
+  `compareAtPrice: Float?` (precio de lista para tachar; misma invariante que `price`: solo COMBO —
+  ver abajo), `categoryId?`, `img?`/`imgPublicId?` (Cloudinary), `isActive=true`, `createdAt`.
+  Relación `variants: ProductVariant[]`, `category?`, `contentSuggestions`, `cartItems`,
+  `orderItems`.
+- **`compareAtPrice`** (migración `20260810204839_add_product_compare_at_price`) — el "antes $X" que
+  se tacha; el ahorro a mostrar es `compareAtPrice - price`. Es un dato **cargado, no calculado**:
+  en un combo es lo que costarían sus componentes sueltos según la carta del local, y nadie lo
+  deriva de la whitelist (que define qué se puede elegir, no cuánto valdría). `null` = sin precio de
+  lista, no se muestra nada. Validado en `schemas/product.schema.js`: tiene que ser mayor a `price`,
+  y en un PRODUCTO se rechaza. El día que un PRODUCTO necesite precio tachado, el campo espejo va en
+  `ProductVariant`, que es donde vive su precio. Primer uso real: las 10 promos con "AHORRÁ $X"
+  impreso de [[punto-healthy]].
 - **`type: ProductType`** (`PRODUCTO | COMBO`, **NOT NULL**) — fuente única de verdad de qué forma
   tiene el producto. Colapsado desde los 3 valores originales (`UNIDAD`/`VARIANTE`/`COMBO`) — ver
   Deuda técnica.

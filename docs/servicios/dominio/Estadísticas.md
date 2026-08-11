@@ -31,10 +31,12 @@ No tiene modelo propio — agrega datos de `Order`/`OrderItem`/`Product` (ver [[
 - **Ranking**: top 5 productos (`rankingSize: 5` fijo en `meta.criteria`) con flag de stock bajo
   según `lowStockThreshold`.
 - **`revenueBasedOn: "COMPLETED_ORDERS"`** — el revenue de KPIs y gráficos se basa únicamente en
-  órdenes completadas, nunca en `PENDING`/`PROCESSING`/`READY`. Una orden **lista pero no entregada**
-  todavía no es venta.
-- **El panel de estados cubre todo el enum.** `ORDER_STATUS_KEYS` (`services/stats/constants.js`)
-  tiene que listar los cinco estados de `OrderStatus`, `READY` incluido: `buildOrderStatusPanel` arma
+  órdenes completadas, nunca en `NEW`/`PROCESSING`/`READY`. Una orden **lista pero no entregada**
+  todavía no es venta. (`NEW` se llamaba `PENDING` hasta 2026-07-31, ver [[Órdenes]].)
+- **El panel de estados cubre todo el enum, y ya no a mano.** `ORDER_STATUS_KEYS`
+  (`services/stats/constants.js`) dejó de ser una lista propia: es `ORDER_STATUS_CODES`, del catálogo
+  de [[Órdenes]] (`services/order-status.js`). Tiene que listar los cinco estados de `OrderStatus`,
+  `READY` incluido, porque `buildOrderStatusPanel` arma
   la distribución mapeando esa lista, así que un estado que falte suma al `totalOrders` pero no
   aparece en el panel y los porcentajes dejan de cerrar en 100.
 

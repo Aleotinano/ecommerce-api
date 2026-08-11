@@ -8,19 +8,19 @@ lado: contrato
 
 ```bash
 # instalá las nuevas dependencias (nodemailer, pino, pino-http, pino-pretty)
-pnpm install   # o npm install
+pnpm install
 
 # aplicá la migración
-npx prisma migrate dev
+pnpm exec prisma migrate dev
 
 # regenerá el client
-npx prisma generate
+pnpm exec prisma generate
 
 # corre el seed (resetea data y crea 2 tenants; admins ya quedan emailVerified=true)
-npx prisma db seed
+pnpm exec prisma db seed
 
 # levanta el server
-npm run dev
+pnpm dev
 ```
 
 ### Variables de entorno relevantes
@@ -394,7 +394,7 @@ NODE_ENV=production              # Rate limiting se activa solo en prod
 
 ```bash
 # 1. Arranca con NODE_ENV=development (default dev)
-npm run dev
+pnpm dev
 
 # 2. El generalLimiter NO limita en dev, pero loginLimiter SÍ
 # Intenta 6 veces login con el mismo email en <15 min:
@@ -414,7 +414,7 @@ done
 
 ```bash
 # Para forzar rate limit general en dev, temporalmente:
-NODE_ENV=production npm run dev
+NODE_ENV=production pnpm dev
 
 # Luego:
 for i in {1..201}; do
@@ -459,7 +459,7 @@ Rate limiting sigue funcionando, pero solo en proceso (no distribuido).
 
 ## 4. Si algo falla
 
-- Verificá que la migración corrió: `npx prisma migrate status`
-- Que el client está regenerado: `npx prisma generate`
+- Verificá que la migración corrió: `pnpm exec prisma migrate status`
+- Que el client está regenerado: `pnpm exec prisma generate`
 - Inspeccioná el JWT en jwt.io — `tenantId` debe estar en el payload
 - Mirá los logs del server para el código de error específico

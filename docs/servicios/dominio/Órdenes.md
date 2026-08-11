@@ -757,7 +757,7 @@ turnos no hay cierre, y el tablero se comporta exactamente como antes de esta fe
 
 | Método | Ruta | Qué hace | Auth / rol |
 | --- | --- | --- | --- |
-| POST | `/` | Crea una orden desde el carrito del usuario. Body **obligatorio** (`orderCreate`): `fulfillmentMethod` (`DELIVERY`/`PICKUP`) + `paymentMethod` (`CASH`/`TRANSFER`/`MIXED`); si `DELIVERY`, al menos uno de `addressText`\|`addressMapsUrl`; si `MIXED`, `cashAmount`+`transferAmount` (deben sumar el total); `addressLat`/`addressLng`/`addressDetails`/`paymentNote` opcionales. Por esta ruta la orden queda `origin = ADMIN` | Usuario autenticado |
+| POST | `/` | Crea una orden **desde el carrito del usuario o desde las líneas que venga en `items`** (ver "Dos fuentes de líneas"). Body **obligatorio** (`orderCreate`): `fulfillmentMethod` (`DELIVERY`/`PICKUP`) + `paymentMethod` (`CASH`/`TRANSFER`/`MIXED`); si `DELIVERY`, al menos uno de `addressText`\|`addressMapsUrl`; si `MIXED`, `cashAmount`+`transferAmount` (deben sumar el total); `addressLat`/`addressLng`/`addressDetails`/`paymentNote` opcionales. **Opcional**: `items` (`[{ productId, variantId?, quantity, note?, comboSelection? }]`, mínimo 1), que es como carga el mostrador. Por esta ruta la orden queda `origin = ADMIN` | Usuario autenticado |
 | GET | `/` | Lista las órdenes **del propio usuario** (filtros `status`, `limit`, `offset`) | Usuario autenticado |
 | GET | `/all` | Lista **todas** las órdenes del tenant (filtro `search` por usuario/producto). **Sin las archivadas** (ver "Archivado") | `ADMIN` / `STAFF` |
 | GET | `/counts` | Cuántas órdenes hay **por estado** (`{ counts: { NEW: 3, … } }`), con todos los códigos presentes aunque estén en cero. Respeta el mismo `search` que `/all` — comparten el `where` (`buildAdminOrdersWhere`). Son los encabezados del tablero del admin, que pagina por columna y por lo tanto no puede sacar el total contando lo que trajo (2026-07-31). Cuenta **sin las archivadas**, igual que `/all`, y de paso hace rodar el turno de caja (2026-08-01, ver "Archivado"). Declarada **antes** de `/:id`, si no se la come la ruta de detalle | `ADMIN` / `STAFF` |
@@ -782,9 +782,34 @@ turnos no hay cierre, y el tablero se comporta exactamente como antes de esta fe
 
 | Método | Ruta | Qué hace | Auth / rol |
 | --- | --- | --- | --- |
-| POST | `/` | Crea una orden desde el carrito. Mismo body obligatorio que el backoffice (`orderCreate`), pero la orden queda `origin = STORE` (→ necesita `review` antes de producir) y el 201 incluye el bloque `whatsapp` con el deep-link del pedido | **Sin login** (`optionalStoreAuth` + `resolveCartOwner`); el invitado debe mandar `contactName` + `contactPhone` |
+| POST | `/` | Crea una orden **siempre desde el carrito**. Mismo body obligatorio que el backoffice (`orderCreate`), pero la orden queda `origin = STORE` (→ necesita `review` antes de producir) y el 201 incluye el bloque `whatsapp` con el deep-link del pedido. **`items` se rechaza acá** (`400 ITEMS_NOT_ALLOWED`): el schema es compartido y lo acepta, pero el middleware `rejectExplicitItems` corta antes de resolver el carrito. No se descarta en silencio a propósito — ver abajo | **Sin login** (`optionalStoreAuth` + `resolveCartOwner`); el invitado debe mandar `contactName` + `contactPhone` |
 | GET | `/` | Lista las órdenes del cliente | Cliente del store (`verifyStoreToken`) |
 | GET | `/:id` | Detalle de una orden del cliente | Cliente del store (`verifyStoreToken`) |
+
+### Dos fuentes de líneas, un solo precio
+
+`OrderModel.create` acepta las líneas de dos lados y **el precio lo resuelve el server en los dos
+casos**, con el mismo `priceItems` (variante, promo o precio fijo del combo). Por `items` viajan qué
+y cuántos, nunca cuánto sale: una venta cargada a mano no puede cobrarse a un precio que no está en
+el catálogo.
+
+| | Carrito | `items` explícitos |
+| --- | --- | --- |
+| Quién la usa | checkout de la tienda y del backoffice | el **mostrador** (`POST /orders`) |
+| Carrito | se lee y se vacía al crear la orden | **ni se busca ni se vacía** |
+| Vacío | `400 EMPTY_CART` si no hay líneas | Zod rechaza `items: []` |
+| Precio y total | `priceItems` | `priceItems` |
+
+Que `items` lo honre solo la ruta de admin es deliberado: por `/store/orders` el pedido tiene que
+salir del carrito, que es lo único que el cliente pudo llenar pasando por las validaciones de
+`cart.add`.
+
+Y ahí se **rechaza**, no se ignora: `rejectExplicitItems` (`routes/store/orders.js`) devuelve
+`400 ITEMS_NOT_ALLOWED` sin tocar el carrito ni crear nada. Un 201 que tiró a la basura media
+petición es indistinguible de uno que hizo lo que le pidieron, y el error recién aparecería como
+"la orden no tiene lo que mandé", lejos de la línea que lo causó. El corte por `origin` del
+controller sigue estando abajo como segunda llave: es código compartido y la próxima ruta que lo
+monte puede olvidarse del filtro. Cubierto por `tests/orders-counter-items.test.js`.
 
 Validación de payload: `schemas/order.schema.js` (`orderCreate`, `orderStatus`, `orderReview`,
 `orderConfirmDeposit`, `orderConfirmTransfer`, `orderConfirmPayment`, `orderReceiptCreate`,
@@ -848,12 +873,14 @@ Etiquetas por tipo de acción — ver convención en [[App]].
   `UserAddress`, 2026-07-27). Es intencional: borrar o editar una dirección guardada no puede
   alterar un pedido ya cerrado. Deroga la nota anterior ("no hay direcciones guardadas por usuario"),
   que quedó vieja al implementarse la libreta.
-- `[riesgo]` **`OrderModel.create` ignora la seña**: no lee `TenantConfig.depositEnabled`, así que
-  las órdenes del storefront salen con `requiresDeposit: false` aunque el tenant tenga seña activa
-   — y esquivan el guard `DEPOSIT_NOT_CONFIRMED`. Solo `createDraft` (bot) y `reviewOrder` calculan
-  `depositAmount`. Preexistente, detectado al implementar el checkout (2026-07-26) y dejado fuera de
-  alcance a propósito porque cambia el comportamiento de pagos. Acción = decidir si el checkout web
-  debe exigir seña.
+- ~~`[riesgo]` **`OrderModel.create` ignora la seña**~~ **Resuelto** (2026-07-29). Las órdenes del
+  storefront salían con `requiresDeposit: false` aunque el tenant cobrara seña, y esquivaban el guard
+  `DEPOSIT_NOT_CONFIRMED`; solo `createDraft` (bot) y `reviewOrder` calculaban `depositAmount`. Hoy
+  `OrderModel.create` trae `depositEnabled`/`depositPercentage` en el mismo `select` que ya pedía el
+  teléfono y resuelve `requiresDeposit` igual que los otros dos caminos (`services/orders.js`). Salió
+  junto con los perfiles de flujo de venta, que obligaban a leer esa config ahí mismo. Esta entrada
+  quedó abierta un par de semanas después de estar arreglada: `ARCHITECTURE.md` §11 sí lo tenía
+  tachado.
 - `[nota]` **Los comprobantes de un tenant pueden quedar repartidos en dos cuentas de Cloudinary**
   (2026-07-30, ver [[Cloudinary por tenant]]). Si el cliente carga su cuenta propia después de haber
   recibido comprobantes, los viejos se quedan en la cuenta de la plataforma. Está resuelto —

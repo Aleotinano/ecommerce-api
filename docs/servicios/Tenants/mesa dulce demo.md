@@ -82,7 +82,7 @@ lado: backend
       (nuevo), `front-md-guia/FRONTEND_COMBOS.md` (actualizado) y `front-md-guia/FRONTEND_INTEGRATION.md`
       (tablas de rutas de `/store/cart/*` y `/cart/*` corregidas + aviso cruzado a las dos guías
       nuevas, para que el equipo de frontend no se quede con el shape viejo).
-- [x] `npx vitest run` → **213/213 tests pasando**.
+- [x] `pnpm test` → **213/213 tests pasando**.
 
 ### Bloqueante operativo pendiente (no es código)
 - [ ] **Cargar stock real de las unidades de Mesa Dulce.** Verificado de nuevo el 2026-07-08 post-

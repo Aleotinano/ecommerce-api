@@ -639,11 +639,15 @@ function resolveContactPhone({ typed, stored, config, enforce, require: alwaysRe
 
 export const OrderModel = {
   /**
-   * Checkout: convierte el carrito del usuario en una orden NEW.
+   * Checkout: convierte el carrito del usuario —o las líneas que le pasen— en una
+   * orden NEW.
    *
-   * Los items NO los manda el cliente: se leen del carrito del server y se
-   * pricean acá (`priceItems`). El cliente solo aporta cómo recibe el pedido y
-   * cómo lo paga.
+   * **Dos fuentes de líneas, un solo precio.** En el checkout de la tienda los items
+   * NO los manda el cliente: se leen del carrito del server. El mostrador del admin,
+   * en cambio, arma la venta en el momento y no tiene carrito que convertir, así que
+   * pasa sus líneas por `items`. Las dos fuentes desembocan en el mismo `priceItems`,
+   * que es quien decide cuánto sale cada cosa: por `items` viajan qué y cuántos, nunca
+   * a cuánto.
    *
    * @param {object} p
    * @param {number|null} [p.userId] atajo para el caso logueado; equivale a
@@ -652,7 +656,11 @@ export const OrderModel = {
    *   carrito a convertir. Con `userId` es un cliente logueado; con `guestId` es
    *   un invitado (cookie httpOnly, mismo par que usa el carrito). La orden que
    *   sale de un carrito de invitado queda con `userId: null` — la columna lo
-   *   admite desde siempre, igual que los drafts del bot.
+   *   admite desde siempre, igual que los drafts del bot. Se ignora si vienen `items`.
+   * @param {Array} [p.items] líneas explícitas, `[{ productId, variantId?, quantity,
+   *   note?, comboSelection? }]`. Cuando vienen, el carrito no se lee **ni se vacía**:
+   *   el del admin es el suyo propio y no tiene nada que ver con lo que acaba de
+   *   vender. Solo las honra la ruta de admin (ver OrderController.create).
    * @param {string} [p.origin="ADMIN"] procedencia de la orden. Las que llegan
    *   por `/store/orders` son "STORE" y quedan sujetas al guard de revisión
    *   (ver updateOrderStatus); las que carga un admin a mano son "ADMIN".
@@ -664,6 +672,7 @@ export const OrderModel = {
     tenantId,
     userId,
     cartOwner,
+    items,
     origin = "ADMIN",
     fulfillmentMethod,
     addressText,
@@ -684,6 +693,9 @@ export const OrderModel = {
     const guestId = owner.guestId ?? null;
     const isGuest = ownerId == null;
 
+    // Con líneas explícitas no hay carrito en juego: ni se busca ni se vacía después.
+    const hasExplicitItems = Array.isArray(items) && items.length > 0;
+
     // Mismo par de dueños que resuelve el carrito (middleware/guestCart.js): con
     // sesión se busca por userId, sin sesión por el guestId de la cookie.
     //
@@ -692,7 +704,7 @@ export const OrderModel = {
     // matchearía el carrito de cualquier otro cliente. `resolveCartOwner` siempre
     // emite la cookie, pero esto no puede depender de que el middleware corra.
     const cart =
-      isGuest && !guestId
+      hasExplicitItems || (isGuest && !guestId)
         ? null
         : await prisma.cart.findFirst({
             where: isGuest
@@ -701,7 +713,9 @@ export const OrderModel = {
             include: { items: true },
           });
 
-    if (!cart || cart.items.length === 0) {
+    // "El carrito está vacío" cubre también el pedido sin líneas: para quien llama es
+    // el mismo hecho —no hay nada que cobrar— y Zod ya rechaza un `items: []`.
+    if (!hasExplicitItems && (!cart || cart.items.length === 0)) {
       throw createError("El carrito está vacío", "EMPTY_CART", 400);
     }
 
@@ -775,12 +789,20 @@ export const OrderModel = {
       const { pricedItems, total } = await priceItems(
         tx,
         tenantId,
-        cart.items.map((item) => ({
-          productId: item.productId,
-          variantId: item.variantId ?? undefined,
-          quantity: item.quantity,
-          comboSelection: item.comboSelection ?? undefined,
-        }))
+        hasExplicitItems
+          ? items.map((item) => ({
+              productId: item.productId,
+              variantId: item.variantId ?? undefined,
+              quantity: item.quantity,
+              note: item.note ?? undefined,
+              comboSelection: item.comboSelection ?? undefined,
+            }))
+          : cart.items.map((item) => ({
+              productId: item.productId,
+              variantId: item.variantId ?? undefined,
+              quantity: item.quantity,
+              comboSelection: item.comboSelection ?? undefined,
+            }))
       );
 
       // El desglose del pago mixto se valida contra el total que acabamos de
@@ -856,7 +878,12 @@ export const OrderModel = {
         },
       });
 
-      await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
+      // Solo si la orden SALIÓ del carrito. Una venta de mostrador no puede vaciarle
+      // el carrito a la persona que la cargó: es el suyo, de la tienda, y no tiene
+      // nada que ver con lo que acaba de vender en el local.
+      if (cart) {
+        await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
+      }
 
       // El config del tenant viene en el mismo round-trip: el controller lo
       // necesita para armar el deep-link de WhatsApp (lib/whatsapp-link.js).

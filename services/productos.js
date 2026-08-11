@@ -562,6 +562,7 @@ export const ProductModel = {
     description,
     categoryId,
     price,
+    compareAtPrice,
     stock,
     img,
     imgPublicId,
@@ -625,6 +626,8 @@ export const ProductModel = {
       categoryId: categoryId ?? null,
       // Exclusivo de COMBO — para PRODUCTO el precio vive en cada variante.
       price: type === "COMBO" ? price : null,
+      // Mismo criterio que `price`: precio de lista para tachar, solo en combos.
+      compareAtPrice: type === "COMBO" ? compareAtPrice ?? null : null,
       img: img ?? null,
       imgPublicId: imgPublicId ?? null,
       isActive: isActive ?? true,
@@ -713,6 +716,7 @@ export const ProductModel = {
       description,
       categoryId,
       price,
+      compareAtPrice,
       img,
       imgPublicId,
       isActive,
@@ -803,6 +807,8 @@ export const ProductModel = {
       description,
       categoryId,
       price: targetType === "COMBO" ? price : isTypeChange ? null : undefined,
+      compareAtPrice:
+        targetType === "COMBO" ? compareAtPrice : isTypeChange ? null : undefined,
       img,
       imgPublicId,
       isActive,

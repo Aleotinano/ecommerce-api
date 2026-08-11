@@ -83,6 +83,7 @@ export class OrderController {
       const { id = null, username = null } = req.user ?? {};
       const cartOwner = req.cartOwner ?? { userId: id, guestId: null };
       const {
+        items,
         fulfillmentMethod,
         addressText,
         addressLat,
@@ -97,12 +98,23 @@ export class OrderController {
         contactName,
       } = req.body;
 
+      // Lo setea la ruta del storefront (routes/store/orders.js); una orden cargada
+      // por un admin desde el panel queda como ADMIN.
+      const origin = req.orderOrigin ?? "ADMIN";
+
       const order = await OrderModel.create({
         tenantId: req.tenantId,
         cartOwner,
-        // Lo setea la ruta del storefront (routes/store/orders.js); una orden
-        // cargada por un admin desde el panel queda como ADMIN.
-        origin: req.orderOrigin ?? "ADMIN",
+        // Las líneas explícitas son la puerta del mostrador y **solo** de él: por
+        // `/store/orders` el pedido tiene que salir del carrito, que es lo único que
+        // el cliente pudo llenar pasando por las validaciones de `cart.add`.
+        //
+        // Esa ruta ya los rechaza con 400 antes de llegar acá
+        // (`rejectExplicitItems`, routes/store/orders.js), así que esto es la
+        // segunda llave: este controller es compartido y nada garantiza que la
+        // próxima ruta que lo monte se acuerde de ponerle el filtro.
+        items: origin === "ADMIN" ? items : undefined,
+        origin,
         fulfillmentMethod,
         addressText,
         addressLat,

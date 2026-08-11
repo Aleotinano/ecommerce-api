@@ -1,7 +1,7 @@
 ---
 tags: [indice, servicios]
 estado: en-desarrollo
-ultima-revision: 2026-07-29
+ultima-revision: 2026-08-07
 lado: backend
 ---
 
@@ -14,11 +14,13 @@ código se marca como `> [!todo] TBD`.
 > [!note] Estado de la documentación
 > - ✅ Documentados: [[Órdenes]], [[Sugerencias de contenido]], [[Productos]], [[TenantConfig]],
 >   [[Categorías]], [[Combos]], [[Variantes]], [[Carrito]], [[MercadoPago]], [[Estadísticas]], [[Roles]],
->   [[Direcciones]], [[Perfiles de flujo de venta]], [[Caja]]
+>   [[Direcciones]], [[Perfiles de flujo de venta]], [[Caja]], [[Cloudinary por tenant]]
 > - ⚠️ Implementado **sin doc de dominio**: Promos (descuento por cantidad, `services/promos.js` + `/promos`)
 > - 📐 Propuestas: [[Sugerencias de contenido — Imágenes (propuesta)]] (librería lista, feature no
 >   expuesta), [[Producción sin cuentas (propuesta)]] (plan puro, nada implementado),
->   [[Caja — día operativo (propuesta)]] (el modelo de [[Caja]] con la entidad Día y hora de corte)
+>   [[Caja — día operativo (propuesta)]] (el modelo de [[Caja]] con la entidad Día y hora de corte),
+>   [[Insumos (propuesta)]] (el costo de mercadería que le falta a [[Caja]] para dar margen; nada
+>   implementado)
 > - 🟡 Stubs (pendientes de documentar): el resto
 >
 > Estructura: los servicios viven en `dominio/` y las abstracciones en `transversales/`; este índice
@@ -97,6 +99,22 @@ Dentro de "Deuda técnica" cada ítem se etiqueta por **tipo de acción**, para 
   registro ni login: qué endpoints de [[Usuarios y Auth]] se apagan, cómo se entregan las
   credenciales de admin, y por qué hoy **el invitado no recibe ningún mail de cambio de estado**.
   **Plan, nada implementado.**
+
+## Tenants
+
+Fichas de los clientes que pasaron por acá: qué se cargó, con qué criterio y qué les falta.
+
+- [[new-tenant-config]] — **el patrón de alta**, destilado de todos los anteriores. Los cuatro
+  pasos, cómo elegir el perfil, qué no inventar y las trampas ya verificadas.
+- [[maikai]] — café/bar/restó en San Juan. Primer `carta` completo (`storeMode: MENU`): 251
+  productos, 8 raíces que son los tiles de la home, pipeline dump → `build-menu.js` → seeds.
+- [[punto-healthy]] — franquicia de comida rápida saludable, en modo tienda (`estandar`). Primer
+  catálogo con **combos y variantes reales** cargados por seed: 31 productos / 57 variantes / 11
+  promos. Su ficha tiene la fricción pendiente entre la whitelist de combo (por producto) y las
+  presentaciones de la carta (por variante).
+- [[mesa dulce demo]] — mesa dulce para eventos, en modo tienda. Log de la sesión de demo:
+  combos reales, rediseño de tipos de producto. **Congelado en 2026-07-08**, con anotaciones
+  de lo que quedó obsoleto.
 
 ## Abstracciones transversales
 

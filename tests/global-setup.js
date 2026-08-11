@@ -13,7 +13,7 @@ export default async function setup() {
   // parcial de CartItem en 20260708190000_product_types_add) — `db push` solo mira el
   // datamodel declarativo y se saltearía ese tipo de constraints.
   console.log("[tests] aplicando migraciones en DB de test...");
-  execSync("npx prisma migrate deploy --schema=prisma/schema.prisma", {
+  execSync("pnpm exec prisma migrate deploy --schema=prisma/schema.prisma", {
     stdio: "inherit",
     env: process.env,
   });

@@ -221,6 +221,62 @@ describe("ProductModel.create — reglas por tipo", () => {
   });
 });
 
+describe("compareAtPrice — precio de lista del combo", () => {
+  it("COMBO lo persiste y el ahorro sale de la resta", async () => {
+    const product = await ProductModel.create({
+      tenantId: tenant.id,
+      name: "Combo con precio de lista",
+      type: "COMBO",
+      price: 38000,
+      compareAtPrice: 53800,
+      comboMinItems: 1,
+      comboMaxItems: 1,
+    });
+
+    expect(product.compareAtPrice).toBe(53800);
+    expect(product.compareAtPrice - product.price).toBe(15800);
+  });
+
+  it("PRODUCTO lo ignora: el precio de lista es exclusivo de COMBO", async () => {
+    const product = await ProductModel.create({
+      tenantId: tenant.id,
+      name: "Producto con precio de lista",
+      type: "PRODUCTO",
+      compareAtPrice: 9999,
+      variants: [{ price: 5000, stock: 1 }],
+    });
+
+    expect(product.compareAtPrice).toBeNull();
+  });
+
+  it("schema: rechaza un precio de lista menor o igual al precio del combo", () => {
+    const result = createProduct.safeParse({
+      name: "Combo mal cargado",
+      type: "COMBO",
+      price: 38000,
+      compareAtPrice: 38000,
+      comboMinItems: 1,
+      comboMaxItems: 1,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error.issues[0].path).toEqual(["compareAtPrice"]);
+  });
+
+  it("schema: rechaza precio de lista en un PRODUCTO", () => {
+    const result = createProduct.safeParse({
+      name: "Producto mal cargado",
+      type: "PRODUCTO",
+      price: 5000,
+      stock: 1,
+      compareAtPrice: 9000,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error.issues.some((i) => i.path[0] === "compareAtPrice")).toBe(true);
+  });
+});
+
 describe("ProductModel.getAll — filtro por type", () => {
   it("type=COMBO → solo devuelve combos", async () => {
     await ProductModel.create({

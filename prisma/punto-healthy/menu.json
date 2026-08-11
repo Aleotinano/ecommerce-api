@@ -1,0 +1,509 @@
+{
+  "_meta": {
+    "tenant": "punto-healthy",
+    "fuente": "Menú Punto Healthy (5 páginas: bowls/smoothies, snacks, bebidas calientes, bebidas frías, promos). Copyright 2023 Punto Healthy.",
+    "moneda": "ARS",
+    "formato": "Mismo modelo que scripts/seed-catalog/data/*.menu.mjs: `categories` con `parent` por nombre, `products` con `category` por nombre. Agrega `variants`, `selections` y `combos`, que el seed.mjs actual NO sabe cargar todavía."
+  },
+
+  "_notas": [
+    "NOMBRES ÚNICOS: el seed compara el nombre GLOBAL, no por categoría. 'Detox Deluxe' está en la carta dos veces (caliente y frío) con el mismo precio pero distinta descripción; acá se desambiguó como 'Detox Deluxe caliente' / 'Detox Deluxe frío'. Si se cargan con el mismo nombre, el segundo se saltea en silencio.",
+    "VARIANTES: los ítems con `variants` se venden por presentación (packs) o por sabor; `variantAttribute` dice qué atributo del tenant hay que usar. Un producto tiene `price` o `variants`, nunca los dos. Si el script no maneja variantes, se aplanan a un producto por variante y el nombre queda 'Cookies x 6 unidades'.",
+    "NUTRICIÓN: `nutrition` es la línea amarilla de la carta, transcrita tal cual para poder concatenarla a la descripción o mostrarla aparte. `nutritionScope: \"unidad\"` es el 'VALORES POR UNIDAD' de la carta (donuts, muffins, chipá, cookies): los macros son de UNA pieza, no del pack.",
+    "COMBOS: `items` es contenido fijo (no se elige) y `groups` es 'elegí N entre estos'. El seed actual solo sabe hacer grupos por categoría entera (`productIds: []`); acá varios grupos necesitan productos explícitos, que es lo que el backend ya soporta con `productIds`.",
+    "PRECIO DEL COMBO: `price` es el precio propio del combo, no la suma de lo que lleva adentro. El combo tampoco tiene stock: el stock que se mueve es el de los productos que lo componen.",
+    "AHORRO: `savings` es el 'AHORRÁ $X' transcrito de la carta, un dato cargado — nadie lo calcula. Hoy el modelo de producto NO tiene dónde guardarlo (no hay precio de lista, y `Promo` es por porcentaje sobre productos sueltos): o va dentro de la descripción del combo, o hace falta un campo nuevo. Sumar los ítems dio el mismo número en las 10 promos que traen badge impreso, y eso es lo que permitió deducir composiciones que la carta no aclara: que 'Combo 1' lleva 2 packs de donas (8 donas) y el pack x12 de cookies, que 'Chipá' en las promos es el de 4, y que una 'bebida funcional' entra a $7.500.",
+    "REVISAR: los ítems con `revisar` tienen algo que la carta no dice y se dedujo de los precios. No afecta a la carga; es un recordatorio."
+  ],
+
+  "categories": [
+    { "name": "Protein Bowls" },
+    {
+      "name": "Smoothies",
+      "description": "Bebida versión Smoothie que contiene una perfecta combinación de proteínas, carbohidratos y fibra. Contribuye a sentirte saciado y con energía. Ayudando a incorporar todos los nutrientes que tu cuerpo necesita con pocas calorías."
+    },
+    { "name": "Protein Snacks" },
+    { "name": "Bebidas" },
+    { "name": "Bebidas calientes", "parent": "Bebidas" },
+    { "name": "Bebidas frías", "parent": "Bebidas" },
+    { "name": "Promos" },
+    { "name": "Promos individuales", "parent": "Promos", "description": "Ahorrá y probá." },
+    { "name": "Promos para compartir", "parent": "Promos", "description": "Para disfrutar de a 2." },
+    { "name": "Promos para llevar", "parent": "Promos", "description": "Planificá tu semana." }
+  ],
+
+  "products": [
+    {
+      "category": "Protein Bowls",
+      "name": "Colágeno Tropical",
+      "price": 13000,
+      "nutrition": "PROTEÍNA 28G | GRASA 3G | CARBS 10G | FIBRA 7G | VIT & MIN 21 | KCAL 300",
+      "description": "Bowl con sabor tropical y arándano. Tiene una perfecta combinación de proteínas, carbohidratos y fibra. Con péptidos bioactivos de Colágeno Verisol hidrolizado tipo 1, con alto contenido de vitaminas y minerales potenciadores de belleza."
+    },
+    {
+      "category": "Protein Bowls",
+      "name": "Detox Active",
+      "price": 13000,
+      "nutrition": "PROTEÍNA 15G | GRASA 2,5G | CARBS 15G | FIBRA 17G | VIT & MIN 21 | KCAL 180",
+      "description": "Bowl con sabor durazno-manzana. Tiene una perfecta combinación de proteínas, carbohidratos y fibra con un extra de probióticos que promueven una depuración interna de forma saludable."
+    },
+
+    {
+      "category": "Smoothies",
+      "name": "Smoothie",
+      "nutrition": "PROTEÍNA 24G | GRASA 3G | CARBS 10G | FIBRA 7G | VIT & MIN 21 | KCAL 250",
+      "description": "Bebida versión Smoothie que contiene una perfecta combinación de proteínas, carbohidratos y fibra. Contribuye a sentirte saciado y con energía.",
+      "variantAttribute": "Sabor",
+      "variants": [
+        { "name": "Banana Split", "price": 9800 },
+        { "name": "Oreo", "price": 9800 },
+        { "name": "Súper Dulce de Leche", "price": 9800 },
+        { "name": "Caramel Coffee", "price": 9800 },
+        { "name": "Café Latte", "price": 9800 },
+        { "name": "Chocolatoso", "price": 9800 },
+        { "name": "Cadbury", "price": 9800 },
+        { "name": "Bananita Dolca", "price": 9800 },
+        { "name": "Frutilla", "price": 9800 },
+        { "name": "Durazno", "price": 9800 }
+      ]
+    },
+    {
+      "category": "Smoothies",
+      "name": "Smoothie Express",
+      "nutrition": "PROTEÍNA 10G | GRASA 1G | CARBS 3G | FIBRA 2G | VIT & MIN 21 | KCAL 100",
+      "description": "Versión express del smoothie, con proteínas, carbohidratos y fibra en menos calorías.",
+      "variantAttribute": "Sabor",
+      "variants": [
+        { "name": "Banana Split", "price": 7600 },
+        { "name": "Súper Dulce de Leche", "price": 7600 },
+        { "name": "Oreo", "price": 7600 },
+        { "name": "Caramel Coffee", "price": 7600 },
+        { "name": "Chocolatoso", "price": 7600 },
+        { "name": "Bananita Dolca", "price": 7600 },
+        { "name": "Frutilla", "price": 7600 },
+        { "name": "Durazno", "price": 7600 }
+      ],
+      "revisar": "La carta no le pone descripción propia (comparte el bloque de la sección): la de acá es redactada, no transcrita. El Express NO ofrece Café Latte ni Cadbury; los sabores son 8, no 10."
+    },
+
+    {
+      "category": "Protein Snacks",
+      "name": "Protein Pizza",
+      "price": 12000,
+      "nutrition": "PROTEÍNA 40G | GRASA 30G | CARBS 52G | SIN HARINAS | VIT & MIN 21 | KCAL 600",
+      "description": "Pizza individual con mozzarella y tomates secos. Sin harinas, alta en proteínas, con carbohidratos saludables, fibra, vitaminas y minerales."
+    },
+    {
+      "category": "Protein Snacks",
+      "name": "Protein Donuts",
+      "price": 7400,
+      "nutrition": "PROTEÍNA 5G | GRASA 2G | CARBS 6G | SIN HARINAS | SIN AZÚCAR | KCAL 60",
+      "nutritionScope": "unidad",
+      "description": "Contiene 4 donas sin harinas, altas en proteína, con carbohidratos saludables, fibra, vitaminas y minerales."
+    },
+    {
+      "category": "Protein Snacks",
+      "name": "Muffins",
+      "nutrition": "PROTEÍNA 6G | GRASA 2G | CARBS 6G | SIN HARINAS | SIN AZÚCAR | KCAL 60",
+      "nutritionScope": "unidad",
+      "description": "Muffins sin harinas ni azúcar añadida, con proteína, carbohidratos saludables, vitaminas y minerales.",
+      "variantAttribute": "Presentación",
+      "variants": [
+        { "name": "6 unidades", "price": 12000 },
+        { "name": "12 unidades", "price": 18000 }
+      ]
+    },
+    {
+      "category": "Protein Snacks",
+      "name": "Waffles",
+      "price": 7000,
+      "nutrition": "PROTEÍNA 15G | GRASA 6G | CARBS 13G | SIN HARINAS | SIN AZÚCAR | KCAL 162",
+      "description": "Si sos fan de lo dulce, tenés que probar nuestros Waffles sin harinas con proteína, carbohidratos saludables, fibra, vitaminas y minerales."
+    },
+    {
+      "category": "Protein Snacks",
+      "name": "Cookie Rellena",
+      "price": 6500,
+      "nutrition": "PROTEÍNA 24G | GRASA 21G | CARBS 19G | SIN HARINAS | SIN AZÚCAR | 373 KCAL",
+      "description": "Cookie rellena con crema hiper proteica, contiene grasas y carbohidratos saludables, una opción deliciosa para cualquier momento del día."
+    },
+    {
+      "category": "Protein Snacks",
+      "name": "Protein Box",
+      "price": 12000,
+      "nutrition": "PROTEÍNA 45G | GRASA 21G | CARBS 46G | SIN HARINAS | SIN AZÚCAR | KCAL 534",
+      "description": "Contiene 3 Cookies, 5 Waffles y 3 Muffins, sin harinas, con proteína, carbohidratos saludables, fibra, vitaminas y minerales."
+    },
+    {
+      "category": "Protein Snacks",
+      "name": "Snack Box",
+      "price": 8800,
+      "nutrition": "PROTEÍNA 26G | GRASA 12G | CARBS 27G | SIN HARINAS | SIN AZÚCAR | KCAL 312",
+      "description": "Contiene 2 Cookies, 2 Waffles y 2 Muffins, sin harinas, con proteína, carbohidratos saludables, fibra, vitaminas y minerales."
+    },
+    {
+      "category": "Protein Snacks",
+      "name": "Protein Chipá",
+      "nutrition": "PROTEÍNA 8G | GRASA 5G | CARBS 12G | SIN HARINAS | SIN AZÚCAR | KCAL 128",
+      "nutritionScope": "unidad",
+      "description": "Versión nutritiva del clásico chipá: elaborado con fécula de mandioca, sin harinas refinadas, con alto aporte de proteína, vitaminas y minerales. Una opción nutritiva con el sabor auténtico de siempre y un plus nutritivo para tus snacks.",
+      "variantAttribute": "Presentación",
+      "variants": [
+        { "name": "4 unidades", "price": 8000 },
+        { "name": "12 unidades", "price": 18000 }
+      ]
+    },
+    {
+      "category": "Protein Snacks",
+      "name": "Cookies",
+      "nutrition": "PROTEÍNA 4G | GRASA 3G | CARBS 5G | SIN HARINAS | SIN AZÚCAR | KCAL 64",
+      "nutritionScope": "unidad",
+      "description": "Cookies sin harinas ni azúcar añadida, con proteína, carbohidratos saludables, vitaminas y minerales.",
+      "variantAttribute": "Presentación",
+      "variants": [
+        { "name": "1 unidad", "price": 2500 },
+        { "name": "6 unidades", "price": 12000 },
+        { "name": "12 unidades", "price": 18000 }
+      ]
+    },
+    {
+      "category": "Protein Snacks",
+      "name": "Bon o Bon Protein",
+      "price": 7500,
+      "description": "Bon o Bon en versión proteica.",
+      "revisar": "NO figura en las páginas de producto de la carta, solo dentro de dos promos. El precio $7.500 está deducido del 'AHORRÁ $4.300' de la promo con Snack Box (7.500 + 8.800 − 12.000 = 4.300). Confirmar precio y descripción antes de publicarlo; sin este producto, esas dos promos no se pueden armar."
+    },
+
+    {
+      "category": "Bebidas calientes",
+      "name": "Dulce de Leche Latte",
+      "price": 7500,
+      "nutrition": "PROTEÍNA 18G | GRASA 4G | CARBS 18G | VIT & MIN 21 | KCAL 200",
+      "description": "Combina el clásico sabor del Dulce de leche con café, sin azúcar y bajo en grasas. Sin lactosa. Con alto aporte nutricional."
+    },
+    {
+      "category": "Bebidas calientes",
+      "name": "Submarino Protein",
+      "price": 7500,
+      "nutrition": "PROTEÍNA 18G | GRASA 4G | CARBS 18G | VIT & MIN 21 | KCAL 200",
+      "description": "Combina el clásico sabor del Chocolate Submarino, sin azúcar y bajo en grasas. Sin lactosa. Con alto aporte nutricional."
+    },
+    {
+      "category": "Bebidas calientes",
+      "name": "Mocca Protein",
+      "price": 7500,
+      "nutrition": "PROTEÍNA 10G | GRASA 1,5G | CARBS 6G | 80MG CAFEÍNA | VIT & MIN 21 | KCAL 78",
+      "description": "Combina el clásico sabor del Chocolate con café, sin azúcar y bajo en grasas. Sin lactosa. Con alto aporte nutricional."
+    },
+    {
+      "category": "Bebidas calientes",
+      "name": "Chai Latte",
+      "price": 7500,
+      "nutrition": "PROTEÍNA 10G | GRASA 1,5G | CARBS 8G | VIT & MIN 21 | KCAL 84",
+      "description": "Combina el clásico sabor chai-cremoso, contiene además canela, hibisco, malva y cardamomo, sin azúcar y bajo en grasa. Sin lactosa. Con alto aporte nutricional."
+    },
+    {
+      "category": "Bebidas calientes",
+      "name": "Detox Deluxe caliente",
+      "price": 8500,
+      "nutrition": "FIBRA 5G | ALOE VERA PURIFICADO | KCAL 10 | ORANGE PEKOE & TÉ VERDE",
+      "description": "Combinación ultra depurativa de Té Verde, Orange Pekoe, Malva, Hibisco y Cardamomo, extracto de Aloe Vera purificado con Niacina y Fibra soluble/insoluble con probióticos para lograr una limpieza y depuración interna. Sabor manzana, mango y té verde.",
+      "revisar": "En la carta se llama solo 'Detox Deluxe'. Renombrada para no chocar con la versión fría."
+    },
+    {
+      "category": "Bebidas calientes",
+      "name": "Herbal Beauty",
+      "price": 7000,
+      "nutrition": "VITAMINAS A-B-C-E | KCAL 50 | COLÁGENO VERISOL HIDROLIZADO | GUARANÁ | TÉ VERDE",
+      "description": "Combina péptidos bioactivos de Colágeno Verisol hidrolizado con extracto de semillas de Guaraná, Té Verde, Orange Pekoe. Sabor limón, fresa y té verde."
+    },
+    {
+      "category": "Bebidas calientes",
+      "name": "Energy Boost",
+      "price": 7000,
+      "nutrition": "CAFEÍNA 237MG | TAURINA 50 MG | VIT C-B6-B12 | POTASIO 50MG | KCAL 50 | GUARANÁ | TÉ VERDE",
+      "description": "Combinación ultra energizante, mejora el rendimiento y la concentración, con extracto de semillas de guaraná, Orange Pekoe, Panax Ginseng, Cafeína natural y Vitamina C. Sabor té verde y granada."
+    },
+    {
+      "category": "Bebidas calientes",
+      "name": "Herbal Active",
+      "price": 7000,
+      "nutrition": "TÉ VERDE | TÉ NEGRO | HIBISCO | EXTRACTO DE MALVA | ALOE VERA | NIACINA",
+      "description": "Combinación digestiva, termogénica y depurativa, contiene Té Verde, Orange Pekoe, Malva, Hibisco y Cardamomo, extracto de Aloe Vera purificado con Niacina. Sabor té verde y cítricos."
+    },
+    {
+      "category": "Bebidas calientes",
+      "name": "Herbal Tea",
+      "nutrition": "TÉ VERDE | TÉ NEGRO | HIBISCO | EXTRACTO DE MALVA",
+      "description": "Combinación digestiva, termogénica y estimulante, contiene Té Verde, Orange Pekoe, Malva, Hibisco y Cardamomo.",
+      "variantAttribute": "Sabor",
+      "variants": [
+        { "name": "Limón", "price": 3500 },
+        { "name": "Chai", "price": 3500 }
+      ]
+    },
+    {
+      "category": "Bebidas calientes",
+      "name": "Café Energy",
+      "price": 3500,
+      "nutrition": "CAFEÍNA 280MG | EXTRACTO DE GUARANÁ",
+      "description": "Combinación ultra energética de café y extracto de semillas de guaraná. Sabor café original, con notas especiadas y aromáticas.",
+      "revisar": "La carta ofrece 'agrandá el Café Energy por sólo $1.000'. Eso es un tamaño grande a $4.500 que no está modelado acá: si se quiere vender, va como variante Presentación (Regular $3.500 / Grande $4.500)."
+    },
+
+    {
+      "category": "Bebidas frías",
+      "name": "Pink Beauty",
+      "nutrition": "PROTEÍNA 10G | VITAMINAS A-B-C-E | COLÁGENO VERISOL HIDROLIZADO | POTASIO 32MG | KCAL 50",
+      "description": "Bebida sabor mix frutal con proteína aislada de suero de leche, péptidos bioactivos de Colágeno Verisol Hidrolizado, con alto contenido de vitaminas y minerales potenciadores de belleza, mejora la elasticidad de la piel y articulaciones.",
+      "variantAttribute": "Presentación",
+      "variants": [
+        { "name": "Individual", "price": 8500 },
+        { "name": "Pack x6", "price": 40000 }
+      ]
+    },
+    {
+      "category": "Bebidas frías",
+      "name": "Detox Deluxe frío",
+      "nutrition": "FIBRA 5G | ALOE VERA PURIFICADO | KCAL 10 | ORANGE PEKOE & TÉ VERDE",
+      "description": "Bebida sabor manzana y mango, ultra depurativa con un mix de hierbas Té Verde, Orange Pekoe, Malva, Hibisco y Cardamomo, extracto de Aloe Vera purificado con Niacina y Fibra soluble/insoluble con probióticos para lograr una limpieza y depuración interna.",
+      "variantAttribute": "Presentación",
+      "variants": [
+        { "name": "Individual", "price": 8500 },
+        {
+          "name": "Pack x6",
+          "price": 40000,
+          "description": "Todos los beneficios de nuestra bebida detox promueven un reseteo en nuestro bienestar digestivo y logran mejorar radicalmente nuestra microbiota intestinal cuando lo hacemos por 6 días consecutivos."
+        }
+      ],
+      "revisar": "En la carta se llama solo 'Detox Deluxe'. Renombrada para no chocar con la versión caliente."
+    },
+    {
+      "category": "Bebidas frías",
+      "name": "Capitán Andino",
+      "price": 7500,
+      "nutrition": "CAFEÍNA 237MG | ELECTROLITOS 273MG | TAURINA 50 MG | VIT C-B1-B6-B12 | POTASIO 150MG | KCAL 60",
+      "description": "Bebida sabor granada ultra energizante con Panax Ginseng, cafeína, taurina, contiene además extracto de semillas de Guaraná, Orange Pekoe, 273mg de electrolitos y carbohidratos para mantenerte con energía e hidratado. Te ayuda a recibir un extra de vitaminas y minerales antioxidantes."
+    },
+    {
+      "category": "Bebidas frías",
+      "name": "Mojito Energy",
+      "nutrition": "CAFEÍNA 400MG | POTASIO 100MG | MAGNESIO 63MG | TÉ VERDE GUARANÁ | VIT B1-B12 | ELECTROLITOS 273 | KCAL 50",
+      "description": "Bebida hidratante y energizante sabor frutos tropicales y Açaí, con mezcla de carbohidratos, 273mg de electrolitos para mantenerte hidratado. Contiene cafeína aportada por semillas de Guaraná y Orange Pekoe.",
+      "variantAttribute": "Presentación",
+      "variants": [
+        { "name": "Individual", "price": 7500 },
+        { "name": "Pack x6", "price": 34000 }
+      ]
+    },
+    {
+      "category": "Bebidas frías",
+      "name": "Limonada Frutilla",
+      "nutrition": "CAFEÍNA 200MG | VIT A-C-E-B1-B12 | POTASIO 100MG | MAGNESIO 63MG | COLÁGENO VERISOL HIDROLIZADO | KCAL 50 | ELECTROLITOS 273MG",
+      "description": "Bebida sabor limón/frutilla con péptidos bioactivos de Colágeno Verisol hidrolizado con alto contenido de vitaminas y minerales. Contiene además extracto de semillas de Guaraná, Té Verde, Orange Pekoe y 273mg de electrolitos y carbohidratos para mantenerte con energía e hidratado.",
+      "variantAttribute": "Presentación",
+      "variants": [
+        { "name": "Individual", "price": 7500 },
+        { "name": "Pack x6", "price": 34000 }
+      ]
+    },
+    {
+      "category": "Bebidas frías",
+      "name": "Fresh Açaí",
+      "nutrition": "POTASIO 200MG | MAGNESIO 126MG | VIT B1 B12 | ELECTROLITOS 546 MG | KCAL 100",
+      "description": "Bebida hidratante y energizante sabor Açaí frutal, contiene 546mg de electrolitos para mantenerte hidratado.",
+      "variantAttribute": "Presentación",
+      "variants": [
+        { "name": "Individual", "price": 7500 },
+        { "name": "Pack x6", "price": 34000 }
+      ]
+    },
+    {
+      "category": "Bebidas frías",
+      "name": "H3O",
+      "price": 3500,
+      "nutrition": "POTASIO 100MG | MAGNESIO 63MG | VIT B1 & B12 | ELECTROLITOS 273 MG | KCAL 50",
+      "description": "Shot de electrolitos, potasio y magnesio para reponer tu hidratación de manera práctica y efectiva."
+    }
+  ],
+
+  "selections": {
+    "bebidas-funcionales": {
+      "label": "1 bebida funcional",
+      "nota": "La carta define este conjunto por exclusión: 'NO INCLUYE PINK BEAUTY NI DETOX DELUXE'. Son las 12 bebidas restantes de las dos páginas de bebidas. El ahorro impreso de las tres promos que lo usan está calculado sobre $7.500, el precio de la elegible más cara.",
+      "products": [
+        "Dulce de Leche Latte",
+        "Submarino Protein",
+        "Mocca Protein",
+        "Chai Latte",
+        "Herbal Beauty",
+        "Energy Boost",
+        "Herbal Active",
+        "Herbal Tea",
+        "Café Energy",
+        "Capitán Andino",
+        "Mojito Energy",
+        "Limonada Frutilla",
+        "Fresh Açaí",
+        "H3O"
+      ],
+      "revisar": "Los 4 primeros son los lattes proteicos; la carta los agrupa bajo el mismo título 'BEBIDAS FUNCIONALES CALIENTES', así que entran por lectura literal del disclaimer. Si el local no los quiere en la promo, sacarlos de esta lista y listo (los combos la referencian, no la repiten)."
+    }
+  },
+
+  "combos": [
+    {
+      "category": "Promos individuales",
+      "name": "Protein Pizza + 1 bebida funcional",
+      "price": 14000,
+      "savings": 5500,
+      "description": "Protein Pizza con la bebida funcional que elijas. No incluye Pink Beauty ni Detox Deluxe.",
+      "items": [{ "product": "Protein Pizza", "qty": 1 }],
+      "groups": [{ "selection": "bebidas-funcionales", "qty": 1 }]
+    },
+    {
+      "category": "Promos individuales",
+      "name": "Bon o Bon Protein + Chipá ó Snack Box",
+      "price": 12000,
+      "savings": 4300,
+      "description": "Bon o Bon Protein con Protein Chipá (4 unidades) o Snack Box, a elección.",
+      "items": [{ "product": "Bon o Bon Protein", "qty": 1 }],
+      "groups": [
+        {
+          "label": "Elegí uno",
+          "qty": 1,
+          "products": [
+            { "product": "Protein Chipá", "variant": "4 unidades" },
+            { "product": "Snack Box" }
+          ]
+        }
+      ],
+      "revisar": "La carta dice 'Chipá' sin aclarar la presentación; se asume el pack de 4. El ahorro impreso ($4.300) cierra exacto con Snack Box (8.800), que es la opción cara del grupo."
+    },
+    {
+      "category": "Promos individuales",
+      "name": "Bon o Bon Protein + Protein Donut de regalo",
+      "price": 7500,
+      "savings": null,
+      "description": "Llevás un Bon o Bon Protein y las Protein Donuts van de regalo.",
+      "items": [
+        { "product": "Bon o Bon Protein", "qty": 1 },
+        { "product": "Protein Donuts", "qty": 1, "gratis": true }
+      ],
+      "groups": [],
+      "revisar": "Es la única promo sin badge 'AHORRÁ' impreso. Por precio el ahorro sería $7.400 (la dona entera es el regalo), pero como no está en la carta se deja en null en vez de inventarlo."
+    },
+    {
+      "category": "Promos individuales",
+      "name": "Café Energy + Cookie",
+      "price": 3000,
+      "savings": 3000,
+      "description": "Café Energy con una cookie.",
+      "items": [
+        { "product": "Café Energy", "qty": 1 },
+        { "product": "Cookies", "variant": "1 unidad", "qty": 1 }
+      ],
+      "groups": []
+    },
+
+    {
+      "category": "Promos para compartir",
+      "name": "2 bebidas funcionales + Protein Chipá",
+      "price": 16000,
+      "savings": 7000,
+      "description": "Dos bebidas funcionales a elección con Protein Chipá (4 unidades). No incluye Pink Beauty ni Detox Deluxe.",
+      "items": [{ "product": "Protein Chipá", "variant": "4 unidades", "qty": 1 }],
+      "groups": [{ "selection": "bebidas-funcionales", "qty": 2 }]
+    },
+    {
+      "category": "Promos para compartir",
+      "name": "2 bebidas funcionales + Protein Box",
+      "price": 18000,
+      "savings": 9000,
+      "description": "Dos bebidas funcionales a elección con un Protein Box. No incluye Pink Beauty ni Detox Deluxe.",
+      "items": [{ "product": "Protein Box", "qty": 1 }],
+      "groups": [{ "selection": "bebidas-funcionales", "qty": 2 }]
+    },
+    {
+      "category": "Promos para compartir",
+      "name": "2 Smoothies + Protein Chipá ó Snack Box",
+      "price": 22000,
+      "savings": 6400,
+      "description": "Dos smoothies del sabor que quieras, con Protein Chipá (4 unidades) o Snack Box a elección.",
+      "items": [],
+      "groups": [
+        { "label": "Elegí 2 smoothies", "category": "Smoothies", "qty": 2 },
+        {
+          "label": "Elegí uno",
+          "qty": 1,
+          "products": [
+            { "product": "Protein Chipá", "variant": "4 unidades" },
+            { "product": "Snack Box" }
+          ]
+        }
+      ],
+      "revisar": "El grupo de smoothies apunta a la categoría entera: entran Smoothie ($9.800) y Smoothie Express ($7.600). El ahorro impreso está calculado con dos Smoothie comunes; si el Express no debería entrar, el grupo pasa a productos explícitos."
+    },
+
+    {
+      "category": "Promos para llevar",
+      "name": "Combo 1",
+      "price": 38000,
+      "savings": 15800,
+      "description": "3 Waffles, 8 donas y 12 cookies.",
+      "items": [
+        { "product": "Waffles", "qty": 3 },
+        { "product": "Protein Donuts", "qty": 2 },
+        { "product": "Cookies", "variant": "12 unidades", "qty": 1 }
+      ],
+      "groups": []
+    },
+    {
+      "category": "Promos para llevar",
+      "name": "Combo 2",
+      "price": 29000,
+      "savings": 7000,
+      "description": "Protein Box ó Protein Pizza x3: tres unidades combinables como quieras.",
+      "items": [],
+      "groups": [
+        {
+          "label": "Elegí 3",
+          "qty": 3,
+          "products": [{ "product": "Protein Box" }, { "product": "Protein Pizza" }]
+        }
+      ]
+    },
+    {
+      "category": "Promos para llevar",
+      "name": "Combo 3",
+      "price": 27000,
+      "savings": 9000,
+      "description": "12 Protein Chipá y 12 Cookies. También podés elegir 24 unidades iguales.",
+      "items": [],
+      "groups": [
+        {
+          "label": "Elegí 2 packs de 12",
+          "qty": 2,
+          "products": [
+            { "product": "Protein Chipá", "variant": "12 unidades" },
+            { "product": "Cookies", "variant": "12 unidades" }
+          ]
+        }
+      ],
+      "revisar": "El grupo de 2 packs a elección es justo lo que habilita el '*también podés elegir 24 unidades iguales' de la carta: 2 del mismo pack. Requiere que el backend permita repetir el mismo producto dentro de un grupo."
+    },
+    {
+      "category": "Promos para llevar",
+      "name": "Merienda Kids",
+      "price": 24000,
+      "savings": 7000,
+      "description": "1 Waffle, 6 Muffins y 6 Cookies.",
+      "items": [
+        { "product": "Waffles", "qty": 1 },
+        { "product": "Muffins", "variant": "6 unidades", "qty": 1 },
+        { "product": "Cookies", "variant": "6 unidades", "qty": 1 }
+      ],
+      "groups": []
+    }
+  ]
+}

@@ -331,8 +331,15 @@ arriba); 20 tests en `tests/combos.test.js`; `front-md-guia/FRONTEND_COMBOS.md`.
 - Pricing suma-de-partes / híbrido (`comboPricingMode`).
 - Edición in-place de un combo ya en carrito/orden (v1: quitar la línea completa y re-agregar).
 - Combos anidados (bloqueado por validación server-side, nunca soportado).
-- Whitelist a nivel de variante específica (hoy es por producto; todas las variantes activas del
-  producto permitido son elegibles).
+- **Whitelist a nivel de variante específica** (hoy es por producto: todas las variantes activas del
+  producto permitido son elegibles). Dejó de ser teórico con [[punto-healthy]] — 7 de sus 11 promos
+  nombran una presentación puntual ("Café Energy + **1** Cookie" a $3.000, y el cliente puede elegir
+  el pack de 12 que vale $18.000). Fix propuesto, en orden: `ComboAllowedProduct.allowedVariantId
+  Int?` (null = cualquier variante, o sea el comportamiento actual, sin migración de datos);
+  `validateComboSelection` rechaza con `COMBO_VARIANT_NOT_ALLOWED` cuando no coincide (punto único,
+  lo comparten carrito y orden); `getComboOptions` filtra `variants[]` para no ofrecer lo que el
+  server va a rechazar; y `comboOption`/`comboCategoryOption` en `schemas/product.schema.js` aceptan
+  la variante. Detalle y tabla de casos en [[punto-healthy]].
 - `ComboAllowedCategory` no baja a subcategorías: matchea `product.categoryId` exacto contra la
   categoría permitida, sin recorrer el árbol de [[Categorías]]. Si se whitelistea una categoría
   padre, sus subcategorías NO quedan incluidas automáticamente — hay que agregarlas explícitamente.
@@ -346,6 +353,15 @@ arriba); 20 tests en `tests/combos.test.js`; `front-md-guia/FRONTEND_COMBOS.md`.
   whitelist (`comboMinItems`/`comboMaxItems`). No existe un modo de combo con contenido fijo
   (sin selección) que se agregue al carrito como un producto simple — si un tenant necesita esto
   (ej. Mesa Dulce, ver [[App]]), es una brecha de producto a resolver, no solo de configuración.
+  Workaround en uso ([[punto-healthy]]): el contenido fijo se expresa como reglas de cantidad exacta
+  (`minQty = maxQty = qty`), así que el combo se arma igual pero el cliente tiene que "elegir" lo
+  único elegible.
+- **Ítem obligatorio en una whitelist standalone**: el `minQty` de una regla standalone solo se
+  valida si el producto está en la selección (`validateComboSelection` itera sobre lo elegido, no
+  sobre las reglas — a diferencia de las reglas de categoría, cuyo mínimo se exige siempre). En un
+  combo "1 fijo + elegí 1" eso deja pasar 2 unidades del grupo y 0 del ítem fijo. Se nota solo
+  cuando el combo NO puede usar reglas de categoría (grupo que cruza categorías, o dos grupos en la
+  misma); 4 combos de [[punto-healthy]] están en esa situación.
 
 ## Dependencias
 - [[Productos]] — el combo es un `Product` más (`type = "COMBO"`); whitelist referencia otros

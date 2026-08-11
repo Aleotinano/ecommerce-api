@@ -1,0 +1,1423 @@
+{
+  "categorias": [
+    {
+      "name": "Protein Bowls",
+      "parent": null,
+      "position": 0,
+      "icon": "salad",
+      "description": null
+    },
+    {
+      "name": "Smoothies",
+      "parent": null,
+      "position": 1,
+      "icon": "blend",
+      "description": "Bebida versión Smoothie que contiene una perfecta combinación de proteínas, carbohidratos y fibra. Contribuye a sentirte saciado y con energía. Ayudando a incorporar todos los nutrientes que tu cuerpo necesita con pocas calorías."
+    },
+    {
+      "name": "Protein Snacks",
+      "parent": null,
+      "position": 2,
+      "icon": "cookie",
+      "description": null
+    },
+    {
+      "name": "Bebidas",
+      "parent": null,
+      "position": 3,
+      "icon": "cup-soda",
+      "description": null
+    },
+    {
+      "name": "Bebidas calientes",
+      "parent": "Bebidas",
+      "position": 0,
+      "icon": "coffee",
+      "description": null
+    },
+    {
+      "name": "Bebidas frías",
+      "parent": "Bebidas",
+      "position": 1,
+      "icon": "glass-water",
+      "description": null
+    },
+    {
+      "name": "Promos",
+      "parent": null,
+      "position": 4,
+      "icon": "percent",
+      "description": null
+    },
+    {
+      "name": "Promos individuales",
+      "parent": "Promos",
+      "position": 0,
+      "icon": "user",
+      "description": "Ahorrá y probá."
+    },
+    {
+      "name": "Promos para compartir",
+      "parent": "Promos",
+      "position": 1,
+      "icon": "users",
+      "description": "Para disfrutar de a 2."
+    },
+    {
+      "name": "Promos para llevar",
+      "parent": "Promos",
+      "position": 2,
+      "icon": "shopping-bag",
+      "description": "Planificá tu semana."
+    }
+  ],
+  "productos": [
+    {
+      "name": "Colágeno Tropical",
+      "category": "Protein Bowls",
+      "description": "Bowl con sabor tropical y arándano. Tiene una perfecta combinación de proteínas, carbohidratos y fibra. Con péptidos bioactivos de Colágeno Verisol hidrolizado tipo 1, con alto contenido de vitaminas y minerales potenciadores de belleza.\n\nPROTEÍNA 28G | GRASA 3G | CARBS 10G | FIBRA 7G | VIT & MIN 21 | KCAL 300",
+      "variantAttribute": null,
+      "variants": [
+        {
+          "sku": "PH-COLAGENO-TROPICAL",
+          "attributes": {},
+          "price": 13000,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": null,
+          "descripcionPropia": null
+        }
+      ]
+    },
+    {
+      "name": "Detox Active",
+      "category": "Protein Bowls",
+      "description": "Bowl con sabor durazno-manzana. Tiene una perfecta combinación de proteínas, carbohidratos y fibra con un extra de probióticos que promueven una depuración interna de forma saludable.\n\nPROTEÍNA 15G | GRASA 2,5G | CARBS 15G | FIBRA 17G | VIT & MIN 21 | KCAL 180",
+      "variantAttribute": null,
+      "variants": [
+        {
+          "sku": "PH-DETOX-ACTIVE",
+          "attributes": {},
+          "price": 13000,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": null,
+          "descripcionPropia": null
+        }
+      ]
+    },
+    {
+      "name": "Smoothie",
+      "category": "Smoothies",
+      "description": "Bebida versión Smoothie que contiene una perfecta combinación de proteínas, carbohidratos y fibra. Contribuye a sentirte saciado y con energía.\n\nPROTEÍNA 24G | GRASA 3G | CARBS 10G | FIBRA 7G | VIT & MIN 21 | KCAL 250",
+      "variantAttribute": "sabor",
+      "variants": [
+        {
+          "sku": "PH-SMOOTHIE-BANANA-SPLIT",
+          "attributes": {
+            "sabor": "Banana Split"
+          },
+          "price": 9800,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": "Banana Split",
+          "descripcionPropia": null
+        },
+        {
+          "sku": "PH-SMOOTHIE-OREO",
+          "attributes": {
+            "sabor": "Oreo"
+          },
+          "price": 9800,
+          "stock": 100,
+          "isDefault": false,
+          "nombre": "Oreo",
+          "descripcionPropia": null
+        },
+        {
+          "sku": "PH-SMOOTHIE-SUPER-DULCE-DE-LECHE",
+          "attributes": {
+            "sabor": "Súper Dulce de Leche"
+          },
+          "price": 9800,
+          "stock": 100,
+          "isDefault": false,
+          "nombre": "Súper Dulce de Leche",
+          "descripcionPropia": null
+        },
+        {
+          "sku": "PH-SMOOTHIE-CARAMEL-COFFEE",
+          "attributes": {
+            "sabor": "Caramel Coffee"
+          },
+          "price": 9800,
+          "stock": 100,
+          "isDefault": false,
+          "nombre": "Caramel Coffee",
+          "descripcionPropia": null
+        },
+        {
+          "sku": "PH-SMOOTHIE-CAFE-LATTE",
+          "attributes": {
+            "sabor": "Café Latte"
+          },
+          "price": 9800,
+          "stock": 100,
+          "isDefault": false,
+          "nombre": "Café Latte",
+          "descripcionPropia": null
+        },
+        {
+          "sku": "PH-SMOOTHIE-CHOCOLATOSO",
+          "attributes": {
+            "sabor": "Chocolatoso"
+          },
+          "price": 9800,
+          "stock": 100,
+          "isDefault": false,
+          "nombre": "Chocolatoso",
+          "descripcionPropia": null
+        },
+        {
+          "sku": "PH-SMOOTHIE-CADBURY",
+          "attributes": {
+            "sabor": "Cadbury"
+          },
+          "price": 9800,
+          "stock": 100,
+          "isDefault": false,
+          "nombre": "Cadbury",
+          "descripcionPropia": null
+        },
+        {
+          "sku": "PH-SMOOTHIE-BANANITA-DOLCA",
+          "attributes": {
+            "sabor": "Bananita Dolca"
+          },
+          "price": 9800,
+          "stock": 100,
+          "isDefault": false,
+          "nombre": "Bananita Dolca",
+          "descripcionPropia": null
+        },
+        {
+          "sku": "PH-SMOOTHIE-FRUTILLA",
+          "attributes": {
+            "sabor": "Frutilla"
+          },
+          "price": 9800,
+          "stock": 100,
+          "isDefault": false,
+          "nombre": "Frutilla",
+          "descripcionPropia": null
+        },
+        {
+          "sku": "PH-SMOOTHIE-DURAZNO",
+          "attributes": {
+            "sabor": "Durazno"
+          },
+          "price": 9800,
+          "stock": 100,
+          "isDefault": false,
+          "nombre": "Durazno",
+          "descripcionPropia": null
+        }
+      ]
+    },
+    {
+      "name": "Smoothie Express",
+      "category": "Smoothies",
+      "description": "Versión express del smoothie, con proteínas, carbohidratos y fibra en menos calorías.\n\nPROTEÍNA 10G | GRASA 1G | CARBS 3G | FIBRA 2G | VIT & MIN 21 | KCAL 100",
+      "variantAttribute": "sabor",
+      "variants": [
+        {
+          "sku": "PH-SMOOTHIE-EXPRESS-BANANA-SPLIT",
+          "attributes": {
+            "sabor": "Banana Split"
+          },
+          "price": 7600,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": "Banana Split",
+          "descripcionPropia": null
+        },
+        {
+          "sku": "PH-SMOOTHIE-EXPRESS-SUPER-DULCE-DE-LECHE",
+          "attributes": {
+            "sabor": "Súper Dulce de Leche"
+          },
+          "price": 7600,
+          "stock": 100,
+          "isDefault": false,
+          "nombre": "Súper Dulce de Leche",
+          "descripcionPropia": null
+        },
+        {
+          "sku": "PH-SMOOTHIE-EXPRESS-OREO",
+          "attributes": {
+            "sabor": "Oreo"
+          },
+          "price": 7600,
+          "stock": 100,
+          "isDefault": false,
+          "nombre": "Oreo",
+          "descripcionPropia": null
+        },
+        {
+          "sku": "PH-SMOOTHIE-EXPRESS-CARAMEL-COFFEE",
+          "attributes": {
+            "sabor": "Caramel Coffee"
+          },
+          "price": 7600,
+          "stock": 100,
+          "isDefault": false,
+          "nombre": "Caramel Coffee",
+          "descripcionPropia": null
+        },
+        {
+          "sku": "PH-SMOOTHIE-EXPRESS-CHOCOLATOSO",
+          "attributes": {
+            "sabor": "Chocolatoso"
+          },
+          "price": 7600,
+          "stock": 100,
+          "isDefault": false,
+          "nombre": "Chocolatoso",
+          "descripcionPropia": null
+        },
+        {
+          "sku": "PH-SMOOTHIE-EXPRESS-BANANITA-DOLCA",
+          "attributes": {
+            "sabor": "Bananita Dolca"
+          },
+          "price": 7600,
+          "stock": 100,
+          "isDefault": false,
+          "nombre": "Bananita Dolca",
+          "descripcionPropia": null
+        },
+        {
+          "sku": "PH-SMOOTHIE-EXPRESS-FRUTILLA",
+          "attributes": {
+            "sabor": "Frutilla"
+          },
+          "price": 7600,
+          "stock": 100,
+          "isDefault": false,
+          "nombre": "Frutilla",
+          "descripcionPropia": null
+        },
+        {
+          "sku": "PH-SMOOTHIE-EXPRESS-DURAZNO",
+          "attributes": {
+            "sabor": "Durazno"
+          },
+          "price": 7600,
+          "stock": 100,
+          "isDefault": false,
+          "nombre": "Durazno",
+          "descripcionPropia": null
+        }
+      ]
+    },
+    {
+      "name": "Protein Pizza",
+      "category": "Protein Snacks",
+      "description": "Pizza individual con mozzarella y tomates secos. Sin harinas, alta en proteínas, con carbohidratos saludables, fibra, vitaminas y minerales.\n\nPROTEÍNA 40G | GRASA 30G | CARBS 52G | SIN HARINAS | VIT & MIN 21 | KCAL 600",
+      "variantAttribute": null,
+      "variants": [
+        {
+          "sku": "PH-PROTEIN-PIZZA",
+          "attributes": {},
+          "price": 12000,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": null,
+          "descripcionPropia": null
+        }
+      ]
+    },
+    {
+      "name": "Protein Donuts",
+      "category": "Protein Snacks",
+      "description": "Contiene 4 donas sin harinas, altas en proteína, con carbohidratos saludables, fibra, vitaminas y minerales.\n\nVALORES POR UNIDAD — PROTEÍNA 5G | GRASA 2G | CARBS 6G | SIN HARINAS | SIN AZÚCAR | KCAL 60",
+      "variantAttribute": null,
+      "variants": [
+        {
+          "sku": "PH-PROTEIN-DONUTS",
+          "attributes": {},
+          "price": 7400,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": null,
+          "descripcionPropia": null
+        }
+      ]
+    },
+    {
+      "name": "Muffins",
+      "category": "Protein Snacks",
+      "description": "Muffins sin harinas ni azúcar añadida, con proteína, carbohidratos saludables, vitaminas y minerales.\n\nVALORES POR UNIDAD — PROTEÍNA 6G | GRASA 2G | CARBS 6G | SIN HARINAS | SIN AZÚCAR | KCAL 60",
+      "variantAttribute": "presentacion",
+      "variants": [
+        {
+          "sku": "PH-MUFFINS-6-UNIDADES",
+          "attributes": {
+            "presentacion": "6 unidades"
+          },
+          "price": 12000,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": "6 unidades",
+          "descripcionPropia": null
+        },
+        {
+          "sku": "PH-MUFFINS-12-UNIDADES",
+          "attributes": {
+            "presentacion": "12 unidades"
+          },
+          "price": 18000,
+          "stock": 100,
+          "isDefault": false,
+          "nombre": "12 unidades",
+          "descripcionPropia": null
+        }
+      ]
+    },
+    {
+      "name": "Waffles",
+      "category": "Protein Snacks",
+      "description": "Si sos fan de lo dulce, tenés que probar nuestros Waffles sin harinas con proteína, carbohidratos saludables, fibra, vitaminas y minerales.\n\nPROTEÍNA 15G | GRASA 6G | CARBS 13G | SIN HARINAS | SIN AZÚCAR | KCAL 162",
+      "variantAttribute": null,
+      "variants": [
+        {
+          "sku": "PH-WAFFLES",
+          "attributes": {},
+          "price": 7000,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": null,
+          "descripcionPropia": null
+        }
+      ]
+    },
+    {
+      "name": "Cookie Rellena",
+      "category": "Protein Snacks",
+      "description": "Cookie rellena con crema hiper proteica, contiene grasas y carbohidratos saludables, una opción deliciosa para cualquier momento del día.\n\nPROTEÍNA 24G | GRASA 21G | CARBS 19G | SIN HARINAS | SIN AZÚCAR | 373 KCAL",
+      "variantAttribute": null,
+      "variants": [
+        {
+          "sku": "PH-COOKIE-RELLENA",
+          "attributes": {},
+          "price": 6500,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": null,
+          "descripcionPropia": null
+        }
+      ]
+    },
+    {
+      "name": "Protein Box",
+      "category": "Protein Snacks",
+      "description": "Contiene 3 Cookies, 5 Waffles y 3 Muffins, sin harinas, con proteína, carbohidratos saludables, fibra, vitaminas y minerales.\n\nPROTEÍNA 45G | GRASA 21G | CARBS 46G | SIN HARINAS | SIN AZÚCAR | KCAL 534",
+      "variantAttribute": null,
+      "variants": [
+        {
+          "sku": "PH-PROTEIN-BOX",
+          "attributes": {},
+          "price": 12000,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": null,
+          "descripcionPropia": null
+        }
+      ]
+    },
+    {
+      "name": "Snack Box",
+      "category": "Protein Snacks",
+      "description": "Contiene 2 Cookies, 2 Waffles y 2 Muffins, sin harinas, con proteína, carbohidratos saludables, fibra, vitaminas y minerales.\n\nPROTEÍNA 26G | GRASA 12G | CARBS 27G | SIN HARINAS | SIN AZÚCAR | KCAL 312",
+      "variantAttribute": null,
+      "variants": [
+        {
+          "sku": "PH-SNACK-BOX",
+          "attributes": {},
+          "price": 8800,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": null,
+          "descripcionPropia": null
+        }
+      ]
+    },
+    {
+      "name": "Protein Chipá",
+      "category": "Protein Snacks",
+      "description": "Versión nutritiva del clásico chipá: elaborado con fécula de mandioca, sin harinas refinadas, con alto aporte de proteína, vitaminas y minerales. Una opción nutritiva con el sabor auténtico de siempre y un plus nutritivo para tus snacks.\n\nVALORES POR UNIDAD — PROTEÍNA 8G | GRASA 5G | CARBS 12G | SIN HARINAS | SIN AZÚCAR | KCAL 128",
+      "variantAttribute": "presentacion",
+      "variants": [
+        {
+          "sku": "PH-PROTEIN-CHIPA-4-UNIDADES",
+          "attributes": {
+            "presentacion": "4 unidades"
+          },
+          "price": 8000,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": "4 unidades",
+          "descripcionPropia": null
+        },
+        {
+          "sku": "PH-PROTEIN-CHIPA-12-UNIDADES",
+          "attributes": {
+            "presentacion": "12 unidades"
+          },
+          "price": 18000,
+          "stock": 100,
+          "isDefault": false,
+          "nombre": "12 unidades",
+          "descripcionPropia": null
+        }
+      ]
+    },
+    {
+      "name": "Cookies",
+      "category": "Protein Snacks",
+      "description": "Cookies sin harinas ni azúcar añadida, con proteína, carbohidratos saludables, vitaminas y minerales.\n\nVALORES POR UNIDAD — PROTEÍNA 4G | GRASA 3G | CARBS 5G | SIN HARINAS | SIN AZÚCAR | KCAL 64",
+      "variantAttribute": "presentacion",
+      "variants": [
+        {
+          "sku": "PH-COOKIES-1-UNIDAD",
+          "attributes": {
+            "presentacion": "1 unidad"
+          },
+          "price": 2500,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": "1 unidad",
+          "descripcionPropia": null
+        },
+        {
+          "sku": "PH-COOKIES-6-UNIDADES",
+          "attributes": {
+            "presentacion": "6 unidades"
+          },
+          "price": 12000,
+          "stock": 100,
+          "isDefault": false,
+          "nombre": "6 unidades",
+          "descripcionPropia": null
+        },
+        {
+          "sku": "PH-COOKIES-12-UNIDADES",
+          "attributes": {
+            "presentacion": "12 unidades"
+          },
+          "price": 18000,
+          "stock": 100,
+          "isDefault": false,
+          "nombre": "12 unidades",
+          "descripcionPropia": null
+        }
+      ]
+    },
+    {
+      "name": "Bon o Bon Protein",
+      "category": "Protein Snacks",
+      "description": "Bon o Bon en versión proteica.",
+      "variantAttribute": null,
+      "variants": [
+        {
+          "sku": "PH-BON-O-BON-PROTEIN",
+          "attributes": {},
+          "price": 7500,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": null,
+          "descripcionPropia": null
+        }
+      ]
+    },
+    {
+      "name": "Dulce de Leche Latte",
+      "category": "Bebidas calientes",
+      "description": "Combina el clásico sabor del Dulce de leche con café, sin azúcar y bajo en grasas. Sin lactosa. Con alto aporte nutricional.\n\nPROTEÍNA 18G | GRASA 4G | CARBS 18G | VIT & MIN 21 | KCAL 200",
+      "variantAttribute": null,
+      "variants": [
+        {
+          "sku": "PH-DULCE-DE-LECHE-LATTE",
+          "attributes": {},
+          "price": 7500,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": null,
+          "descripcionPropia": null
+        }
+      ]
+    },
+    {
+      "name": "Submarino Protein",
+      "category": "Bebidas calientes",
+      "description": "Combina el clásico sabor del Chocolate Submarino, sin azúcar y bajo en grasas. Sin lactosa. Con alto aporte nutricional.\n\nPROTEÍNA 18G | GRASA 4G | CARBS 18G | VIT & MIN 21 | KCAL 200",
+      "variantAttribute": null,
+      "variants": [
+        {
+          "sku": "PH-SUBMARINO-PROTEIN",
+          "attributes": {},
+          "price": 7500,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": null,
+          "descripcionPropia": null
+        }
+      ]
+    },
+    {
+      "name": "Mocca Protein",
+      "category": "Bebidas calientes",
+      "description": "Combina el clásico sabor del Chocolate con café, sin azúcar y bajo en grasas. Sin lactosa. Con alto aporte nutricional.\n\nPROTEÍNA 10G | GRASA 1,5G | CARBS 6G | 80MG CAFEÍNA | VIT & MIN 21 | KCAL 78",
+      "variantAttribute": null,
+      "variants": [
+        {
+          "sku": "PH-MOCCA-PROTEIN",
+          "attributes": {},
+          "price": 7500,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": null,
+          "descripcionPropia": null
+        }
+      ]
+    },
+    {
+      "name": "Chai Latte",
+      "category": "Bebidas calientes",
+      "description": "Combina el clásico sabor chai-cremoso, contiene además canela, hibisco, malva y cardamomo, sin azúcar y bajo en grasa. Sin lactosa. Con alto aporte nutricional.\n\nPROTEÍNA 10G | GRASA 1,5G | CARBS 8G | VIT & MIN 21 | KCAL 84",
+      "variantAttribute": null,
+      "variants": [
+        {
+          "sku": "PH-CHAI-LATTE",
+          "attributes": {},
+          "price": 7500,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": null,
+          "descripcionPropia": null
+        }
+      ]
+    },
+    {
+      "name": "Detox Deluxe caliente",
+      "category": "Bebidas calientes",
+      "description": "Combinación ultra depurativa de Té Verde, Orange Pekoe, Malva, Hibisco y Cardamomo, extracto de Aloe Vera purificado con Niacina y Fibra soluble/insoluble con probióticos para lograr una limpieza y depuración interna. Sabor manzana, mango y té verde.\n\nFIBRA 5G | ALOE VERA PURIFICADO | KCAL 10 | ORANGE PEKOE & TÉ VERDE",
+      "variantAttribute": null,
+      "variants": [
+        {
+          "sku": "PH-DETOX-DELUXE-CALIENTE",
+          "attributes": {},
+          "price": 8500,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": null,
+          "descripcionPropia": null
+        }
+      ]
+    },
+    {
+      "name": "Herbal Beauty",
+      "category": "Bebidas calientes",
+      "description": "Combina péptidos bioactivos de Colágeno Verisol hidrolizado con extracto de semillas de Guaraná, Té Verde, Orange Pekoe. Sabor limón, fresa y té verde.\n\nVITAMINAS A-B-C-E | KCAL 50 | COLÁGENO VERISOL HIDROLIZADO | GUARANÁ | TÉ VERDE",
+      "variantAttribute": null,
+      "variants": [
+        {
+          "sku": "PH-HERBAL-BEAUTY",
+          "attributes": {},
+          "price": 7000,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": null,
+          "descripcionPropia": null
+        }
+      ]
+    },
+    {
+      "name": "Energy Boost",
+      "category": "Bebidas calientes",
+      "description": "Combinación ultra energizante, mejora el rendimiento y la concentración, con extracto de semillas de guaraná, Orange Pekoe, Panax Ginseng, Cafeína natural y Vitamina C. Sabor té verde y granada.\n\nCAFEÍNA 237MG | TAURINA 50 MG | VIT C-B6-B12 | POTASIO 50MG | KCAL 50 | GUARANÁ | TÉ VERDE",
+      "variantAttribute": null,
+      "variants": [
+        {
+          "sku": "PH-ENERGY-BOOST",
+          "attributes": {},
+          "price": 7000,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": null,
+          "descripcionPropia": null
+        }
+      ]
+    },
+    {
+      "name": "Herbal Active",
+      "category": "Bebidas calientes",
+      "description": "Combinación digestiva, termogénica y depurativa, contiene Té Verde, Orange Pekoe, Malva, Hibisco y Cardamomo, extracto de Aloe Vera purificado con Niacina. Sabor té verde y cítricos.\n\nTÉ VERDE | TÉ NEGRO | HIBISCO | EXTRACTO DE MALVA | ALOE VERA | NIACINA",
+      "variantAttribute": null,
+      "variants": [
+        {
+          "sku": "PH-HERBAL-ACTIVE",
+          "attributes": {},
+          "price": 7000,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": null,
+          "descripcionPropia": null
+        }
+      ]
+    },
+    {
+      "name": "Herbal Tea",
+      "category": "Bebidas calientes",
+      "description": "Combinación digestiva, termogénica y estimulante, contiene Té Verde, Orange Pekoe, Malva, Hibisco y Cardamomo.\n\nTÉ VERDE | TÉ NEGRO | HIBISCO | EXTRACTO DE MALVA",
+      "variantAttribute": "sabor",
+      "variants": [
+        {
+          "sku": "PH-HERBAL-TEA-LIMON",
+          "attributes": {
+            "sabor": "Limón"
+          },
+          "price": 3500,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": "Limón",
+          "descripcionPropia": null
+        },
+        {
+          "sku": "PH-HERBAL-TEA-CHAI",
+          "attributes": {
+            "sabor": "Chai"
+          },
+          "price": 3500,
+          "stock": 100,
+          "isDefault": false,
+          "nombre": "Chai",
+          "descripcionPropia": null
+        }
+      ]
+    },
+    {
+      "name": "Café Energy",
+      "category": "Bebidas calientes",
+      "description": "Combinación ultra energética de café y extracto de semillas de guaraná. Sabor café original, con notas especiadas y aromáticas.\n\nCAFEÍNA 280MG | EXTRACTO DE GUARANÁ",
+      "variantAttribute": null,
+      "variants": [
+        {
+          "sku": "PH-CAFE-ENERGY",
+          "attributes": {},
+          "price": 3500,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": null,
+          "descripcionPropia": null
+        }
+      ]
+    },
+    {
+      "name": "Pink Beauty",
+      "category": "Bebidas frías",
+      "description": "Bebida sabor mix frutal con proteína aislada de suero de leche, péptidos bioactivos de Colágeno Verisol Hidrolizado, con alto contenido de vitaminas y minerales potenciadores de belleza, mejora la elasticidad de la piel y articulaciones.\n\nPROTEÍNA 10G | VITAMINAS A-B-C-E | COLÁGENO VERISOL HIDROLIZADO | POTASIO 32MG | KCAL 50",
+      "variantAttribute": "presentacion",
+      "variants": [
+        {
+          "sku": "PH-PINK-BEAUTY-INDIVIDUAL",
+          "attributes": {
+            "presentacion": "Individual"
+          },
+          "price": 8500,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": "Individual",
+          "descripcionPropia": null
+        },
+        {
+          "sku": "PH-PINK-BEAUTY-PACK-X6",
+          "attributes": {
+            "presentacion": "Pack x6"
+          },
+          "price": 40000,
+          "stock": 100,
+          "isDefault": false,
+          "nombre": "Pack x6",
+          "descripcionPropia": null
+        }
+      ]
+    },
+    {
+      "name": "Detox Deluxe frío",
+      "category": "Bebidas frías",
+      "description": "Bebida sabor manzana y mango, ultra depurativa con un mix de hierbas Té Verde, Orange Pekoe, Malva, Hibisco y Cardamomo, extracto de Aloe Vera purificado con Niacina y Fibra soluble/insoluble con probióticos para lograr una limpieza y depuración interna.\n\nFIBRA 5G | ALOE VERA PURIFICADO | KCAL 10 | ORANGE PEKOE & TÉ VERDE",
+      "variantAttribute": "presentacion",
+      "variants": [
+        {
+          "sku": "PH-DETOX-DELUXE-FRIO-INDIVIDUAL",
+          "attributes": {
+            "presentacion": "Individual"
+          },
+          "price": 8500,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": "Individual",
+          "descripcionPropia": null
+        },
+        {
+          "sku": "PH-DETOX-DELUXE-FRIO-PACK-X6",
+          "attributes": {
+            "presentacion": "Pack x6"
+          },
+          "price": 40000,
+          "stock": 100,
+          "isDefault": false,
+          "nombre": "Pack x6",
+          "descripcionPropia": "Todos los beneficios de nuestra bebida detox promueven un reseteo en nuestro bienestar digestivo y logran mejorar radicalmente nuestra microbiota intestinal cuando lo hacemos por 6 días consecutivos."
+        }
+      ]
+    },
+    {
+      "name": "Capitán Andino",
+      "category": "Bebidas frías",
+      "description": "Bebida sabor granada ultra energizante con Panax Ginseng, cafeína, taurina, contiene además extracto de semillas de Guaraná, Orange Pekoe, 273mg de electrolitos y carbohidratos para mantenerte con energía e hidratado. Te ayuda a recibir un extra de vitaminas y minerales antioxidantes.\n\nCAFEÍNA 237MG | ELECTROLITOS 273MG | TAURINA 50 MG | VIT C-B1-B6-B12 | POTASIO 150MG | KCAL 60",
+      "variantAttribute": null,
+      "variants": [
+        {
+          "sku": "PH-CAPITAN-ANDINO",
+          "attributes": {},
+          "price": 7500,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": null,
+          "descripcionPropia": null
+        }
+      ]
+    },
+    {
+      "name": "Mojito Energy",
+      "category": "Bebidas frías",
+      "description": "Bebida hidratante y energizante sabor frutos tropicales y Açaí, con mezcla de carbohidratos, 273mg de electrolitos para mantenerte hidratado. Contiene cafeína aportada por semillas de Guaraná y Orange Pekoe.\n\nCAFEÍNA 400MG | POTASIO 100MG | MAGNESIO 63MG | TÉ VERDE GUARANÁ | VIT B1-B12 | ELECTROLITOS 273 | KCAL 50",
+      "variantAttribute": "presentacion",
+      "variants": [
+        {
+          "sku": "PH-MOJITO-ENERGY-INDIVIDUAL",
+          "attributes": {
+            "presentacion": "Individual"
+          },
+          "price": 7500,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": "Individual",
+          "descripcionPropia": null
+        },
+        {
+          "sku": "PH-MOJITO-ENERGY-PACK-X6",
+          "attributes": {
+            "presentacion": "Pack x6"
+          },
+          "price": 34000,
+          "stock": 100,
+          "isDefault": false,
+          "nombre": "Pack x6",
+          "descripcionPropia": null
+        }
+      ]
+    },
+    {
+      "name": "Limonada Frutilla",
+      "category": "Bebidas frías",
+      "description": "Bebida sabor limón/frutilla con péptidos bioactivos de Colágeno Verisol hidrolizado con alto contenido de vitaminas y minerales. Contiene además extracto de semillas de Guaraná, Té Verde, Orange Pekoe y 273mg de electrolitos y carbohidratos para mantenerte con energía e hidratado.\n\nCAFEÍNA 200MG | VIT A-C-E-B1-B12 | POTASIO 100MG | MAGNESIO 63MG | COLÁGENO VERISOL HIDROLIZADO | KCAL 50 | ELECTROLITOS 273MG",
+      "variantAttribute": "presentacion",
+      "variants": [
+        {
+          "sku": "PH-LIMONADA-FRUTILLA-INDIVIDUAL",
+          "attributes": {
+            "presentacion": "Individual"
+          },
+          "price": 7500,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": "Individual",
+          "descripcionPropia": null
+        },
+        {
+          "sku": "PH-LIMONADA-FRUTILLA-PACK-X6",
+          "attributes": {
+            "presentacion": "Pack x6"
+          },
+          "price": 34000,
+          "stock": 100,
+          "isDefault": false,
+          "nombre": "Pack x6",
+          "descripcionPropia": null
+        }
+      ]
+    },
+    {
+      "name": "Fresh Açaí",
+      "category": "Bebidas frías",
+      "description": "Bebida hidratante y energizante sabor Açaí frutal, contiene 546mg de electrolitos para mantenerte hidratado.\n\nPOTASIO 200MG | MAGNESIO 126MG | VIT B1 B12 | ELECTROLITOS 546 MG | KCAL 100",
+      "variantAttribute": "presentacion",
+      "variants": [
+        {
+          "sku": "PH-FRESH-ACAI-INDIVIDUAL",
+          "attributes": {
+            "presentacion": "Individual"
+          },
+          "price": 7500,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": "Individual",
+          "descripcionPropia": null
+        },
+        {
+          "sku": "PH-FRESH-ACAI-PACK-X6",
+          "attributes": {
+            "presentacion": "Pack x6"
+          },
+          "price": 34000,
+          "stock": 100,
+          "isDefault": false,
+          "nombre": "Pack x6",
+          "descripcionPropia": null
+        }
+      ]
+    },
+    {
+      "name": "H3O",
+      "category": "Bebidas frías",
+      "description": "Shot de electrolitos, potasio y magnesio para reponer tu hidratación de manera práctica y efectiva.\n\nPOTASIO 100MG | MAGNESIO 63MG | VIT B1 & B12 | ELECTROLITOS 273 MG | KCAL 50",
+      "variantAttribute": null,
+      "variants": [
+        {
+          "sku": "PH-H3O",
+          "attributes": {},
+          "price": 3500,
+          "stock": 100,
+          "isDefault": true,
+          "nombre": null,
+          "descripcionPropia": null
+        }
+      ]
+    }
+  ],
+  "combos": [
+    {
+      "name": "Protein Pizza + 1 bebida funcional",
+      "category": "Promos individuales",
+      "description": "Protein Pizza con la bebida funcional que elijas. No incluye Pink Beauty ni Detox Deluxe.",
+      "price": 14000,
+      "compareAtPrice": 19500,
+      "savings": 5500,
+      "patron": "standalone",
+      "comboMinItems": 2,
+      "comboMaxItems": 2,
+      "categoryOptions": null,
+      "options": [
+        {
+          "product": "Protein Pizza",
+          "minQty": 1,
+          "maxQty": 1
+        },
+        {
+          "product": "Dulce de Leche Latte",
+          "minQty": 0,
+          "maxQty": 1
+        },
+        {
+          "product": "Submarino Protein",
+          "minQty": 0,
+          "maxQty": 1
+        },
+        {
+          "product": "Mocca Protein",
+          "minQty": 0,
+          "maxQty": 1
+        },
+        {
+          "product": "Chai Latte",
+          "minQty": 0,
+          "maxQty": 1
+        },
+        {
+          "product": "Herbal Beauty",
+          "minQty": 0,
+          "maxQty": 1
+        },
+        {
+          "product": "Energy Boost",
+          "minQty": 0,
+          "maxQty": 1
+        },
+        {
+          "product": "Herbal Active",
+          "minQty": 0,
+          "maxQty": 1
+        },
+        {
+          "product": "Herbal Tea",
+          "minQty": 0,
+          "maxQty": 1
+        },
+        {
+          "product": "Café Energy",
+          "minQty": 0,
+          "maxQty": 1
+        },
+        {
+          "product": "Capitán Andino",
+          "minQty": 0,
+          "maxQty": 1
+        },
+        {
+          "product": "Mojito Energy",
+          "minQty": 0,
+          "maxQty": 1
+        },
+        {
+          "product": "Limonada Frutilla",
+          "minQty": 0,
+          "maxQty": 1
+        },
+        {
+          "product": "Fresh Açaí",
+          "minQty": 0,
+          "maxQty": 1
+        },
+        {
+          "product": "H3O",
+          "minQty": 0,
+          "maxQty": 1
+        }
+      ],
+      "variantesReferenciadas": []
+    },
+    {
+      "name": "Bon o Bon Protein + Chipá ó Snack Box",
+      "category": "Promos individuales",
+      "description": "Bon o Bon Protein con Protein Chipá (4 unidades) o Snack Box, a elección.",
+      "price": 12000,
+      "compareAtPrice": 16300,
+      "savings": 4300,
+      "patron": "standalone",
+      "comboMinItems": 2,
+      "comboMaxItems": 2,
+      "categoryOptions": null,
+      "options": [
+        {
+          "product": "Bon o Bon Protein",
+          "minQty": 1,
+          "maxQty": 1
+        },
+        {
+          "product": "Protein Chipá",
+          "minQty": 0,
+          "maxQty": 1
+        },
+        {
+          "product": "Snack Box",
+          "minQty": 0,
+          "maxQty": 1
+        }
+      ],
+      "variantesReferenciadas": [
+        "Protein Chipá / 4 unidades"
+      ]
+    },
+    {
+      "name": "Bon o Bon Protein + Protein Donut de regalo",
+      "category": "Promos individuales",
+      "description": "Llevás un Bon o Bon Protein y las Protein Donuts van de regalo.",
+      "price": 7500,
+      "compareAtPrice": null,
+      "savings": null,
+      "patron": "standalone",
+      "comboMinItems": 2,
+      "comboMaxItems": 2,
+      "categoryOptions": null,
+      "options": [
+        {
+          "product": "Bon o Bon Protein",
+          "minQty": 1,
+          "maxQty": 1
+        },
+        {
+          "product": "Protein Donuts",
+          "minQty": 1,
+          "maxQty": 1
+        }
+      ],
+      "variantesReferenciadas": []
+    },
+    {
+      "name": "Café Energy + Cookie",
+      "category": "Promos individuales",
+      "description": "Café Energy con una cookie.",
+      "price": 3000,
+      "compareAtPrice": 6000,
+      "savings": 3000,
+      "patron": "categorias",
+      "comboMinItems": 2,
+      "comboMaxItems": 2,
+      "categoryOptions": [
+        {
+          "category": "Bebidas calientes",
+          "minQty": 1,
+          "maxQty": 1,
+          "products": [
+            "Café Energy"
+          ]
+        },
+        {
+          "category": "Protein Snacks",
+          "minQty": 1,
+          "maxQty": 1,
+          "products": [
+            "Cookies"
+          ]
+        }
+      ],
+      "options": null,
+      "variantesReferenciadas": [
+        "Cookies / 1 unidad"
+      ]
+    },
+    {
+      "name": "2 bebidas funcionales + Protein Chipá",
+      "category": "Promos para compartir",
+      "description": "Dos bebidas funcionales a elección con Protein Chipá (4 unidades). No incluye Pink Beauty ni Detox Deluxe.",
+      "price": 16000,
+      "compareAtPrice": 23000,
+      "savings": 7000,
+      "patron": "standalone",
+      "comboMinItems": 3,
+      "comboMaxItems": 3,
+      "categoryOptions": null,
+      "options": [
+        {
+          "product": "Protein Chipá",
+          "minQty": 1,
+          "maxQty": 1
+        },
+        {
+          "product": "Dulce de Leche Latte",
+          "minQty": 0,
+          "maxQty": 2
+        },
+        {
+          "product": "Submarino Protein",
+          "minQty": 0,
+          "maxQty": 2
+        },
+        {
+          "product": "Mocca Protein",
+          "minQty": 0,
+          "maxQty": 2
+        },
+        {
+          "product": "Chai Latte",
+          "minQty": 0,
+          "maxQty": 2
+        },
+        {
+          "product": "Herbal Beauty",
+          "minQty": 0,
+          "maxQty": 2
+        },
+        {
+          "product": "Energy Boost",
+          "minQty": 0,
+          "maxQty": 2
+        },
+        {
+          "product": "Herbal Active",
+          "minQty": 0,
+          "maxQty": 2
+        },
+        {
+          "product": "Herbal Tea",
+          "minQty": 0,
+          "maxQty": 2
+        },
+        {
+          "product": "Café Energy",
+          "minQty": 0,
+          "maxQty": 2
+        },
+        {
+          "product": "Capitán Andino",
+          "minQty": 0,
+          "maxQty": 2
+        },
+        {
+          "product": "Mojito Energy",
+          "minQty": 0,
+          "maxQty": 2
+        },
+        {
+          "product": "Limonada Frutilla",
+          "minQty": 0,
+          "maxQty": 2
+        },
+        {
+          "product": "Fresh Açaí",
+          "minQty": 0,
+          "maxQty": 2
+        },
+        {
+          "product": "H3O",
+          "minQty": 0,
+          "maxQty": 2
+        }
+      ],
+      "variantesReferenciadas": [
+        "Protein Chipá / 4 unidades"
+      ]
+    },
+    {
+      "name": "2 bebidas funcionales + Protein Box",
+      "category": "Promos para compartir",
+      "description": "Dos bebidas funcionales a elección con un Protein Box. No incluye Pink Beauty ni Detox Deluxe.",
+      "price": 18000,
+      "compareAtPrice": 27000,
+      "savings": 9000,
+      "patron": "standalone",
+      "comboMinItems": 3,
+      "comboMaxItems": 3,
+      "categoryOptions": null,
+      "options": [
+        {
+          "product": "Protein Box",
+          "minQty": 1,
+          "maxQty": 1
+        },
+        {
+          "product": "Dulce de Leche Latte",
+          "minQty": 0,
+          "maxQty": 2
+        },
+        {
+          "product": "Submarino Protein",
+          "minQty": 0,
+          "maxQty": 2
+        },
+        {
+          "product": "Mocca Protein",
+          "minQty": 0,
+          "maxQty": 2
+        },
+        {
+          "product": "Chai Latte",
+          "minQty": 0,
+          "maxQty": 2
+        },
+        {
+          "product": "Herbal Beauty",
+          "minQty": 0,
+          "maxQty": 2
+        },
+        {
+          "product": "Energy Boost",
+          "minQty": 0,
+          "maxQty": 2
+        },
+        {
+          "product": "Herbal Active",
+          "minQty": 0,
+          "maxQty": 2
+        },
+        {
+          "product": "Herbal Tea",
+          "minQty": 0,
+          "maxQty": 2
+        },
+        {
+          "product": "Café Energy",
+          "minQty": 0,
+          "maxQty": 2
+        },
+        {
+          "product": "Capitán Andino",
+          "minQty": 0,
+          "maxQty": 2
+        },
+        {
+          "product": "Mojito Energy",
+          "minQty": 0,
+          "maxQty": 2
+        },
+        {
+          "product": "Limonada Frutilla",
+          "minQty": 0,
+          "maxQty": 2
+        },
+        {
+          "product": "Fresh Açaí",
+          "minQty": 0,
+          "maxQty": 2
+        },
+        {
+          "product": "H3O",
+          "minQty": 0,
+          "maxQty": 2
+        }
+      ],
+      "variantesReferenciadas": []
+    },
+    {
+      "name": "2 Smoothies + Protein Chipá ó Snack Box",
+      "category": "Promos para compartir",
+      "description": "Dos smoothies del sabor que quieras, con Protein Chipá (4 unidades) o Snack Box a elección.",
+      "price": 22000,
+      "compareAtPrice": 28400,
+      "savings": 6400,
+      "patron": "categorias",
+      "comboMinItems": 3,
+      "comboMaxItems": 3,
+      "categoryOptions": [
+        {
+          "category": "Smoothies",
+          "minQty": 2,
+          "maxQty": 2,
+          "products": []
+        },
+        {
+          "category": "Protein Snacks",
+          "minQty": 1,
+          "maxQty": 1,
+          "products": [
+            "Protein Chipá",
+            "Snack Box"
+          ]
+        }
+      ],
+      "options": null,
+      "variantesReferenciadas": [
+        "Protein Chipá / 4 unidades"
+      ]
+    },
+    {
+      "name": "Combo 1",
+      "category": "Promos para llevar",
+      "description": "3 Waffles, 8 donas y 12 cookies.",
+      "price": 38000,
+      "compareAtPrice": 53800,
+      "savings": 15800,
+      "patron": "standalone",
+      "comboMinItems": 6,
+      "comboMaxItems": 6,
+      "categoryOptions": null,
+      "options": [
+        {
+          "product": "Waffles",
+          "minQty": 3,
+          "maxQty": 3
+        },
+        {
+          "product": "Protein Donuts",
+          "minQty": 2,
+          "maxQty": 2
+        },
+        {
+          "product": "Cookies",
+          "minQty": 1,
+          "maxQty": 1
+        }
+      ],
+      "variantesReferenciadas": [
+        "Cookies / 12 unidades"
+      ]
+    },
+    {
+      "name": "Combo 2",
+      "category": "Promos para llevar",
+      "description": "Protein Box ó Protein Pizza x3: tres unidades combinables como quieras.",
+      "price": 29000,
+      "compareAtPrice": 36000,
+      "savings": 7000,
+      "patron": "categorias",
+      "comboMinItems": 3,
+      "comboMaxItems": 3,
+      "categoryOptions": [
+        {
+          "category": "Protein Snacks",
+          "minQty": 3,
+          "maxQty": 3,
+          "products": [
+            "Protein Box",
+            "Protein Pizza"
+          ]
+        }
+      ],
+      "options": null,
+      "variantesReferenciadas": []
+    },
+    {
+      "name": "Combo 3",
+      "category": "Promos para llevar",
+      "description": "12 Protein Chipá y 12 Cookies. También podés elegir 24 unidades iguales.",
+      "price": 27000,
+      "compareAtPrice": 36000,
+      "savings": 9000,
+      "patron": "categorias",
+      "comboMinItems": 2,
+      "comboMaxItems": 2,
+      "categoryOptions": [
+        {
+          "category": "Protein Snacks",
+          "minQty": 2,
+          "maxQty": 2,
+          "products": [
+            "Protein Chipá",
+            "Cookies"
+          ]
+        }
+      ],
+      "options": null,
+      "variantesReferenciadas": [
+        "Protein Chipá / 12 unidades",
+        "Cookies / 12 unidades"
+      ]
+    },
+    {
+      "name": "Merienda Kids",
+      "category": "Promos para llevar",
+      "description": "1 Waffle, 6 Muffins y 6 Cookies.",
+      "price": 24000,
+      "compareAtPrice": 31000,
+      "savings": 7000,
+      "patron": "standalone",
+      "comboMinItems": 3,
+      "comboMaxItems": 3,
+      "categoryOptions": null,
+      "options": [
+        {
+          "product": "Waffles",
+          "minQty": 1,
+          "maxQty": 1
+        },
+        {
+          "product": "Muffins",
+          "minQty": 1,
+          "maxQty": 1
+        },
+        {
+          "product": "Cookies",
+          "minQty": 1,
+          "maxQty": 1
+        }
+      ],
+      "variantesReferenciadas": [
+        "Muffins / 6 unidades",
+        "Cookies / 6 unidades"
+      ]
+    }
+  ]
+}

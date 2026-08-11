@@ -30,11 +30,24 @@ Campos por grupo:
 - **Operación**: `currency` (default `"ARS"`), `locale` (default `"es-AR"`), `showOutOfStock`
   (default `false`), `allowCartGuest` (default `true`).
 - **Variantes**: `productVariantsEnabled` (default `true`) — ver [[Productos]] y [[Variantes]].
-- **Flujo de venta** (los cuatro que NO edita el tenant, ver más abajo):
-  `paymentMethodsEnabled` (array de `OrderPaymentMethod`, default `[CASH, TRANSFER, MIXED]`),
+- **Flujo de venta** (los que NO edita el tenant, ver más abajo):
+  `storeMode` (`"SHOP"` | `"MENU"`, default `"SHOP"`), `paymentMethodsEnabled` (array de
+  `OrderPaymentMethod`, default `[CASH, TRANSFER, MIXED]`),
   `fulfillmentMethodsEnabled` (array de `FulfillmentMethod`, default `[DELIVERY, PICKUP]`),
   `depositEnabled` (default `false`), `depositPercentage` (default `50`) — ver [[Órdenes]] →
   "Flujo de seña / pedidos del bot".
+  - **`storeMode`** (2026-08-04) dice si la tienda **se compra o se lee**: en `MENU` el catálogo es
+    una carta —restó, cafetería— y el storefront no monta carrito ni `/checkout`. Es el más
+    drástico del bloque y por eso el que más razón tiene de no ser del tenant: un admin que se lo
+    prendiera solo se quedaría sin ventas sin entender por qué. Enum cerrado con CHECK en la
+    migración, no en el schema de Prisma, igual que `customerPhoneMode`. Ver
+    [[Perfiles de flujo de venta]] (perfil `carta`) y [[maikai]], el primero cargado entero.
+  - **En `MENU`, `paymentMethodsEnabled` y `fulfillmentMethodsEnabled` quedan poblados a
+    propósito**: no gobiernan nada ahí, y vaciarlos obligaría a `OrderModel.create` a distinguir
+    "sin métodos habilitados" de "no vende". El campo que dice qué es el tenant es uno solo.
+  - `[bug]` **Nadie aplica `MENU` del lado del backend**: `POST /orders` y `POST /store/orders`
+    siguen aceptando órdenes. Lo apaga solo el front, leyendo este campo del `GET` público. Si el
+    front no lo lee, el tenant "carta" vende igual.
 - **Caja**: `cashRegisterEnabled` (default `false`) — habilita el módulo de [[Caja]]. **No lo edita el
   tenant**: prendido, cobrar sin turno abierto falla, así que es de la misma clase que los cuatro de
   arriba. No es parte de un perfil: se setea con `node prisma/set-cash-register.js <slug> on|off`.

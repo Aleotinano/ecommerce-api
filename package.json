@@ -24,6 +24,13 @@
     "seed:maikai:categorias": "node prisma/maikai/categorias.js",
     "seed:maikai:productos": "node prisma/maikai/productos.js",
     "seed:maikai:config": "node prisma/maikai/config.js",
+    "punto-healthy:build-menu": "node prisma/punto-healthy/build-menu.js",
+    "seed:punto-healthy": "node prisma/punto-healthy/index.js",
+    "seed:punto-healthy:categorias": "node prisma/punto-healthy/categorias.js",
+    "seed:punto-healthy:atributos": "node prisma/punto-healthy/atributos.js",
+    "seed:punto-healthy:productos": "node prisma/punto-healthy/productos.js",
+    "seed:punto-healthy:combos": "node prisma/punto-healthy/combos.js",
+    "seed:punto-healthy:config": "node prisma/punto-healthy/config.js",
     "receipts:purge": "node scripts/purge-receipts.js"
   },
   "keywords": [],

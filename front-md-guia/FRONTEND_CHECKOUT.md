@@ -4,9 +4,11 @@ lado: contrato
 
 # Checkout: entrega, pago y pedido por WhatsApp
 
-> Última actualización: 2026-07-26.
+> Última actualización: 2026-08-11.
 > Cubre `POST /store/orders` (y su gemelo de backoffice `POST /orders`), que desde 2026-07-23 **ya
 > no acepta un body vacío**. Si tu front todavía manda `POST /store/orders` sin nada, recibe un 400.
+> Los dos comparten el schema `orderCreate`, pero **ya no son idénticos**: el de backoffice acepta
+> líneas explícitas en `items` y el de la tienda las ignora (§2).
 
 ---
 
@@ -35,6 +37,18 @@ igual existe.
 
 Los ítems, precios y total **no se mandan**: los resuelve el server desde el carrito. El body solo
 describe entrega y pago.
+
+> [!warning] El `items` del schema no es para vos (2026-08-11)
+> Desde el mostrador del backoffice, `orderCreate` acepta un array `items` con las líneas explícitas
+> del pedido, y como el schema es **compartido** lo vas a ver en la validación de esta ruta. Pero
+> **`items` solo lo honra `POST /orders`**: acá la petición se rechaza entera con
+> `400 ITEMS_NOT_ALLOWED`, sin tocar el carrito ni crear nada.
+>
+> Del lado del tipado ya no se puede escribir: `CreateOrderInput` declara `items?: never` y el body
+> con líneas es otro tipo (`CreateAdminOrderInput`), que vive del lado del backoffice.
+>
+> Lo que no cambia en ningún caso: el **precio lo resuelve siempre el server** (`priceItems`), venga
+> la línea del carrito o de `items`.
 
 ```jsonc
 {
@@ -171,6 +185,7 @@ if (res.ok) {
 | `PRODUCT_NOT_FOUND` / `PRODUCT_NOT_AVAILABLE` | 404 / 400 | un producto del carrito ya no existe o se desactivó |
 | `VARIANT_NOT_FOUND` / `VARIANT_NOT_AVAILABLE` | 404 / 400 | ídem a nivel variante |
 | `INSUFFICIENT_STOCK` | 409 | no alcanza el stock (trae `details` con la línea) |
+| `ITEMS_NOT_ALLOWED` | 400 | mandaste `items` (ver el aviso de §2). No hay mensaje que mostrarle a la persona: es un error de programación |
 
 Shape estándar: `{ "error": { "message", "code", "details"? } }`.
 

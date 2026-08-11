@@ -313,6 +313,14 @@ model Product {
   // Exclusivo de COMBO (precio fijo del combo). Para PRODUCTO es siempre null — el
   // precio real vive en la variante default (ver `ProductVariant.isDefault`).
   price              Float?
+  // Precio de lista ("antes"), para tachar y mostrar el ahorro: el descuento a mostrar
+  // es `compareAtPrice - price`. Es un dato CARGADO, no calculado — en un combo es lo
+  // que costarían sus componentes sueltos según la carta del local, y nadie lo recalcula
+  // desde la whitelist (que define qué se puede elegir, no cuánto valdría). Sigue la
+  // misma invariante que `price`: exclusivo de COMBO, siempre null para PRODUCTO. El día
+  // que un PRODUCTO necesite precio tachado, el campo espejo va en `ProductVariant`,
+  // donde vive su precio. Opcional: null = sin precio de lista, no se muestra nada.
+  compareAtPrice     Float?
   categoryId         Int?
   isActive           Boolean             @default(true)
   createdAt          DateTime            @default(now())

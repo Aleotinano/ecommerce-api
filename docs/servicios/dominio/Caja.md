@@ -1,7 +1,7 @@
 ---
 tags: [servicio, dominio/caja]
 estado: estable
-ultima-revision: 2026-07-30
+ultima-revision: 2026-08-07
 lado: backend
 ---
 
@@ -239,6 +239,53 @@ enum CashCategoryApplies { INCOME EXPENSE BOTH }
 > cierra: una columna no puede tener dos enums, y la caja necesita además sus dos tipos propios, los
 > manuales. Sí se borró `CashMovementMethod`: ahí `PaymentChannel` alcanza.
 
+## Dos saldos, caja chica y arrastre (2026-08-03)
+
+Tres cambios que llegaron juntos porque son el mismo hueco: **la caja arrancaba de cero todos
+los días y el local no**.
+
+### El banco es un saldo, no un total del turno
+
+Hasta acá las transferencias solo se acumulaban dentro del turno (`transferTotal`) y no
+arrastraban: cada apertura empezaba la cuenta del banco en cero aunque la plata siguiera ahí.
+Ahora la caja lleva **dos saldos continuos** —el efectivo del cajón y lo que hay en la cuenta—,
+que es como el local piensa su caja.
+
+- `transferTotal` sigue siendo **el neto del turno** (lo que se movió).
+- `expectedTransferAmount` = `openingTransferAmount + transferTotal`, o sea **el saldo**. Son dos
+  números distintos y confundirlos duplica plata.
+- **Contar el banco es opcional.** Un local que no lo chequea al cerrar deja
+  `countedTransferAmount` y `transferDifference` en `null`, en vez de firmar una diferencia que
+  nadie miró. Por eso el CHECK de completitud del cierre no los exige.
+
+### El cierre parte el efectivo contado en dos
+
+Lo que **se retira** (caja grande) y lo que **queda** en el cajón (caja chica):
+`pettyCashAmount = countedCashAmount − withdrawnCashAmount`. Antes el turno siguiente reabría con
+todo lo contado, que asume que la plata se queda en el local; en el local real se retira todos los
+días y queda un fondo para arrancar, así que la caja de mañana amanecía con plata que ya no
+estaba.
+
+La caja chica es un valor **derivado y guardado igual**: es lo que abre el turno siguiente
+(`openingAmount`) y lo que arrastra una apertura manual, y recalcularla mañana a partir de un
+arqueo firmado sería recalcular un snapshot. Sin retiro declarado los dos números coinciden, que
+es el comportamiento de siempre. Los dos quedan en `null` cuando nadie contó.
+
+La continuación toma del último turno cerrado, con fallback para los que son anteriores a estas
+columnas: efectivo = `pettyCashAmount ?? countedCashAmount ?? expectedCashAmount ?? 0`; banco =
+`countedTransferAmount ?? expectedTransferAmount ?? transferTotal ?? 0`.
+
+### Los saldos de apertura admiten negativos
+
+Zod **sigue rechazando** una apertura negativa en `POST /open`, que es por donde entra una
+persona. Lo que se sacó son los dos CHECK de no-negatividad, porque bloqueaban la **continuación**,
+que es un valor derivado: un turno que termina con el esperado en negativo —los egresos superaron
+lo que entró, o sea que falta registrar un ingreso— tiene que arrancar el siguiente con ese
+número. Forzarlo a 0 es inventar plata y borrar justo el desvío que la caja existe para mostrar, y
+dejar el CHECK hacía que cerrar reventara con un 500 en el único momento en que el problema estaba
+a la vista. El aviso de `expectedNegative` lo sigue señalando en el panel hasta que alguien cargue
+el ingreso que falta.
+
 ## Invariantes
 
 1. **Un solo turno `OPEN` por tenant.** Garantizado por el índice único **parcial**
@@ -251,10 +298,11 @@ enum CashCategoryApplies { INCOME EXPENSE BOTH }
    `signedAmount` **lanza** con un tipo desconocido en vez de asumir que suma (más estricto que
    `PAYMENT_SIGN[kind] ?? 1` en [[Órdenes]], a propósito: allá un signo raro desvía un
    `paymentStatus` que se recalcula, acá falsea plata contada).
-3. **Solo `channel: CASH` entra al arqueo.** El efectivo esperado es
-   `openingAmount + Σ(signo × amount)` sobre los movimientos en efectivo. Las transferencias se
-   acumulan aparte (`transferTotal`) porque no están en el cajón y contarlas haría que la diferencia
-   mienta siempre.
+3. **Solo `channel: CASH` entra al arqueo del cajón.** El efectivo esperado es
+   `openingAmount + Σ(signo × amount)` sobre los movimientos en efectivo. Las transferencias no
+   están en el cajón, así que meterlas ahí haría que la diferencia mienta siempre: llevan su
+   **propio saldo y su propio arqueo, opcional** (ver "Dos saldos, caja chica y arrastre"). Son dos
+   arqueos separados, no uno con dos monedas.
 4. **`GATEWAY` no puede entrar** (`CHECK channel <> 'GATEWAY'`). MercadoPago no pasa por el cajón.
 5. **Un turno cerrado es inmutable**: no acepta movimientos ni se reabre. Un error se corrige con un
    movimiento manual en el turno siguiente, con nota — igual que en una caja real. Vale también para
@@ -353,8 +401,8 @@ configurar el catálogo. Con el flag apagado, todos responden 404 `CASH_REGISTER
 | Método | Ruta | Qué hace | Rol |
 | --- | --- | --- | --- |
 | GET | `/current` | Turno abierto con movimientos, totales **en vivo** y `vencido`/`vencidoHaceMinutos`. Con horario cargado **abre el turno** si corresponde. `session: null` + **200** si no hay ninguno: "no hay caja abierta" es un estado normal que el panel tiene que pintar | ADMIN, STAFF |
-| POST | `/open` | `{ openingAmount, note? }`. `openingAmount` puede ser 0 | ADMIN, STAFF |
-| POST | `/close` | `{ countedCashAmount, note? }` → devuelve el arqueo | ADMIN, STAFF |
+| POST | `/open` | `{ openingAmount?, openingTransferAmount?, note? }`. Los dos saldos son **opcionales**: el que falte toma el arrastre del cierre anterior. Un `0` explícito sí arranca vacío — un local que empieza sin cambio en el cajón es un caso real | ADMIN, STAFF |
+| POST | `/close` | `{ countedCashAmount, countedTransferAmount?, withdrawnCashAmount?, reopen?, note? }` → devuelve el arqueo. Contar el banco es opcional (sin ese número no se firma diferencia, queda `null`); sin retiro no se retira nada y arrastra todo. **`reopen` viene en `true`**: cerrar firma el arqueo y la caja sigue con la caja chica. `false` es la acción explícita de dejar la caja cerrada —fin de temporada—, y mientras dure bloquea los cobros en efectivo | ADMIN, STAFF |
 | POST | `/movements` | `{ type: INCOME\|EXPENSE, channel, amount, categoryId, payee?, note? }` | ADMIN, STAFF |
 | GET | `/summary` | Totales por etiqueta, tipo y vía en un rango (`from`, `to`), cruzando turnos | ADMIN, STAFF |
 | GET | `/categories` | Catálogo (`includeInactive=true` para ver las desactivadas) | ADMIN, STAFF |
@@ -397,9 +445,9 @@ configurar el catálogo. Con el flag apagado, todos responden 404 `CASH_REGISTER
 
 | Hoja | Qué tiene |
 | --- | --- |
-| **Turno** | Encabezado con el nombre de la tienda, quién abrió/cerró (por **nombre**, no por id), montos, y el arqueo con la diferencia en rojo o verde. Un turno abierto muestra el esperado en vivo y ningún arqueo |
+| **Turno** | Encabezado con el nombre de la tienda, quién abrió/cerró (por **nombre**, no por id), montos, y los **dos arqueos** —el del cajón y el de transferencias— con la diferencia en rojo o verde. El de transferencias sale `SIN CONTEO` si nadie miró el banco, que no es lo mismo que una diferencia de 0. Un turno abierto muestra el esperado en vivo y ningún arqueo |
 | **Movimientos** | Una fila por movimiento con fecha, tipo y vía en castellano, etiqueta, destinatario, monto **con signo**, orden, nota y quién lo cargó. Con autofiltro y fila de encabezado congelada |
-| **Resumen** | Totales por etiqueta (ordenados de mayor egreso a menor) y por tipo, más el recordatorio de que las transferencias no entran al arqueo |
+| **Resumen** | Totales por etiqueta (ordenados de mayor egreso a menor) y por tipo, más el recordatorio de que al arqueo **del cajón** solo entra el efectivo |
 
 Reemplaza al "resumen imprimible" que estaba planeado en la Fase 3: un `.xlsx` se imprime igual y
 además se puede sumar aparte, que es lo que hace un contador. El módulo **no toca la base** —recibe el
@@ -423,8 +471,10 @@ turno cerrado sin conteo sale con `SIN CONTEO` en rojo en la columna de contado,
 > [!warning] Un `YYYY-MM-DD` es un día, no un instante
 > `z.coerce.date()` parsea `"2026-07-01"` como medianoche **UTC**: con el server en UTC−3 el archivo de
 > julio arrancaba el 30 de junio a las 21:00 y —peor— `to=2026-07-31` dejaba afuera casi todo el 31.
-> `dayBoundary` (schemas/cash-register.schema.js) ancla el `from` al **arranque del día local** y el
-> `to` al **final**; una fecha con hora explícita se respeta tal cual. Lo mismo con el nombre del
+> `dayBoundary` ancla el `from` al **arranque del día local** y el `to` al **final**; una fecha con
+> hora explícita se respeta tal cual. Vive en `schemas/date.schema.js` desde que la planilla de
+> [[Órdenes]] necesitó exactamente lo mismo (2026-08-01): el bug de la medianoche UTC se arregla una
+> vez o se repite en cada export. Lo mismo con el nombre del
 > archivo: `isoDay` usa el día local, porque con `toISOString()` un turno abierto a las 22:00 se
 > llamaba con la fecha de mañana. Hay tests de las dos cosas.
 
