@@ -99,6 +99,19 @@ describe("modo producción", () => {
 
     // El header `Origin` del browser nunca lleva barra final, así que sin
     // normalizar, un ORIGINS con barra no matchea jamás y el panel queda afuera.
+    // La contracara del bypass de dev (tests/cors-dev.test.js): en producción un
+    // `*.localhost` no tiene ningún trato especial y se evalúa contra ORIGINS
+    // como cualquier otro origen. Fijarlo acá es lo que impide que aflojar el
+    // desarrollo se filtre al deploy sin que nadie lo note.
+    it("rechaza un subdominio de localhost: el bypass es sólo de dev", async () => {
+      const res = await request(appCon(middleWare()))
+        .get("/health")
+        .set("Origin", "http://mesa-dulce.localhost:3000");
+
+      expect(res.status).toBe(403);
+      expect(res.body.error.code).toBe("CORS_ORIGIN_NOT_ALLOWED");
+    });
+
     it("acepta un origen configurado con barra final", async () => {
       const res = await request(appCon(middleWare()))
         .get("/health")

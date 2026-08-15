@@ -94,7 +94,7 @@ este, porque compose mergea las listas `ports:` y un override no puede despublic
 > (`CONFIG SET dir` + escritura de `authorized_keys`).
 >
 > Eso es exactamente lo que hace `docker-compose.prod.yml`: sin `ports:` en ninguno de los dos,
-> `--requirepass` en Redis y el backend alcanzable sólo por Caddy. **Este compose no va a un
+> `--requirepass` en Redis y el backend publicado sólo en `127.0.0.1`. **Este compose no va a un
 > server**, es el motivo por el que existe el otro.
 
 #### CVEs de las imágenes (2026-08-07)
@@ -162,7 +162,7 @@ Fuente única de verdad: `schemas/env.schema.js` (validado con zod en `config.js
 | `CLOUDINARY_API_KEY` | no | idem |
 | `CLOUDINARY_API_SECRET` | no | idem |
 | `CLOUDINARY_FOLDER` | no | `e-commerce-express` |
-| `ORIGINS` | **en prod** | CSV de orígenes CORS del **panel admin** (el storefront no depende de esto: `storeCors` acepta cualquier origen). Con `NODE_ENV=production` el arranque **falla** si falta: vacía no degrada, rechaza *todas* las requests del panel. La barra final se descarta al parsear — el header `Origin` nunca la lleva, así que `https://x.com/` no matchearía nunca |
+| `ORIGINS` | **en prod** | CSV de orígenes CORS: el **panel admin** y el dominio de **cada storefront**. La tienda no queda exenta por `storeCors`: el CORS global se monta antes (`app.js`) y contesta 403 antes de entrar al router de `/store`, así que `storeCors` sólo aporta `exposedHeaders: ["Authorization"]`. Con `NODE_ENV=production` el arranque **falla** si falta: vacía no degrada, rechaza *todas* las requests. La barra final se descarta al parsear — el header `Origin` nunca la lleva, así que `https://x.com/` no matchearía nunca |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | no | SMTP nodemailer |
 | `SMTP_SECURE` | no | `"true"`/`"false"` → boolean (default false) |
 | `MAIL_FROM` | no | `no-reply@localhost` |
@@ -486,6 +486,10 @@ Hay **dos mecanismos distintos** de resolución de tenant según la familia de r
      propia API** (se deriva de `BASE_URL`) y los subdominios `www`/`api`/`app`;
      requiere ≥3 labels.
   2. Header **`X-Tenant-Slug`** (fallback).
+- En desarrollo el slug sale **siempre del header**: `mesa-dulce.localhost` tiene 2 labels
+  y no llega al mínimo de 3, así que entrar por `http://mesa-dulce.localhost:3000` resuelve
+  el tenant en el storefront (que lee el host) y lo manda en el header. Lo único que hizo
+  falta del lado del backend es que CORS acepte ese origen (`helpers/origin.js`).
 
 > [!important] El host de la API se descarta por `BASE_URL`, no por la lista de nombres
 > `IGNORED_SUBDOMAINS` son tres nombres, y **el subdominio le gana al header**: cualquier
@@ -787,6 +791,11 @@ edición posterior por API (cambiarlo rompería las `attributes` de las variante
 Montaje en `routes/store/index.js`: **todo `/store/*` aplica `storeCors()` + `storeCacheHeaders` +
 `resolveTenantFromSlug`** antes de las sub-rutas. Auth = `verifyStoreToken` (obligatoria,
 Bearer/cookie) u `optionalStoreAuth` (pública con user opcional).
+
+`storeCors()` **no** abre `/store/*` a cualquier origen en producción: el CORS global de `app.js`
+se monta antes que cualquier router y rechaza con 403 los orígenes fuera de `ORIGINS`, así que la
+request no llega hasta acá. Lo único que agrega en la práctica es `exposedHeaders:
+["Authorization"]`. El dominio de cada tienda va en `ORIGINS` igual que el del panel (ver §Env).
 
 `storeCacheHeaders` fuerza `Cache-Control: no-store` y appendea `Vary: X-Tenant-Slug` +
 `Vary: Authorization`: el tenant viaja por header, no por URL, así que un cache compartido que

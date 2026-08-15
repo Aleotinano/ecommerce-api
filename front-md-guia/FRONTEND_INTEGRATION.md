@@ -44,7 +44,7 @@ Son **dos frontends separados**, NO un solo sitio con un menú. Cada uno vive en
 El tenant se identifica por **subdominio** (lo resuelve el backend, ver §3). El frontend storefront no tiene que elegir tenant en una pantalla: el host ya lo dice.
 
 - **Producción:** cada tienda se sirve en su subdominio. `acme.midominio.com` → el front lee `window.location.hostname`, saca el primer label (`acme`) y lo manda como `X-Tenant-Slug` en cada request a `/store/*`. (El backend igual lo deduce solo del subdominio, pero mandar el header lo hace robusto detrás de proxies.)
-- **Desarrollo:** no hay subdominios en `localhost`, así que el slug se elige por **header `X-Tenant-Slug`**. Para probar varias tiendas: usá `?tenant=acme` en la URL del front y guardalo, o un selector solo-dev. Ej. de cliente:
+- **Desarrollo:** los browsers resuelven cualquier `*.localhost` a loopback, así que `http://acme.localhost:3000` funciona igual que en producción y el CORS del backend lo acepta. El backend **no** saca el slug de ese host (`acme.localhost` tiene 2 labels y `extractSlugFromHost` pide 3), así que el front igual manda el **header `X-Tenant-Slug`** — que es el mecanismo real en dev. Alternativa sin subdominio: `?tenant=acme` en la URL del front y guardalo, o un selector solo-dev. Ej. de cliente:
 
 ```js
 // storefront/src/api.js
@@ -101,13 +101,13 @@ APP ADMIN (raíz)                  STOREFRONT (subdominio del tenant)
 | Dato | Valor |
 |------|-------|
 | API URL | `http://localhost:4000` (`.env` → `PORT=4000`) |
-| CORS admin | en **dev**: cualquier `localhost`/`127.0.0.1` (cualquier puerto). En **prod**: solo los orígenes de `ORIGINS` |
-| CORS storefront | cualquier origin en dev (`storeCors`) |
+| CORS admin | en **dev**: cualquier `localhost`/`127.0.0.1`, con o sin subdominio de un nivel (`mesa-dulce.localhost:3000`), cualquier puerto. En **prod**: solo los orígenes de `ORIGINS` |
+| CORS storefront | en **dev**: cualquier origin. En **prod**: igual que el panel — el dominio de la tienda tiene que estar en `ORIGINS`. `storeCors` no lo exime: el CORS global decide antes |
 
 > ⚠️ **Auth admin = cookie httpOnly.** Toda request al panel admin (incluido `/auth/login`) DEBE mandarse con credenciales, si no la cookie no viaja:
 > - `fetch(url, { credentials: "include" })`
 > - axios: `axios.create({ baseURL, withCredentials: true })`
-> En producción agregá el dominio del panel admin a `ORIGINS` (separado por comas); si no, el CORS responde **500 `El origen no esta permitido`**.
+> En producción agregá a `ORIGINS` (CSV) el dominio del panel admin **y el de cada storefront**; si no, el CORS responde **403 `CORS_ORIGIN_NOT_ALLOWED`**.
 
 **Usuarios de prueba** (password de todos: `password123`):
 

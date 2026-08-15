@@ -1,7 +1,7 @@
 import { UserModel } from "../../services/users.js";
 import { CartModel } from "../../services/cart.js";
 import { DEFAULTS } from "../../config.js";
-import { GUEST_CART_COOKIE, GUEST_CART_COOKIE_OPTIONS } from "../../middleware/guestCart.js";
+import { GUEST_CART_COOKIE, guestCartCookieAttrs } from "../../middleware/guestCart.js";
 import { logger } from "../../lib/logger.js";
 import jwt from "jsonwebtoken";
 
@@ -66,7 +66,7 @@ export class StoreAuthController {
         } catch (mergeError) {
           logger.error({ err: mergeError }, "No se pudo fusionar el carrito de invitado");
         }
-        res.clearCookie(GUEST_CART_COOKIE, { path: GUEST_CART_COOKIE_OPTIONS.path });
+        res.clearCookie(GUEST_CART_COOKIE, guestCartCookieAttrs(req));
       }
 
       return res.json({

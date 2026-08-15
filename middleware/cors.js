@@ -1,6 +1,7 @@
 import cors from "cors";
 import { DEFAULTS } from "../config.js";
 import { createError } from "../helpers/error.js";
+import { isLocalhostOrigin } from "../helpers/origin.js";
 
 const ACCEPTED_ORIGINS = DEFAULTS.ORIGINS;
 const isProd = DEFAULTS.NODE_ENV === "production";
@@ -11,9 +12,15 @@ const isProd = DEFAULTS.NODE_ENV === "production";
 // un día no es optimista: es dejar que cada uno use su máximo.
 const PREFLIGHT_MAX_AGE = 86400;
 
-// En desarrollo, cualquier puerto de localhost/127.0.0.1 es válido
-const isLocalhost = (origin) =>
-  /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+// En desarrollo, cualquier puerto de localhost/127.0.0.1 es válido — y también
+// cualquier SUBDOMINIO de localhost, que es como se entra a un tenant en dev:
+// `http://mesa-dulce.localhost:3000`. Sin eso, el storefront multi-tenant local
+// caía a la lista de ORIGINS —que enumera puertos de localhost pelado— y todo
+// /store/* moría en el preflight con 403. Ver helpers/origin.js.
+//
+// Esto NO toca producción: la puerta sigue siendo `!isProd` unas líneas más
+// abajo, así que fuera de dev un `*.localhost` se evalúa contra ORIGINS como
+// cualquier otro origen.
 
 // Una request SIN header `Origin` no es una request cross-origin: es un cliente
 // que no es un browser (curl, el healthcheck del contenedor, un webhook
@@ -33,7 +40,7 @@ export const middleWare = ({ acceptedOrigins = ACCEPTED_ORIGINS } = {}) => {
     origin: (origin, callback) => {
       if (!origin) return callback(null, isProd ? NO_ORIGIN : true);
 
-      if (!isProd && isLocalhost(origin)) {
+      if (!isProd && isLocalhostOrigin(origin)) {
         return callback(null, true);
       }
 

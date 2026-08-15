@@ -5,7 +5,8 @@ const envShape = z.object({
   PORT: z.coerce.number().int().positive().default(3001),
 
   // Expresión `trust proxy` de Express: cantidad de proxies delante de la app
-  // ("1" detrás del Caddy del deploy), "true"/"false", o una lista de IPs/CIDRs.
+  // ("1" detrás del Tailscale Funnel del deploy), "true"/"false", o una lista de
+  // IPs/CIDRs.
   // El default "0" es el correcto en local, donde no hay nadie adelante.
   //
   // Sin esto, detrás de un reverse proxy `req.ip` es la IP del proxy y los cinco
@@ -105,13 +106,17 @@ const envShape = z.object({
 });
 
 // En producción, `ORIGINS` vacía no degrada nada: **rechaza todas** las requests
-// del panel admin, porque fuera de dev no hay ningún origen permitido por default
+// de browser, porque fuera de dev no hay ningún origen permitido por default
 // (middleware/cors.js). Y hasta acá la app arrancaba igual, así que el síntoma era
 // un panel entero muerto con un error de CORS y ninguna pista de por qué.
 //
 // Fallar al arrancar es más ruidoso y mucho más barato de diagnosticar: el
-// contenedor no levanta y el mensaje dice exactamente qué falta. El storefront no
-// depende de esto (`storeCors` acepta cualquier origen, ver docs/DEPLOY.md).
+// contenedor no levanta y el mensaje dice exactamente qué falta.
+//
+// El storefront TAMPOCO tiene salida propia: `storeCors` acepta cualquier origen,
+// pero el CORS global se monta antes en app.js y rechaza con 403 antes de entrar
+// al router de /store. O sea que el dominio de cada tienda también va en esta
+// lista. Ver docs/DEPLOY.md.
 export const envSchema = envShape.superRefine((env, ctx) => {
   if (env.NODE_ENV === "production" && !env.ORIGINS?.trim()) {
     ctx.addIssue({
@@ -119,8 +124,9 @@ export const envSchema = envShape.superRefine((env, ctx) => {
       path: ["ORIGINS"],
       message:
         "ORIGINS es obligatoria con NODE_ENV=production: sin ella el panel admin " +
-        "rechaza todas las requests por CORS. Es un CSV de orígenes, " +
-        'ej. "https://panel.midominio.com".',
+        "y las tiendas rechazan todas las requests por CORS. Es un CSV con el " +
+        "origen del panel y el de CADA storefront, " +
+        'ej. "https://panel.midominio.com,https://tienda.midominio.com".',
     });
   }
 });
