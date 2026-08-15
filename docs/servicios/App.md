@@ -110,8 +110,13 @@ Fichas de los clientes que pasaron por acá: qué se cargó, con qué criterio y
   productos, 8 raíces que son los tiles de la home, pipeline dump → `build-menu.js` → seeds.
 - [[punto-healthy]] — franquicia de comida rápida saludable, en modo tienda (`estandar`). Primer
   catálogo con **combos y variantes reales** cargados por seed: 31 productos / 57 variantes / 11
-  promos. Su ficha tiene la fricción pendiente entre la whitelist de combo (por producto) y las
-  presentaciones de la carta (por variante).
+  promos. Su ficha describe la fricción entre la whitelist de combo (por producto) y las
+  presentaciones de la carta (por variante) — el backend ya la resuelve con `allowedVariantId`,
+  pero **su catálogo todavía no está migrado** a usarlo.
+- [[pastaia]] — pastas caseras congeladas, en modo tienda (`estandar`). Primer tenant con **dos
+  ejes de variación en el mismo producto** (masa × caja): 15 productos / 111 variantes desde una
+  spec matricial. Motivó `allowedVariantId` en [[Combos]]. **En preparación**: faltan precios y
+  contacto, el seed no se corrió.
 - [[mesa dulce demo]] — mesa dulce para eventos, en modo tienda. Log de la sesión de demo:
   combos reales, rediseño de tipos de producto. **Congelado en 2026-07-08**, con anotaciones
   de lo que quedó obsoleto.

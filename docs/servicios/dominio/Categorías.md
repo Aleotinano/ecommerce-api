@@ -24,8 +24,11 @@ Fuente: `prisma/schema.prisma` (modelo `Categories`; nombre del archivo/servicio
 - Índice único `(tenantId, name)`.
 - **Orden de listado**: `getTree`/`getAll` ordenan `orderBy: [{ position: "asc" }, { id: "asc" }]`
   (`services/categories.js`) — antes de agregarse `position`, el orden implícito era por id de
-  creación; hoy es configurable. No hay un endpoint dedicado de "reordenar": se setea `position` vía
-  el mismo `PATCH /:id` genérico, moviendo una categoría a la vez.
+  creación; hoy es configurable. **Pero no por HTTP**: `CategoryModel.create`/`edit` aceptan y
+  escriben `position`, y sin embargo el campo no está en `schemas/category.schema.js` (que hace
+  `.strip()`) ni lo destructura `controllers/categories.js` — un `position` enviado por el cliente
+  se descarta antes de llegar al service. Hoy el único camino real es un seed en Node que llame al
+  service directo (`prisma/<slug>/categorias.js`). Ver Deuda técnica.
 
 ## Reglas de negocio / invariantes
 - **Nombre único por tenant**: `create`/`edit` rechazan con `409 CATEGORY_ALREADY_EXISTS` si ya existe
@@ -94,10 +97,18 @@ Etiquetas por tipo de acción — ver convención en [[App]].
 
 - `[nota]` Naming: archivos/modelo en inglés (`categories.js`, `Categories`) mientras el dominio del
   producto conversa en español ("categorías"). Informativo, no bloqueante.
+- `[bug]` **`position` es inalcanzable desde la API.** El parámetro existe en
+  `CategoryModel.create`/`edit` (`services/categories.js:130,176`) pero ninguna capa HTTP lo deja
+  pasar: no está en `createCategory`/`updateCategory` (`schemas/category.schema.js`) ni en
+  `controllers/categories.js`. Consecuencia: toda categoría creada desde el panel nace en
+  `position = 0` y el orden cae al desempate `{ id: "asc" }`; el orden solo se puede fijar desde un
+  seed. Detectado al preparar [[pastaia]], donde el orden de las 4 raíces es el del grid de la
+  landing. El fix es sumar `position` a los dos schemas Zod y al destructuring del controller.
 - `[nota]` `GET /:id` del storefront devuelve `parent`/`children` igual que el admin — no hay
   necesidad hoy de una versión reducida, pero si el árbol crece podría valer la pena limitar el payload
   público.
 
 ## Preguntas abiertas / mejoras candidatas
-- ¿Conviene un endpoint de reorden batch (`PATCH /reorder` con una lista de `{id, position}`) ahora
-  que `position` es real, en vez de mover una categoría a la vez vía `PATCH /:id`?
+- Una vez que `position` sea escribible por `PATCH /:id` (ver el `[bug]` de arriba), ¿conviene
+  además un endpoint de reorden batch (`PATCH /reorder` con una lista de `{id, position}`), en vez
+  de mover una categoría a la vez?

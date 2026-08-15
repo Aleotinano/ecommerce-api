@@ -248,6 +248,39 @@ describe("storefront guest cart (no auth)", () => {
     expect(getRes.body.products).toHaveLength(1);
   });
 
+  // Con el storefront en `<slug>.localhost:3000` y el backend en `localhost`, el
+  // browser ve dos "sites" distintos: con SameSite=Lax la cookie no vuelve nunca
+  // y el carrito de invitado se vacía en cada request. Ver middleware/guestCart.js.
+  it("bajo un subdominio de localhost la cookie de guest sale SameSite=None; Secure", async () => {
+    const res = await request(app)
+      .post(`/store/cart/${productId}`)
+      .set("X-Tenant-Slug", "shopco")
+      .set("Origin", "http://mesa-dulce.localhost:3000")
+      .send({ variantId });
+
+    expect(res.status).toBe(201);
+    const cookie = res.headers["set-cookie"]?.find((c) =>
+      c.startsWith("guest_cart_id=")
+    );
+    expect(cookie).toMatch(/SameSite=None/i);
+    expect(cookie).toMatch(/Secure/i);
+  });
+
+  it("con localhost pelado la cookie sigue siendo Lax: es el mismo site", async () => {
+    const res = await request(app)
+      .post(`/store/cart/${productId}`)
+      .set("X-Tenant-Slug", "shopco")
+      .set("Origin", "http://localhost:3000")
+      .send({ variantId });
+
+    expect(res.status).toBe(201);
+    const cookie = res.headers["set-cookie"]?.find((c) =>
+      c.startsWith("guest_cart_id=")
+    );
+    expect(cookie).toMatch(/SameSite=Lax/i);
+    expect(cookie).not.toMatch(/Secure/i);
+  });
+
   it("el carrito de invitado se fusiona con el del user al hacer login", async () => {
     const agent = request.agent(app);
 
@@ -274,9 +307,14 @@ describe("storefront guest cart (no auth)", () => {
       .send({ email: mergeUser.email, password: "password123" });
 
     expect(loginRes.status).toBe(200);
-    expect(
-      loginRes.headers["set-cookie"]?.some((c) => c.startsWith("guest_cart_id=;"))
-    ).toBe(true);
+    // El borrado tiene que repetir los atributos con los que se creó la cookie
+    // (Path, SameSite, Secure) o el browser se queda con la vieja.
+    const cleared = loginRes.headers["set-cookie"]?.find((c) =>
+      c.startsWith("guest_cart_id=;")
+    );
+    expect(cleared).toBeDefined();
+    expect(cleared).toMatch(/Path=\/store/i);
+    expect(cleared).toMatch(/SameSite=Lax/i);
 
     const cartRes = await request(app)
       .get("/store/cart")

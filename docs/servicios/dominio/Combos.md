@@ -73,6 +73,7 @@ model ComboAllowedProduct {
   tenantId               Int
   comboProductId         Int
   allowedProductId       Int
+  allowedVariantId       Int?     // null = cualquier variante activa; con valor = SOLO esa
   comboAllowedCategoryId Int?
   minQty                 Int      @default(0)
   maxQty                 Int?
@@ -90,10 +91,24 @@ model ComboAllowedProduct {
   @@index([comboAllowedCategoryId])
 }
 ```
-La whitelist es a nivel **`Product`**, no `ProductVariant` — cada producto permitido siempre es
-`type: "PRODUCTO"` (nunca otro `COMBO`, sin anidamiento). Todas sus variantes activas quedan
-elegibles (la whitelist no restringe a una variante puntual — queda fuera de alcance, ver Alcance
-diferido).
+La whitelist apunta a un **`Product`** — cada producto permitido siempre es `type: "PRODUCTO"`
+(nunca otro `COMBO`, sin anidamiento). Por defecto **todas sus variantes activas quedan
+elegibles**.
+
+> [!note] `allowedVariantId` — fijar la presentación (2026-08-15)
+> Migración `20260815043933_add_combo_allowed_variant`. Con valor, la regla acota el producto a
+> **una sola variante**: es lo que permite expresar "el pack lleva la caja x48" sin que el cliente
+> pueda meter la x12. `null` = cualquier variante activa, el comportamiento histórico — por eso la
+> columna nace nullable y la migración no tocó una sola fila.
+>
+> Aplica a los **dos sabores** de fila (una regla standalone y un miembro explícito de categoría
+> pueden fijar variante por igual). Lo que **no** puede fijarla es una regla de categoría **sin
+> miembros explícitos**: no tiene fila donde guardarla, y es correcto — "toda la categoría"
+> incluye productos futuros cuyas variantes todavía no existen.
+>
+> `onDelete: Cascade`, igual que `allowedProductId`: si la variante fijada desaparece, la regla se
+> va con ella. La alternativa (`SetNull`) volvería a habilitar todas las variantes **en silencio**,
+> que es justo el bug que la columna cierra.
 
 `comboAllowedCategoryId` distingue dos sabores de fila, según el comentario del propio schema:
 - **`null` — regla standalone** (legacy, ex sub-tab "Unidad" del admin): `minQty`/`maxQty` acotan
@@ -233,7 +248,7 @@ precio/stock server-side):
   "allowedProducts": [
     {
       "productId": 1, "name": "Galleta A", "type": "PRODUCTO", "price": null,
-      "minQty": 0, "maxQty": 6,
+      "minQty": 0, "maxQty": 6, "allowedVariantId": null,
       "variants": [{ "id": 10, "attributes": {}, "price": 500, "stock": 40 }]
     }
   ],
@@ -285,12 +300,15 @@ trae `childItems` anidado para que `GET /orders/:id` devuelva el árbol completo
    min/max).
 3. Renderiza contador de progreso ("Elegiste 8 de 12") + lista de `allowedProducts` con selector de
    cantidad (y de atributos — sabor/tamaño/etc., ver [[Variantes]] — si el producto permitido tiene
-   más de una variante activa).
+   más de una variante activa). Con `allowedVariantId` no-null el backend ya recortó `variants[]` a
+   una sola: no va selector, y conviene mostrar la presentación como dato fijo ("pack x4").
 4. Validación en frontend es solo UX (no autoritativa): total dentro de min/max, cada producto dentro
    de su `minQty`/`maxQty`, no exceder stock.
 5. "Agregar al carrito" → `POST /cart/combo/:comboProductId`. El backend es la fuente de verdad;
    errores mapean a `COMBO_SELECTION_OUT_OF_RANGE` / `COMBO_PRODUCT_NOT_ALLOWED` /
-   `COMBO_ITEM_QTY_OUT_OF_RANGE` / `INSUFFICIENT_STOCK`.
+   `COMBO_ITEM_QTY_OUT_OF_RANGE` / `COMBO_VARIANT_NOT_ALLOWED` / `INSUFFICIENT_STOCK`.
+   `COMBO_VARIANT_NOT_ALLOWED` no debería llegarle nunca a un front que respete
+   `allowedVariantId`: si viene, es que el panel ofreció una variante que la regla fija.
 6. Carrito/checkout: línea del combo expandible con los componentes elegidos (`comboSelection`
    resuelto por `GET /cart`, con nombres, no solo ids).
 7. Detalle de orden (cliente y admin): backend arma `{ ...parentItem, childItems: [...] }` ya agrupado
@@ -324,22 +342,39 @@ miembros explícitos vía `ComboAllowedProduct.comboAllowedCategoryId` —
 `services/orders.js:priceItems` combo-aware + `updateOrderStatus` con stock por componente +
 `orderItemsInclude` con `childItems`; `services/cart.js:addCombo` + `POST /cart/combo/:productId`
 (admin + store); guard de rechazo en el bot; catálogo real de Mesa Dulce (3 combos, ver nota de
-arriba); 20 tests en `tests/combos.test.js`; `front-md-guia/FRONTEND_COMBOS.md`.
+arriba); 37 tests en `tests/combos.test.js`; `front-md-guia/FRONTEND_COMBOS.md`.
+
+**Whitelist a nivel de variante (2026-08-15)** — `ComboAllowedProduct.allowedVariantId`, migración
+`20260815043933_add_combo_allowed_variant`. Cierra la brecha que había dejado [[punto-healthy]].
+Las cinco piezas:
+
+1. Columna nullable + FK con `onDelete: Cascade` e índice. Sin migración de datos.
+2. `validateComboSelection` (`services/combos.js`) rechaza con `COMBO_VARIANT_NOT_ALLOWED` cuando
+   la línea trae otra variante. Es el **punto único** de validación: lo comparten carrito y orden.
+3. Una línea **sin `variantId`** en un producto con variante fijada resuelve **la fijada**, no la
+   default: el cliente que pide "Chipá" en un combo que lleva el pack de 4 no tiene por qué
+   nombrar la presentación.
+4. `getComboOptions` recorta `variants[]` a la fijada y devuelve `allowedVariantId` en cada
+   producto permitido, para que el panel no ofrezca lo que el server va a rechazar.
+5. `schemas/product.schema.js`: `allowedVariantId` opcional en `comboOption`, y
+   `comboCategoryOption.productIds` acepta **las dos formas** —id suelto o
+   `{ productId, allowedVariantId }`— normalizadas a la segunda. `services/productos.js` también
+   las acepta (`normalizeComboMembers`), porque los seeds llaman al service directo salteando Zod
+   y mandan ids sueltos.
+
+Al guardar, `ensureAllowedVariantsValid` exige que la variante exista, sea del tenant, pertenezca
+al producto de su regla (`COMBO_VARIANT_PRODUCT_MISMATCH`) y esté activa.
+
+> [!warning] El catálogo de punto-healthy todavía no usa esto
+> El mecanismo existe pero sus 7 promos afectadas siguen cargadas sin variante fijada. Pasarlas es
+> editar `prisma/punto-healthy/build-menu.js` para que `variantesReferenciadas` sea la fuente de
+> las reglas en vez de un warning, y re-correr el seed.
 
 ### Explícitamente diferido (decisión, no olvido)
 - Bot de WhatsApp: soporte conversacional completo (v1 solo rechaza con mensaje amigable).
 - Pricing suma-de-partes / híbrido (`comboPricingMode`).
 - Edición in-place de un combo ya en carrito/orden (v1: quitar la línea completa y re-agregar).
 - Combos anidados (bloqueado por validación server-side, nunca soportado).
-- **Whitelist a nivel de variante específica** (hoy es por producto: todas las variantes activas del
-  producto permitido son elegibles). Dejó de ser teórico con [[punto-healthy]] — 7 de sus 11 promos
-  nombran una presentación puntual ("Café Energy + **1** Cookie" a $3.000, y el cliente puede elegir
-  el pack de 12 que vale $18.000). Fix propuesto, en orden: `ComboAllowedProduct.allowedVariantId
-  Int?` (null = cualquier variante, o sea el comportamiento actual, sin migración de datos);
-  `validateComboSelection` rechaza con `COMBO_VARIANT_NOT_ALLOWED` cuando no coincide (punto único,
-  lo comparten carrito y orden); `getComboOptions` filtra `variants[]` para no ofrecer lo que el
-  server va a rechazar; y `comboOption`/`comboCategoryOption` en `schemas/product.schema.js` aceptan
-  la variante. Detalle y tabla de casos en [[punto-healthy]].
 - `ComboAllowedCategory` no baja a subcategorías: matchea `product.categoryId` exacto contra la
   categoría permitida, sin recorrer el árbol de [[Categorías]]. Si se whitelistea una categoría
   padre, sus subcategorías NO quedan incluidas automáticamente — hay que agregarlas explícitamente.

@@ -5,6 +5,7 @@ import { app } from "../app.js";
 import { ProductModel } from "../services/productos.js";
 import { CategoryModel } from "../services/categories.js";
 import { CartModel } from "../services/cart.js";
+import { validateComboSelection } from "../services/combos.js";
 import { OrderModel } from "../services/orders.js";
 import { buildToolContext } from "../services/chat/tools.js";
 import { seedTenants, cookieFor } from "./helpers.js";
@@ -653,5 +654,189 @@ describe("Bot de WhatsApp: combos rechazados con mensaje amigable", () => {
 
     const ordersAfter = await prisma.order.count({ where: { tenantId: acme.id } });
     expect(ordersAfter).toBe(ordersBefore);
+  });
+});
+
+// El fix de la brecha que dejó punto-healthy: la whitelist apuntaba solo al Product,
+// así que un combo que dice "lleva el pack de 4" habilitaba también el de 12. Ver
+// docs/servicios/dominio/Combos.md.
+describe("Combos: whitelist a nivel de variante (allowedVariantId)", () => {
+  let chipa;
+  let packChico;
+  let packGrande;
+  let comboLibre;
+  let comboFijado;
+  let categoriaPacks;
+  let comboPorCategoria;
+
+  beforeAll(async () => {
+    // `talle` es el atributo de acme (ropa) — acá se usa como presentación porque es
+    // lo que el catálogo del tenant de test tiene cargado; lo que importa es que sean
+    // dos variantes distinguibles del mismo producto.
+    categoriaPacks = await CategoryModel.create({
+      tenantId: acme.id,
+      name: "Categoría Packs",
+    });
+
+    chipa = await ProductModel.create({
+      tenantId: acme.id,
+      name: "Chipá",
+      type: "PRODUCTO",
+      categoryId: categoriaPacks.id,
+      variants: [
+        { attributes: { talle: "4 unidades" }, price: 8000, stock: 20 },
+        { attributes: { talle: "12 unidades" }, price: 18000, stock: 20 },
+      ],
+    });
+    packChico = chipa.variants.find((v) => v.isDefault);
+    packGrande = chipa.variants.find((v) => !v.isDefault);
+
+    comboLibre = await ProductModel.create({
+      tenantId: acme.id,
+      name: "Combo sin variante fijada",
+      price: 9000,
+      type: "COMBO",
+      comboMinItems: 1,
+      comboMaxItems: 2,
+      comboOptions: [{ allowedProductId: chipa.id, minQty: 0, maxQty: 2 }],
+    });
+
+    // Fija el pack GRANDE, que NO es la variante default: así se distingue "resolvió
+    // la fijada" de "resolvió la default de siempre".
+    comboFijado = await ProductModel.create({
+      tenantId: acme.id,
+      name: "Combo con pack fijado",
+      price: 19000,
+      type: "COMBO",
+      comboMinItems: 1,
+      comboMaxItems: 2,
+      comboOptions: [
+        { allowedProductId: chipa.id, allowedVariantId: packGrande.id, minQty: 0, maxQty: 2 },
+      ],
+    });
+
+    comboPorCategoria = await ProductModel.create({
+      tenantId: acme.id,
+      name: "Combo por categoría con pack fijado",
+      price: 19000,
+      type: "COMBO",
+      comboCategoryOptions: [
+        {
+          categoryId: categoriaPacks.id,
+          minQty: 1,
+          maxQty: 1,
+          productIds: [{ productId: chipa.id, allowedVariantId: packGrande.id }],
+        },
+      ],
+    });
+  });
+
+  it("sin variante fijada, cualquier variante activa del producto sigue entrando", async () => {
+    const res = await request(app)
+      .post(`/cart/combo/${comboLibre.id}`)
+      .set("Cookie", cookieFor(acmeCustomer))
+      .send({ selection: [{ productId: chipa.id, variantId: packGrande.id, quantity: 1 }] });
+
+    expect(res.status).toBe(201);
+  });
+
+  it("con variante fijada, elegir otra → 400 COMBO_VARIANT_NOT_ALLOWED", async () => {
+    const res = await request(app)
+      .post(`/cart/combo/${comboFijado.id}`)
+      .set("Cookie", cookieFor(acmeCustomer))
+      .send({ selection: [{ productId: chipa.id, variantId: packChico.id, quantity: 1 }] });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("COMBO_VARIANT_NOT_ALLOWED");
+    expect(res.body.error.details).toMatchObject({
+      elegida: packChico.id,
+      permitida: packGrande.id,
+    });
+  });
+
+  it("con variante fijada, elegir la fijada entra", async () => {
+    const res = await request(app)
+      .post(`/cart/combo/${comboFijado.id}`)
+      .set("Cookie", cookieFor(acmeCustomer))
+      .send({ selection: [{ productId: chipa.id, variantId: packGrande.id, quantity: 1 }] });
+
+    expect(res.status).toBe(201);
+  });
+
+  it("línea sin variantId resuelve la FIJADA, no la default del producto", async () => {
+    const children = await validateComboSelection({
+      tx: prisma,
+      tenantId: acme.id,
+      comboProduct: comboFijado,
+      selection: [{ productId: chipa.id, quantity: 1 }],
+      checkStock: false,
+    });
+
+    expect(children).toHaveLength(1);
+    expect(children[0].variantId).toBe(packGrande.id);
+    expect(children[0].variantId).not.toBe(packChico.id);
+  });
+
+  it("getComboOptions recorta variants[] a la fijada y expone allowedVariantId", async () => {
+    const libre = await ProductModel.getComboOptions({ tenantId: acme.id, id: comboLibre.id });
+    expect(libre.allowedProducts[0].allowedVariantId).toBeNull();
+    expect(libre.allowedProducts[0].variants).toHaveLength(2);
+
+    const fijado = await ProductModel.getComboOptions({ tenantId: acme.id, id: comboFijado.id });
+    expect(fijado.allowedProducts[0].allowedVariantId).toBe(packGrande.id);
+    expect(fijado.allowedProducts[0].variants).toHaveLength(1);
+    expect(fijado.allowedProducts[0].variants[0].id).toBe(packGrande.id);
+  });
+
+  it("fijar una variante que no es del producto permitido → COMBO_VARIANT_PRODUCT_MISMATCH", async () => {
+    await expect(
+      ProductModel.create({
+        tenantId: acme.id,
+        name: "Combo con variante ajena",
+        price: 5000,
+        type: "COMBO",
+        comboMinItems: 1,
+        comboMaxItems: 1,
+        comboOptions: [
+          { allowedProductId: galletaA.id, allowedVariantId: packGrande.id, minQty: 0 },
+        ],
+      })
+    ).rejects.toMatchObject({ code: "COMBO_VARIANT_PRODUCT_MISMATCH" });
+  });
+
+  it("un miembro de regla de categoría también puede fijar variante", async () => {
+    const options = await ProductModel.getComboOptions({
+      tenantId: acme.id,
+      id: comboPorCategoria.id,
+    });
+    const packs = options.allowedCategories[0];
+    expect(packs.products[0].allowedVariantId).toBe(packGrande.id);
+    expect(packs.products[0].variants).toHaveLength(1);
+
+    const res = await request(app)
+      .post(`/cart/combo/${comboPorCategoria.id}`)
+      .set("Cookie", cookieFor(acmeCustomer))
+      .send({ selection: [{ productId: chipa.id, variantId: packChico.id, quantity: 1 }] });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("COMBO_VARIANT_NOT_ALLOWED");
+  });
+
+  it("productIds con ids sueltos sigue funcionando (los seeds los mandan así)", async () => {
+    const combo = await ProductModel.create({
+      tenantId: acme.id,
+      name: "Combo por categoría con ids sueltos",
+      price: 9000,
+      type: "COMBO",
+      comboCategoryOptions: [
+        { categoryId: categoriaPacks.id, minQty: 1, maxQty: 1, productIds: [chipa.id] },
+      ],
+    });
+
+    const options = await ProductModel.getComboOptions({ tenantId: acme.id, id: combo.id });
+    const packs = options.allowedCategories[0];
+    expect(packs.memberProductIds).toEqual([chipa.id]);
+    expect(packs.products[0].allowedVariantId).toBeNull();
+    expect(packs.products[0].variants).toHaveLength(2);
   });
 });

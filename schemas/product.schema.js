@@ -10,11 +10,22 @@ import { SUGGESTION_ANGLES } from "./content-suggestion.schema.js";
 const DESCRIPTION_MAX = 600;
 
 // Combos: una fila de la whitelist de productos permitidos dentro de un combo.
+// Combos: fija la regla a UNA variante del producto permitido. Ausente/null = cualquier
+// variante activa (el comportamiento histórico). Con valor, `validateComboSelection`
+// rechaza cualquier otra — es lo que permite decir "el pack lleva la caja x48".
+const allowedVariantId = z.coerce
+  .number({ invalid_type_error: "El ID de variante debe ser un número" })
+  .int("El ID de variante debe ser un número entero")
+  .positive("ID de variante inválido")
+  .nullable()
+  .optional();
+
 export const comboOption = z.object({
   allowedProductId: z.coerce
     .number({ invalid_type_error: "El ID de producto debe ser un número" })
     .int("El ID de producto debe ser un número entero")
     .positive("ID de producto inválido"),
+  allowedVariantId,
   minQty: z.coerce
     .number({ invalid_type_error: "minQty debe ser un número" })
     .int("minQty debe ser un número entero")
@@ -50,15 +61,35 @@ export const comboCategoryOption = z.object({
     .positive("maxQty debe ser mayor a 0")
     .nullable()
     .optional(),
+  // Dos formas aceptadas, normalizadas a la misma: un id suelto (`[5, 6]`, lo que
+  // mandan el panel y los seeds de siempre) o `{ productId, allowedVariantId }` para
+  // fijar la variante de ese miembro. Se normaliza acá a
+  // `[{ productId, allowedVariantId }]` para que el service no tenga que distinguir.
   productIds: z
     .array(
-      z.coerce
-        .number({ invalid_type_error: "El ID de producto debe ser un número" })
-        .int("El ID de producto debe ser un número entero")
-        .positive("ID de producto inválido")
+      z.union([
+        z.coerce
+          .number({ invalid_type_error: "El ID de producto debe ser un número" })
+          .int("El ID de producto debe ser un número entero")
+          .positive("ID de producto inválido"),
+        z.object({
+          productId: z.coerce
+            .number({ invalid_type_error: "El ID de producto debe ser un número" })
+            .int("El ID de producto debe ser un número entero")
+            .positive("ID de producto inválido"),
+          allowedVariantId,
+        }),
+      ])
     )
     .optional()
-    .default([]),
+    .default([])
+    .transform((items) =>
+      items.map((item) =>
+        typeof item === "object"
+          ? { productId: item.productId, allowedVariantId: item.allowedVariantId ?? null }
+          : { productId: item, allowedVariantId: null }
+      )
+    ),
 });
 
 // PRODUCTO: siempre tiene >=1 ProductVariant (la principal marcada `isDefault`) —

@@ -45,6 +45,8 @@ La whitelist de un combo se define por **categorías**: "el combo lleva 4 de la 
 - `productIds` son los **miembros explícitos** permitidos dentro de la categoría ("de los brownies,
   solo A y B"). Vacío u omitido = todos los productos activos de la categoría (incluye productos
   futuros). Cada miembro debe pertenecer a esa categoría (`400 COMBO_MEMBER_CATEGORY_MISMATCH`).
+  Acepta **dos formas**, mezclables en el mismo array: `30` (cualquier variante del producto) o
+  `{ "productId": 30, "allowedVariantId": 210 }` (solo esa presentación). Ver "Fijar la variante".
 - Solo entran productos activos `type: "PRODUCTO"` (nunca `COMBO`, ni el propio combo).
 - **No baja a subcategorías**: si whitelisteás una categoría padre, sus subcategorías NO quedan
   incluidas automáticamente.
@@ -53,10 +55,40 @@ La whitelist de un combo se define por **categorías**: "el combo lleva 4 de la 
 
 ### Whitelist standalone (`comboOptions`, legacy)
 
-Cada entrada: `{ allowedProductId, minQty, maxQty }` — un producto puntual con su propio rango
-per-producto. Se mantiene por compatibilidad (combos viejos) pero el admin nuevo ya no la genera.
+Cada entrada: `{ allowedProductId, allowedVariantId?, minQty, maxQty }` — un producto puntual con
+su propio rango per-producto. Se mantiene por compatibilidad (combos viejos) pero el admin nuevo ya no la genera.
 Un producto con regla standalone aparece en `allowedProducts` con su propia regla y **no suma** al
 grupo de su categoría. Independiente de `comboCategoryOptions` (editar una no toca la otra).
+
+### Fijar la variante (`allowedVariantId`)
+
+Por defecto, permitir un producto en un combo habilita **todas sus variantes activas**. Con
+productos que se venden por presentación eso es plata: un combo que dice "1 cookie" ($2.500)
+dejaba elegir el pack de 12 ($18.000) y se cobraba igual.
+
+`allowedVariantId` acota la regla a **una sola variante**:
+
+```json
+{
+  "comboCategoryOptions": [
+    { "categoryId": 5, "minQty": 1, "maxQty": 1,
+      "productIds": [{ "productId": 30, "allowedVariantId": 210 }] },
+    { "categoryId": 8, "minQty": 2, "maxQty": 2 }
+  ]
+}
+```
+
+- **Ausente o `null` = cualquier variante activa**, el comportamiento de siempre. No hace falta
+  tocar nada en combos que ya andan.
+- Sirve tanto en `comboOptions` (standalone) como en los miembros de `comboCategoryOptions`. Lo
+  que **no** puede fijar variante es una regla de categoría **sin** miembros explícitos: ahí la
+  regla abarca la categoría entera, productos futuros incluidos.
+- La variante tiene que ser **de ese producto** y estar activa, o el guardado falla con
+  `400 COMBO_VARIANT_PRODUCT_MISMATCH` / `400 COMBO_VARIANT_NOT_ALLOWED`.
+- En la lectura, `GET .../combo-options` devuelve `allowedVariantId` por producto y ya **recorta
+  `variants[]` a la fijada** — no tenés que filtrar del lado del front.
+- Al armar la selección podés mandar ese `variantId` o **no mandar ninguno**: si la regla fija una
+  variante, el backend resuelve esa (no la default del producto).
 
 ---
 
@@ -125,6 +157,7 @@ grupo de su categoría. Independiente de `comboCategoryOptions` (editar una no t
           "type": "PRODUCTO",
           "minQty": 4,
           "maxQty": 4,
+          "allowedVariantId": null,
           "variants": [{ "id": 210, "attributes": {}, "price": 800, "stock": 40 }]
         },
         {
@@ -134,6 +167,7 @@ grupo de su categoría. Independiente de `comboCategoryOptions` (editar una no t
           "type": "PRODUCTO",
           "minQty": 0,
           "maxQty": null,
+          "allowedVariantId": null,
           "variants": [
             { "id": 220, "attributes": { "color": "#000000", "talle": "M" }, "price": 5000, "stock": 8 },
             { "id": 221, "attributes": { "color": "#ffffff", "talle": "M" }, "price": 5000, "stock": 3 }
@@ -177,12 +211,15 @@ grupo de su categoría. Independiente de `comboCategoryOptions` (editar una no t
    ```ts
    type ComboOption = {
      productId: number; name: string; img: string | null;
+     allowedVariantId: number | null;   // no-null => presentación fija, sin picker
      variants: { id: number; attributes: Record<string, string>; price: number; stock: number }[];
      groupKey: string;    // `category:${categoryId}` o "standalone"
      groupLabel: string; groupMinQty: number; groupMaxQty: number | null;
    };
    type Selection = Record<number, { variantId: number | null; quantity: number }>;
    ```
+   - `allowedVariantId !== null` → la regla fija la presentación. El backend ya recortó `variants[]`
+     a esa sola, así que **no va picker**: mostrala como dato fijo ("pack x4") y stepper directo.
    - `variants.length === 1` → sin picker de atributos, stepper de cantidad directo (igual guardá
      ese `variantId`, no lo mandes `null` al submit).
    - `variants.length > 1` → picker de atributos obligatorio (labels del catálogo de
@@ -287,6 +324,7 @@ server resuelve la variante principal.
 | `COMBO_SELECTION_REQUIRED` | 400 | `selection` vacío o ausente |
 | `COMBO_SELECTION_OUT_OF_RANGE` | 400 | la suma de cantidades no está en `[comboMinItems, comboMaxItems]` |
 | `COMBO_PRODUCT_NOT_ALLOWED` | 400 | algún `productId` de la selección no pertenece a la whitelist (incluye "está en la categoría pero no es miembro explícito") — `details.productId` |
+| `COMBO_VARIANT_NOT_ALLOWED` | 400 | la regla fija una presentación (`allowedVariantId`) y la selección mandó otra variante — `details: { productId, elegida, permitida }`. Un front que respete `allowedVariantId` no debería verlo nunca |
 | `COMBO_ITEM_QTY_OUT_OF_RANGE` | 400 | la SUMA de un grupo de categoría no respeta su `minQty`/`maxQty` (`details: { categoryId, minQty, maxQty, selected }` — también salta si falta el mínimo de un grupo no elegido) o, en reglas standalone legacy, la cantidad de ese producto (`details.productId`) |
 | `VARIANT_NOT_FOUND` | 404 | el `variantId` mandado no existe o no es de ese producto |
 | `INSUFFICIENT_STOCK` | 409 | algún componente elegido no tiene stock suficiente |
@@ -371,6 +409,8 @@ esto, es 100% server-side.
       `400 COMBO_ITEM_QTY_OUT_OF_RANGE` con `details.categoryId`.
 - [ ] Agregar al carrito un producto permitido vía categoría → `201`, igual que cualquier otro
       componente.
+- [ ] Un producto con `allowedVariantId` no-null → se renderiza sin picker de presentación, y el
+      `variantId` que se manda es ese. Mandar otro a mano → `400 COMBO_VARIANT_NOT_ALLOWED`.
 - [ ] Armar una selección por debajo del mínimo → el front bloquea "Agregar al carrito" (y si igual se
       manda, el backend devuelve `400 COMBO_SELECTION_OUT_OF_RANGE`).
 - [ ] Agregar un combo válido al carrito (`POST /cart/combo/:productId`) → aparece como 1 línea con

@@ -105,6 +105,18 @@ export async function validateComboSelection({
       .filter((a) => a.comboAllowedCategoryId == null)
       .map((a) => [a.allowedProductId, a])
   );
+  // Variante FIJADA por producto (`allowedVariantId`, ver schema.prisma). Aplica a los
+  // dos sabores de fila, porque tanto una regla standalone como un miembro explícito
+  // pueden nombrar una presentación puntual ("el pack lleva la caja x48"). El
+  // @@unique([comboProductId, allowedProductId]) garantiza una sola fila por producto,
+  // así que alcanza con un Map. Una regla de categoría SIN miembros explícitos no
+  // puede fijar variante: no tiene fila donde guardarla, y eso es correcto — "toda la
+  // categoría" incluye productos futuros cuyas variantes todavía no existen.
+  const pinnedVariantByProduct = new Map(
+    allowed
+      .filter((a) => a.allowedVariantId != null)
+      .map((a) => [a.allowedProductId, a.allowedVariantId])
+  );
   const rulesByCategory = new Map(allowedCategories.map((a) => [a.categoryId, a]));
   const ruleById = new Map(allowedCategories.map((a) => [a.id, a]));
   const memberRuleIdByProduct = new Map();
@@ -211,9 +223,27 @@ export async function validateComboSelection({
       throw error;
     }
 
-    const variant = resolveVariantForProduct(product, line.variantId);
+    // Con variante fijada y una línea que no eligió ninguna, se resuelve LA FIJADA en
+    // vez de la default: el cliente que dice "quiero Chipá" en un combo que lleva el
+    // pack de 4 no tiene por qué nombrar la presentación. Si eligió una explícita, se
+    // respeta y se valida abajo.
+    const pinnedVariantId = pinnedVariantByProduct.get(line.productId) ?? null;
+    const variant = resolveVariantForProduct(product, line.variantId ?? pinnedVariantId);
     if (!variant) {
       throw createError("Variante no encontrada", "VARIANT_NOT_FOUND", 404);
+    }
+    if (pinnedVariantId != null && variant.id !== pinnedVariantId) {
+      const error = createError(
+        "Ese producto entra al combo solo en una presentación puntual",
+        "COMBO_VARIANT_NOT_ALLOWED",
+        400
+      );
+      error.details = {
+        productId: line.productId,
+        elegida: variant.id,
+        permitida: pinnedVariantId,
+      };
+      throw error;
     }
     if (!variant.isActive) {
       const error = createError(

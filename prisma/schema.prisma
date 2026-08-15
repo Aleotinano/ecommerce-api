@@ -368,6 +368,15 @@ model ComboAllowedProduct {
   comboProductId         Int
   allowedProductId       Int
   comboAllowedCategoryId Int?
+  // Fija la regla a UNA variante puntual del producto permitido. null = cualquier
+  // variante activa (el comportamiento histórico, por eso la columna nace nullable y
+  // la migración no toca datos). Con valor, `validateComboSelection` rechaza cualquier
+  // otra con COMBO_VARIANT_NOT_ALLOWED: es lo que permite expresar "el pack lleva la
+  // caja x48" sin que el cliente pueda meter la x12.
+  // Cascade igual que `allowedProductId`: si la variante fijada desaparece, la regla se
+  // va con ella. La alternativa (SetNull) volvería a habilitar TODAS las variantes en
+  // silencio, que es justo el bug que esta columna cierra.
+  allowedVariantId       Int?
   minQty                 Int      @default(0)
   maxQty                 Int?
   isActive               Boolean  @default(true)
@@ -375,6 +384,7 @@ model ComboAllowedProduct {
 
   comboProduct     Product               @relation("ComboOptions", fields: [comboProductId], references: [id], onDelete: Cascade)
   allowedProduct   Product               @relation("AllowedInCombos", fields: [allowedProductId], references: [id], onDelete: Cascade)
+  allowedVariant   ProductVariant?       @relation("AllowedVariantInCombos", fields: [allowedVariantId], references: [id], onDelete: Cascade)
   memberOfCategory ComboAllowedCategory? @relation("CategoryMembers", fields: [comboAllowedCategoryId], references: [id], onDelete: Cascade)
   tenant           Tenant                @relation(fields: [tenantId], references: [id])
 
@@ -382,6 +392,7 @@ model ComboAllowedProduct {
   @@index([tenantId])
   @@index([comboProductId])
   @@index([comboAllowedCategoryId])
+  @@index([allowedVariantId])
 }
 
 // Whitelist de CATEGORÍAS permitidas dentro de un combo (ej. "el combo lleva 4 de
@@ -515,6 +526,9 @@ model ProductVariant {
   tenant      Tenant      @relation(fields: [tenantId], references: [id])
   cartItems   CartItem[]
   orderItems  OrderItem[]
+
+  // Reglas de combo que fijan ESTA variante como la única elegible de su producto.
+  allowedInCombos ComboAllowedProduct[] @relation("AllowedVariantInCombos")
 
   // Marca la variante "principal" de un Product tipo PRODUCTO — todo producto no-combo
   // tiene siempre exactamente una. El índice único parcial que garantiza "a lo sumo una

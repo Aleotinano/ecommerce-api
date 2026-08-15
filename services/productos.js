@@ -100,6 +100,65 @@ const ensureCategoryExists = async (tenantId, categoryId) => {
   }
 };
 
+// Combos: miembros explícitos de una regla de categoría. Llegan en dos formas y el
+// service acepta las dos porque es la puerta que cruzan los dos caminos: el HTTP ya
+// viene normalizado a `[{ productId, allowedVariantId }]` por Zod
+// (`schemas/product.schema.js`), y los seeds que llaman a `ProductModel` directo
+// (`prisma/punto-healthy/combos.js`, `prisma/mesa-dulce/productos.js`) mandan ids
+// sueltos. Salida siempre `[{ productId, allowedVariantId }]`.
+const normalizeComboMembers = (productIds = []) =>
+  productIds.map((item) =>
+    typeof item === "object" && item !== null
+      ? { productId: item.productId, allowedVariantId: item.allowedVariantId ?? null }
+      : { productId: item, allowedVariantId: null }
+  );
+
+// Combos: valida las variantes FIJADAS de un lote de reglas (`allowedVariantId`, ver
+// schema.prisma). Cada una tiene que existir, ser del tenant, pertenecer al producto
+// de SU regla y estar activa. Sin este chequeo la regla quedaría apuntando a algo
+// inelegible y el combo sería invendible sin que nadie se entere hasta el checkout.
+// `pins` es `[{ productId, allowedVariantId }]`; las que vienen en null se saltean
+// (null = cualquier variante, el comportamiento histórico).
+const ensureAllowedVariantsValid = async (tenantId, pins) => {
+  const ids = [
+    ...new Set(pins.filter((p) => p.allowedVariantId != null).map((p) => p.allowedVariantId)),
+  ];
+  if (!ids.length) return;
+
+  const variants = await prisma.productVariant.findMany({
+    where: { id: { in: ids }, tenantId },
+    select: { id: true, productId: true, isActive: true },
+  });
+  const variantMap = new Map(variants.map((v) => [v.id, v]));
+
+  for (const pin of pins) {
+    if (pin.allowedVariantId == null) continue;
+
+    const variant = variantMap.get(pin.allowedVariantId);
+    if (!variant) {
+      throw createError("La variante fijada no existe", "VARIANT_NOT_FOUND", 404);
+    }
+    if (variant.productId !== pin.productId) {
+      const error = createError(
+        "La variante fijada no pertenece al producto permitido",
+        "COMBO_VARIANT_PRODUCT_MISMATCH",
+        400
+      );
+      error.details = { productId: pin.productId, allowedVariantId: pin.allowedVariantId };
+      throw error;
+    }
+    if (!variant.isActive) {
+      const error = createError(
+        "La variante fijada está inactiva",
+        "COMBO_VARIANT_NOT_ALLOWED",
+        400
+      );
+      error.details = { allowedVariantId: pin.allowedVariantId };
+      throw error;
+    }
+  }
+};
+
 // Combos: valida la whitelist antes de persistirla. `comboProductId` es null en
 // `create` (el combo todavía no tiene id) — el self-check no aplica ahí.
 const ensureComboOptionsValid = async (tenantId, comboOptions, comboProductId = null) => {
@@ -137,6 +196,14 @@ const ensureComboOptionsValid = async (tenantId, comboOptions, comboProductId = 
       );
     }
   }
+
+  await ensureAllowedVariantsValid(
+    tenantId,
+    comboOptions.map((o) => ({
+      productId: o.allowedProductId,
+      allowedVariantId: o.allowedVariantId ?? null,
+    }))
+  );
 };
 
 // Combos: valida la whitelist de CATEGORÍAS antes de persistirla — que cada categoría
@@ -167,7 +234,9 @@ const ensureComboCategoryOptionsValid = async (
     }
   }
 
-  const memberIds = [...new Set(comboCategoryOptions.flatMap((o) => o.productIds ?? []))];
+  const membersByOption = comboCategoryOptions.map((o) => normalizeComboMembers(o.productIds));
+  const allMembers = membersByOption.flat();
+  const memberIds = [...new Set(allMembers.map((m) => m.productId))];
   if (!memberIds.length) return;
 
   if (comboProductId != null && memberIds.includes(comboProductId)) {
@@ -184,8 +253,8 @@ const ensureComboCategoryOptionsValid = async (
   });
   const memberMap = new Map(members.map((p) => [p.id, p]));
 
-  for (const option of comboCategoryOptions) {
-    for (const productId of option.productIds ?? []) {
+  for (const [index, option] of comboCategoryOptions.entries()) {
+    for (const { productId } of membersByOption[index]) {
       const product = memberMap.get(productId);
       if (!product) {
         throw createError(
@@ -210,6 +279,8 @@ const ensureComboCategoryOptionsValid = async (
       }
     }
   }
+
+  await ensureAllowedVariantsValid(tenantId, allMembers);
 };
 
 // Combos: filas de ComboAllowedProduct para los miembros explícitos de cada regla
@@ -219,10 +290,11 @@ const ensureComboCategoryOptionsValid = async (
 const buildComboMemberRows = ({ tenantId, comboProductId, comboCategoryOptions, createdRules }) => {
   const ruleIdByCategory = new Map(createdRules.map((rule) => [rule.categoryId, rule.id]));
   return comboCategoryOptions.flatMap((option) =>
-    (option.productIds ?? []).map((productId) => ({
+    normalizeComboMembers(option.productIds).map(({ productId, allowedVariantId }) => ({
       tenantId,
       comboProductId,
       allowedProductId: productId,
+      allowedVariantId,
       comboAllowedCategoryId: ruleIdByCategory.get(option.categoryId),
       minQty: 0,
       maxQty: null,
@@ -658,6 +730,7 @@ export const ProductModel = {
                   create: comboOptions.map((option) => ({
                     tenantId,
                     allowedProductId: option.allowedProductId,
+                    allowedVariantId: option.allowedVariantId ?? null,
                     minQty: option.minQty ?? 0,
                     maxQty: option.maxQty ?? null,
                   })),
@@ -855,6 +928,7 @@ export const ProductModel = {
                 tenantId,
                 comboProductId: id,
                 allowedProductId: option.allowedProductId,
+                allowedVariantId: option.allowedVariantId ?? null,
                 minQty: option.minQty ?? 0,
                 maxQty: option.maxQty ?? null,
               })),
@@ -950,19 +1024,27 @@ export const ProductModel = {
         }),
       ]);
 
-      const toAllowedProduct = (product, minQty, maxQty) => ({
+      // `allowedVariantId` no-null = la regla fija una presentación puntual. Se recorta
+      // `variants[]` a esa: el panel del combo no tiene que ofrecer lo que
+      // `validateComboSelection` va a rechazar con COMBO_VARIANT_NOT_ALLOWED. Se
+      // devuelve además el id para que el front sepa que no hay nada que elegir y no
+      // pinte un selector de una sola opción.
+      const toAllowedProduct = (product, minQty, maxQty, allowedVariantId = null) => ({
         productId: product.id,
         name: product.name,
         img: product.img,
         type: product.type,
         minQty,
         maxQty,
-        variants: product.variants.map((variant) => ({
-          id: variant.id,
-          attributes: variant.attributes,
-          price: variant.price,
-          stock: variant.stock,
-        })),
+        allowedVariantId,
+        variants: product.variants
+          .filter((variant) => allowedVariantId == null || variant.id === allowedVariantId)
+          .map((variant) => ({
+            id: variant.id,
+            attributes: variant.attributes,
+            price: variant.price,
+            stock: variant.stock,
+          })),
       });
 
       // Las filas de comboAllowedProduct tienen dos sabores (ver schema.prisma):
@@ -994,6 +1076,11 @@ export const ProductModel = {
             const memberProducts = members
               .filter((member) => member.allowedProduct.isActive)
               .map((member) => member.allowedProduct);
+            // Solo los miembros explícitos pueden fijar variante (una regla sin
+            // miembros abarca la categoría entera, productos futuros incluidos).
+            const pinnedByProductId = new Map(
+              members.map((member) => [member.allowedProductId, member.allowedVariantId ?? null])
+            );
 
             const categoryProducts = members.length
               ? memberProducts
@@ -1017,7 +1104,12 @@ export const ProductModel = {
               // futuros). El admin lo usa para precargar el picker.
               memberProductIds: members.map((member) => member.allowedProductId),
               products: categoryProducts.map((product) =>
-                toAllowedProduct(product, option.minQty, option.maxQty)
+                toAllowedProduct(
+                  product,
+                  option.minQty,
+                  option.maxQty,
+                  pinnedByProductId.get(product.id) ?? null
+                )
               ),
             };
           })
@@ -1028,7 +1120,14 @@ export const ProductModel = {
         comboMaxItems: product.comboMaxItems,
         allowedProducts: standaloneOptions
           .filter((option) => option.allowedProduct.isActive)
-          .map((option) => toAllowedProduct(option.allowedProduct, option.minQty, option.maxQty)),
+          .map((option) =>
+            toAllowedProduct(
+              option.allowedProduct,
+              option.minQty,
+              option.maxQty,
+              option.allowedVariantId ?? null
+            )
+          ),
         allowedCategories,
       };
     });

@@ -1,0 +1,58 @@
+{
+  "_nota": [
+    "Spec del catálogo de Pastaia. A diferencia de punto-healthy/menu.json (que es la",
+    "transcripción de una carta impresa), esto es una MATRIZ: ./build-menu.js expande",
+    "formatos x rellenos en productos, y masas x cajas en variantes.",
+    "",
+    "Este es el archivo que se edita a mano para un cambio de precio o para sumar un",
+    "relleno. Después de tocarlo: pnpm pastaia:build-menu",
+    "",
+    "Los `null` de `precios` y `salsas[].price` son datos de negocio que todavía no",
+    "tenemos. El build FALLA mientras siga habiendo alguno: un precio inventado que",
+    "llegue a producción se cobra de verdad."
+  ],
+
+  "masas": ["Clásica", "Remolacha", "Albahaca"],
+
+  "cajas": [
+    { "label": "12 unidades", "unidades": 12 },
+    { "label": "24 unidades", "unidades": 24 },
+    { "label": "48 unidades", "unidades": 48 }
+  ],
+
+  "_notaIconos": "Íconos lucide provisorios: las raíces son los tiles de la landing y van a mostrar foto (imageUrl), no ícono. Revisar cuando esté el diseño.",
+
+  "formatos": [
+    { "name": "Sorrentinos", "icon": "circle-dot", "description": "Sorrentinos caseros congelados, en masa y relleno a elección." },
+    { "name": "Ravioles", "icon": "grid-2x2", "description": "Ravioles caseros congelados, en masa y relleno a elección." },
+    { "name": "Raviolones", "icon": "layout-grid", "description": "Raviolones caseros congelados, en masa y relleno a elección." }
+  ],
+
+  "rellenos": ["jamón y queso", "ricota y nuez", "pollo y verdura", "calabaza y queso"],
+
+  "descripcionTemplate": "{formato} rellenos de {relleno}. Elegí la masa y el tamaño de la caja. Se entregan congelados, listos para cocinar.",
+
+  "precios": {
+    "_nota": "base = precio de la caja con masa Clásica y sin recargo de relleno. Los recargos son POR UNIDAD y se multiplican por las unidades de la caja. El build redondea a la centena.",
+    "masaSinRecargo": "Clásica",
+    "base": {
+      "Sorrentinos": { "12 unidades": null, "24 unidades": null, "48 unidades": null },
+      "Ravioles": { "12 unidades": null, "24 unidades": null, "48 unidades": null },
+      "Raviolones": { "12 unidades": null, "24 unidades": null, "48 unidades": null }
+    },
+    "recargoMasaPorUnidad": null,
+    "recargoRellenoPorUnidad": {
+      "_nota": "Solo los rellenos con sobreprecio. El que no figure va sin recargo. Ej: \"pollo y verdura\": 120"
+    }
+  },
+
+  "salsas": {
+    "categoria": { "name": "Salsas", "icon": "cooking-pot", "description": "Salsas caseras para acompañar." },
+    "_nota": "Si hay más de un tamaño de pote, dejan de ser productos de una variante: se suma un atributo `pote` en ./atributos.js y una variante por tamaño.",
+    "productos": [
+      { "name": "Salsa blanca", "description": null, "price": null },
+      { "name": "Salsa tuco", "description": null, "price": null },
+      { "name": "Salsa mixta", "description": null, "price": null }
+    ]
+  }
+}

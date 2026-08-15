@@ -104,7 +104,15 @@ Los dos casos que fuerzan standalone acá:
 
 ## La fricción real: la whitelist es por producto, la carta habla de variantes
 
-**Es la brecha principal que dejó este tenant**, y está pendiente de resolver.
+> [!success] El backend ya lo soporta (2026-08-15) — falta migrar ESTE catálogo
+> `ComboAllowedProduct.allowedVariantId` está implementado (migración
+> `20260815043933_add_combo_allowed_variant`, detalle en [[Combos]] → Alcance). Lo motivó
+> [[pastaia]], que necesita packs con la caja fijada. **Las 7 promos de abajo siguen cargadas
+> sin variante fijada**: pasarlas es editar `build-menu.js` para que `variantesReferenciadas`
+> sea la fuente de las reglas en vez de un warning, y re-correr `pnpm seed:punto-healthy`.
+> Lo que sigue describe el problema y el fix tal como se diseñó.
+
+**Es la brecha principal que dejó este tenant.**
 
 `ComboAllowedProduct.allowedProductId` apunta a un `Product`, no a una `ProductVariant`
 (diferido explícito en [[Combos]]). Cuando un combo permite un producto, **todas sus
@@ -123,7 +131,7 @@ Los tres primeros son plata: el combo se cobra igual y se lleva el pack caro. Ho
 catálogo se cargó igual —la descripción de cada combo aclara la presentación— y el local
 ve la orden antes de producirla, pero la validación server-side no lo impide.
 
-**Fix propuesto** (no hecho, es trabajo aparte):
+**El fix** (implementado 2026-08-15; el paso 5 es el que falta para este tenant):
 
 1. `ComboAllowedProduct.allowedVariantId Int?` — null = cualquier variante (comportamiento
    actual, sin migración de datos); con valor = solo esa. Mismo criterio de "opcional que
