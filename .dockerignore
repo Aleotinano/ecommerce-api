@@ -17,8 +17,7 @@ generated
 backups
 
 # Infra del deploy: la consume docker/compose desde el host, no va adentro de la
-# imagen (el Caddyfile lo monta el servicio `caddy` como volumen).
-Caddyfile
+# imagen.
 docker-compose*.yml
 
 .claude

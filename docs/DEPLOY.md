@@ -1,29 +1,25 @@
 # Deploy en producción
 
-Deploy sobre **una VM** que corre el stack entero con `docker-compose.prod.yml`:
-Postgres + Redis + backend + Caddy (TLS). Es el mismo compose de siempre, no una
-arquitectura distinta — lo que cambia respecto de dev está en
+Deploy sobre **una sola máquina** que corre el stack entero con
+`docker-compose.prod.yml`: Postgres + Redis + backend. Es el mismo compose de
+siempre, no una arquitectura distinta — lo que cambia respecto de dev está en
 [§Qué cambia entre dev y prod](#qué-cambia-entre-dev-y-prod).
 
-El proveedor de referencia es **Oracle Cloud Always Free**, porque es el único
-tier gratuito de 2026 que da una VM real, no duerme y no expira. Los pasos son
-los mismos en cualquier VM Linux con IP pública (GCP `e2-micro`, un VPS de €4).
+La máquina de referencia es un **mini PC casero** (Intel Celeron J1900, 4 GB de
+RAM, disco mecánico) con Ubuntu Server 24.04 sin GUI, y se expone a internet con
+**Tailscale Funnel**. Los pasos son los mismos en cualquier Linux con Docker.
 
-> [!important] Por qué una VM y no un PaaS gratuito
-> Con los webhooks apagados (ver paso 8) no hay ningún cliente automático que se
-> desuscriba por timeout, así que un PaaS que duerme **no queda descartado de
-> plano**. Quedan tres razones, más flojas pero suficientes:
+> [!important] Por qué Funnel y no un reverse proxy propio
+> La conexión es hogareña y probablemente esté detrás de **CGNAT**: no hay IP
+> pública que apuntar ni puertos que abrir en el router, así que un Caddy o un
+> nginx propio no tendrían por dónde recibir tráfico. Funnel resuelve las tres
+> cosas de una: sale por conexión saliente (el CGNAT deja de importar), termina
+> el TLS y emite el certificado solo.
 >
-> 1. **El cold start lo pagan personas.** Los free tiers de PaaS duermen a los 15
->    minutos y despiertan en ~50 s. Eso lo come el comprador que abre la tienda y
->    —peor— el mostrador esperando para cobrar en el módulo de caja.
-> 2. **Igual habría que partir el stack.** El Postgres gratis de Render expira a
->    los 30 días y su Redis no tiene tier gratis, así que el camino PaaS son tres
->    proveedores (Render + Neon + Upstash), tres cuentas y ningún `docker compose`.
-> 3. **Una VM no expira ni duerme**, y los datos del cliente son tuyos.
->
-> Si el piloto se volviera una demo sin uso real, el cálculo cambia y Render +
-> Neon + Upstash es menos trabajo. Hoy no es el caso.
+> Lo que se paga: **un nodo de Tailscale es un solo hostname**. No hay
+> subdominio por tienda, así que el multi-tenant va enteramente por el header
+> `X-Tenant-Slug` — ver [§Multi-tenant sin subdominios](#6-multi-tenant-sin-subdominios),
+> que es el punto que hay que tener claro antes de empezar.
 
 ---
 
@@ -31,56 +27,34 @@ los mismos en cualquier VM Linux con IP pública (GCP `e2-micro`, un VPS de €4
 
 | Qué | Detalle |
 |---|---|
-| Cuenta Oracle Cloud | Pide tarjeta **para verificar identidad**; el tier Always Free no cobra. Verificá que la cuenta quede como *Always Free* y no como *Pay As You Go* |
-| Un dominio | Necesario para el certificado TLS. Si no tenés, sirve un subdominio gratis de DuckDNS — Let's Encrypt los emite sin problema |
+| Una cuenta de Tailscale | El tier gratis alcanza. Funnel hay que **habilitarlo explícitamente** en la tailnet, ver paso 2 |
+| Docker Engine + `docker compose` | En la máquina, no en un contenedor |
 | El repo con `pnpm-lock.yaml` commiteado | Ver [§El lockfile](#el-lockfile-tiene-que-estar-en-git) |
 
-### Recursos Always Free (estado a agosto 2026)
+**No hace falta**: dominio propio, registro DNS, certificado, puertos abiertos en
+el router, ni IP pública.
 
-Oracle **recortó el tier en junio de 2026, sin anuncio**: la cuota de Ampere A1
-pasó de 4 OCPU / 24 GB a **2 OCPU / 12 GB**. Sigue siendo holgado para este stack
-(Postgres + Redis con `maxmemory 256mb` + Node + Caddy).
+### Sobre la máquina
 
----
+4 GB de RAM compartidos entre Postgres, Redis, Node y el sistema. Hoy ningún
+servicio tiene límite de memoria declarado en el compose: si el stack empieza a
+apretar, ese es el primer lugar a mirar (`mem_limit` por servicio y
+`NODE_OPTIONS=--max-old-space-size` en el backend).
 
-## 1. Crear la VM
+El disco es mecánico, así que **el build es la parte lenta**, no el runtime. La
+rotación de logs ya está puesta en el compose (`10m` × 3 por servicio); sin eso el
+driver `json-file` crece sin techo.
 
-1. *Compute → Instances → Create instance*.
-2. **Shape**: `VM.Standard.A1.Flex` (Ampere, ARM) con 2 OCPU / 12 GB.
-3. **Imagen**: Ubuntu 24.04.
-4. **Boot volume**: 50 GB alcanza y sobra (el Always Free da hasta 200 GB).
-5. Guardá la clave SSH privada que te ofrece descargar: no hay segunda chance.
+`argon2` es la única dependencia nativa del proyecto y trae prebuild para
+`linux-x64` **musl** (`node_modules/argon2/prebuilds/linux-x64/argon2.musl.node`),
+que es exactamente la combinación de `node:24-alpine` en esta máquina. No compila
+nada.
 
-> [!tip] "Out of capacity"
-> Es el error más común creando instancias ARM en Oracle: la región no tiene
-> capacidad libre en ese momento. No es un problema de tu cuenta. Probá otro
-> *availability domain* o reintentá más tarde.
+Con cortes de luz ocasionales, los servicios llevan `restart: always`: dejá el
+demonio de Docker habilitado al boot (`sudo systemctl enable docker`) y el stack
+vuelve solo.
 
-**ARM no es un problema para esta imagen.** `argon2` —la única dependencia
-nativa— publica prebuilds para `linux-arm64` **musl**
-(`node_modules/argon2/prebuilds/linux-arm64/argon2.armv8.musl.node`), que es
-exactamente la combinación de `node:24-alpine` en ARM. No compila nada.
-
-## 2. Abrir los puertos (los dos lugares)
-
-Este es el paso que más tiempo hace perder en Oracle, porque el firewall está
-**dos veces** y abrir uno solo no alcanza.
-
-**a) Security List de la VCN** (el firewall de Oracle, en la consola web):
-*Networking → Virtual Cloud Networks → tu VCN → Security Lists → Default*.
-Agregá dos *ingress rules* desde `0.0.0.0/0`: TCP **80** y TCP **443**.
-
-**b) `iptables` dentro de la VM.** Las imágenes de Ubuntu de Oracle vienen con una
-regla `REJECT` que descarta todo lo que no sea SSH. Sin esto, el puerto está
-abierto en la consola y la conexión igual muere:
-
-```bash
-sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 80 -j ACCEPT
-sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 443 -j ACCEPT
-sudo netfilter-persistent save
-```
-
-## 3. Instalar Docker
+## 1. Instalar Docker
 
 ```bash
 sudo apt update && sudo apt install -y ca-certificates curl git
@@ -88,42 +62,48 @@ curl -fsSL https://get.docker.com | sudo sh
 sudo usermod -aG docker "$USER" && newgrp docker
 ```
 
-## 4. DNS
-
-Apuntá un registro **A** de tu dominio a la IP pública de la VM y esperá a que
-propague. Caddy pide el certificado por el desafío HTTP-01, que exige que el
-dominio ya resuelva a esta IP: **si no resolvió todavía, el primer arranque
-falla** y Let's Encrypt cuenta ese intento contra el límite semanal.
-
-Comprobalo antes de seguir:
+## 2. Tailscale y Funnel
 
 ```bash
-dig +short api.midominio.com   # tiene que devolver la IP de la VM
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
 ```
 
-## 5. Clonar y configurar
+Funnel no viene habilitado por defecto: hay que darle a este nodo el atributo
+`funnel` en la ACL de la tailnet, desde la consola de administración de
+Tailscale. Si falta, el comando del paso 4 falla con un mensaje que dice
+exactamente eso y linkea a dónde habilitarlo.
+
+Anotá el hostname que te queda, que es la URL pública de la API:
+
+```bash
+tailscale status --json
+```
+
+El `DNSName` sale con la forma `<tu-host>.<tailnet>.ts.net`. **Ese valor va a
+`BASE_URL`** en el paso siguiente, y tiene que coincidir carácter por carácter.
+
+## 3. Clonar y configurar
 
 ```bash
 git clone <tu-repo> e-commerce-express && cd e-commerce-express
 cp .env.example .env
-openssl rand -hex 24   # POSTGRES_PASSWORD
-openssl rand -hex 24   # REDIS_PASSWORD
-openssl rand -hex 32   # SECRET_ENC_KEY
+openssl rand -hex 24
+openssl rand -hex 32
 ```
 
 Editá `.env`. Lo mínimo que **tiene** que cambiar respecto del ejemplo:
 
 ```ini
 NODE_ENV=production
-BASE_URL=https://api.midominio.com
-ORIGINS=https://panel.midominio.com
+BASE_URL=https://<tu-host>.<tailnet>.ts.net
+ORIGINS=https://panel.midominio.com,https://tienda.midominio.com
 
 SECRET_JWT_KEY=<algo largo y random>
 
-POSTGRES_PASSWORD=<el hex de arriba>
-REDIS_PASSWORD=<el otro hex de arriba>
-DOMAIN=api.midominio.com
-ACME_EMAIL=vos@midominio.com
+POSTGRES_PASSWORD=<un hex de 24>
+REDIS_PASSWORD=<otro hex de 24>
+SECRET_ENC_KEY=<un hex de 32>
 ```
 
 > [!warning] Las passwords, en hex
@@ -144,44 +124,142 @@ compose**: lo que pongas en `.env` para esas cinco no se usa en producción.
 > [!important] `BASE_URL` tiene que ser **exactamente** el host por el que entran
 > las requests
 > No es cosmético ni sólo para armar links: de ahí sale el host que el resolutor
-> de tenant descarta como "esto es la API, no una tienda". Si `BASE_URL` no
-> coincide con el host real, el primer label del dominio se lee como slug de
-> tenant y **todo `/store/*` contesta `TENANT_NOT_FOUND`** — el catálogo, el
-> carrito, el checkout y el chat — mientras el panel admin sigue funcionando
+> de tenant descarta como "esto es la API, no una tienda". El hostname de Funnel
+> tiene cuatro labels, así que si `BASE_URL` no coincide, `<tu-host>` se lee como
+> slug de tenant y **todo `/store/*` contesta `TENANT_NOT_FOUND`** — el catálogo,
+> el carrito, el checkout y el chat — mientras el panel admin sigue funcionando
 > normal. Es el síntoma más confuso que tiene este backend.
 >
-> Con un subdominio de DuckDNS (`micomercio.duckdns.org`) esto es la diferencia
-> entre una tienda que anda y una que no existe. Ver `docs/ARCHITECTURE.md`
-> §Multi-tenancy.
+> Sin barra final. Ver `docs/ARCHITECTURE.md` §Multi-tenancy.
 
 > [!warning] `ORIGINS` es obligatoria acá y el arranque falla sin ella
-> Es el CSV de orígenes del **panel admin**. Vacía no degrada nada: rechaza
-> *todas* sus requests por CORS. Antes la app arrancaba igual y el síntoma era un
+> Es el CSV con **todos** los orígenes de browser. Vacía no degrada nada: rechaza
+> *todas* las requests por CORS. Antes la app arrancaba igual y el síntoma era un
 > panel entero muerto sin ninguna pista, así que ahora el contenedor directamente
 > no levanta y el mensaje dice qué falta.
 >
-> El **storefront no va acá**: `/store/*` acepta cualquier origen a propósito,
-> porque cada tienda vive en su propio dominio. La barra final se descarta sola
-> (`https://panel.com/` = `https://panel.com`), que era el error de configuración
-> más fácil de cometer y más difícil de ver.
+> El **storefront también va acá**, con el dominio de **cada** tienda. Que
+> `routes/store/index.js` monte `storeCors()` —que acepta cualquier origen— no lo
+> exime: el CORS global de `app.js` corre **antes**, y no se limita a no emitir
+> headers, contesta **403 `CORS_ORIGIN_NOT_ALLOWED`**. O sea que la request muere
+> antes de entrar al router de `/store`, y `storeCors()` sólo termina agregando
+> `Authorization` a los headers expuestos. Olvidarse un dominio da el mismo perfil
+> de falla que `BASE_URL` mal: **panel funcionando, tienda muerta**.
+>
+> La barra final se descarta sola (`https://panel.com/` = `https://panel.com`),
+> que era el error de configuración más fácil de cometer y más difícil de ver.
 
-## 6. Levantar
+> [!caution] Detrás del rewrite de Vercel el síntoma es peor: catálogo que carga y
+> carrito que no
+> Con `browser → Vercel → Funnel → app` el browser habla *same-origin* contra
+> Vercel, así que un **GET no lleva header `Origin`** y cae en la rama sin origen
+> de `middleware/cors.js`: pasa igual, con `ORIGINS` mal configurada. Pero los
+> **POST/PUT/DELETE sí mandan `Origin`** aun same-origin, y Vercel lo reenvía
+> upstream. Si ese dominio no está en `ORIGINS`, el catálogo se ve perfecto y el
+> carrito tira 403 — parece un bug de la tienda y no lo es.
+>
+> Verificalo con un POST real (no un GET) desde el dominio de Vercel antes de dar
+> el deploy por bueno. Ver el paso 4.
+
+## 4. Levantar y exponer
 
 ```bash
 docker compose -f docker-compose.prod.yml build
-docker compose -f docker-compose.prod.yml run --rm migrate   # migraciones
+docker compose -f docker-compose.prod.yml run --rm migrate
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Verificar:
+El backend publica en `127.0.0.1:3001` — sólo loopback, así que hasta acá no lo
+alcanza nadie de la red de casa. Comprobalo antes de exponerlo:
 
 ```bash
-curl https://api.midominio.com/health          # {"status":"ok"}
-docker compose -f docker-compose.prod.yml ps   # backend en "healthy"
+curl http://127.0.0.1:3001/health
 ```
 
-Si el backend queda en `unhealthy`, mirá los logs: `docker compose -f
-docker-compose.prod.yml logs backend`.
+Recién ahora, el Funnel:
+
+```bash
+sudo tailscale funnel --bg 3001
+```
+
+Y la verificación de punta a punta:
+
+```bash
+curl https://<tu-host>.<tailnet>.ts.net/health
+```
+
+```bash
+docker compose -f docker-compose.prod.yml ps
+```
+
+El backend tiene que figurar en `healthy`. Si queda en `unhealthy`, mirá los
+logs: `docker compose -f docker-compose.prod.yml logs backend`.
+
+Y la verificación de CORS, que `/health` **no** cubre: `curl` sin `Origin` cae en
+la rama "no es un browser" y pasa siempre, así que hay que mandar el header a
+mano, con el dominio exacto que va a usar el browser:
+
+```bash
+curl -i -X OPTIONS https://<tu-host>.<tailnet>.ts.net/store/cart \
+  -H "Origin: https://tienda.midominio.com" \
+  -H "Access-Control-Request-Method: POST"
+```
+
+**204** con un header `access-control-allow-origin` que repita ese dominio = está
+en la lista. **403 `CORS_ORIGIN_NOT_ALLOWED`** = falta en `ORIGINS`. No toca
+datos: el preflight lo contesta el middleware global, antes de cualquier router.
+Repetilo por cada storefront y por el panel.
+
+> [!note] Por qué el backend publica puerto y Postgres/Redis no
+> Funnel corre en el **host** y no ve la red interna de compose, así que el
+> backend tiene que publicar en el host para que lo alcance. El bind explícito a
+> `127.0.0.1` es la mitad importante: lo llega `tailscaled` y nadie más. Un
+> `"3001:3001"` pelado lo abriría a toda la LAN.
+>
+> Postgres y Redis siguen sin `ports:` — se hablan por la red de compose. Un
+> Redis alcanzable es RCE directa (`CONFIG SET dir` + `authorized_keys`).
+
+## 5. Verificar `TRUST_PROXY` — una vez, mirando
+
+El compose deja `TRUST_PROXY: "1"` asumiendo un salto (`tailscaled` agregando
+`X-Forwarded-For`). **Confirmalo la primera vez**, porque si el número está mal,
+`req.ip` es la IP equivocada y los cinco rate limiters de
+`middleware/rateLimit.js` meten a todos los visitantes en el mismo balde — 200
+req / 15 min compartidos entre toda la tienda.
+
+Pegale al hostname público **desde fuera de la tailnet** (datos del celular, por
+ejemplo) y mirá qué IP loguea la app:
+
+```bash
+docker compose -f docker-compose.prod.yml logs backend --tail 50
+```
+
+Si la IP del request es la tuya real, `1` está bien. Si aparece una interna de
+Tailscale (rango `100.64.0.0/10`), subí el número.
+
+## 6. Multi-tenant sin subdominios
+
+Un nodo de Tailscale = un hostname, así que el diseño de subdominio-por-tenant
+(`acme.midominio.com` → tenant `acme`) **no aplica en este deploy**. Todas las
+tiendas se distinguen por el header:
+
+```
+X-Tenant-Slug: <slug>
+```
+
+El código ya lo soporta sin cambios: `middleware/tenant.js` resuelve por host y,
+si el host es el de la API, cae al header. Lo que **no** es opcional es que el
+frontend lo mande siempre — el storefront lo trata como invariante y falla antes
+de hacer la request si no puede resolver el slug.
+
+La única ruta que no necesita tenant es `/order-statuses`, y es a propósito: es
+una tabla estática del sistema, sin datos de nadie.
+
+Probalo con un tenant real antes de dar el deploy por bueno:
+
+```bash
+curl -H "X-Tenant-Slug: <slug-real>" https://<tu-host>.<tailnet>.ts.net/store/config
+```
 
 ## 7. Crear el tenant y su admin
 
@@ -190,6 +268,9 @@ directo (no `pnpm`):
 
 ```bash
 docker compose -f docker-compose.prod.yml exec backend node prisma/create-tenant.js
+```
+
+```bash
 docker compose -f docker-compose.prod.yml exec backend node prisma/create-tenant.js --list
 ```
 
@@ -222,9 +303,9 @@ reiniciar: el código sigue ahí, no se borró nada. Ahí sí van estas URLs:
 
 | Proveedor | URL |
 |---|---|
-| MercadoPago — webhook | `https://api.midominio.com/mercadopago/webhook` |
-| MercadoPago — `back_url` | `https://api.midominio.com/mercadopago/{success,failure,pending}` |
-| WhatsApp (Meta) | `https://api.midominio.com/webhooks/whatsapp` (GET verify + POST) |
+| MercadoPago — webhook | `https://<tu-host>.<tailnet>.ts.net/mercadopago/webhook` |
+| MercadoPago — `back_url` | `https://<tu-host>.<tailnet>.ts.net/mercadopago/{success,failure,pending}` |
+| WhatsApp (Meta) | `https://<tu-host>.<tailnet>.ts.net/webhooks/whatsapp` (GET verify + POST) |
 
 > [!note] El arreglo de CORS sigue haciendo falta igual
 > Aunque no haya webhooks, el `HEALTHCHECK` del Dockerfile también llega sin
@@ -236,19 +317,27 @@ reiniciar: el código sigue ahí, no se borró nada. Ahí sí van estas URLs:
 
 ```bash
 chmod +x scripts/backup-db.sh
+```
+
+```bash
 crontab -e
 ```
 
 ```cron
-0 3 * * * /home/ubuntu/e-commerce-express/scripts/backup-db.sh >> /home/ubuntu/backup.log 2>&1
+0 3 * * * /home/<usuario>/e-commerce-express/scripts/backup-db.sh >> /home/<usuario>/backup.log 2>&1
 ```
 
 Restaurar:
 
 ```bash
-gzip -dc backups/ecommerce-20260811-030000.sql.gz \
-  | docker compose -f docker-compose.prod.yml exec -T postgres psql -U ecommerce -d ecommerce
+gzip -dc backups/ecommerce-20260811-030000.sql.gz | docker compose -f docker-compose.prod.yml exec -T postgres psql -U ecommerce -d ecommerce
 ```
+
+> [!danger] Los backups viven en la misma máquina que la base
+> `scripts/backup-db.sh` deja los `.sql.gz` en `backups/`, en este mismo disco.
+> Con una sola máquina, disco mecánico y cortes de luz, eso no es un backup: es
+> una copia que se pierde junto con el original. **Copialos afuera** — otra
+> máquina de la tailnet es lo más directo, porque la red ya está.
 
 > [!important] Un backup que nunca se restauró no es un backup.
 > Probá la restauración una vez, contra una base descartable, antes de confiar en
@@ -273,6 +362,9 @@ docker compose -f docker-compose.prod.yml build --pull
 docker compose -f docker-compose.prod.yml up -d
 ```
 
+El Funnel no hay que volver a levantarlo: `--bg` lo deja persistido y sobrevive a
+los reinicios del contenedor y de la máquina.
+
 ---
 
 ## Qué cambia entre dev y prod
@@ -286,9 +378,10 @@ justamente lo que hay que hacer.
 |---|---|---|
 | Postgres | puerto `5432` en `0.0.0.0`, password `ecommerce` | sin `ports:`, password de `.env` |
 | Redis | puerto `6379` en `0.0.0.0`, **sin password** | sin `ports:`, `--requirepass` |
-| Backend | puerto `3001` publicado | sólo `expose`, alcanzable únicamente por Caddy |
-| TLS | no hay | Caddy, certificado automático de Let's Encrypt |
-| `TRUST_PROXY` | `0` | `1` (un salto: Caddy) |
+| Backend | puerto `3001` en `0.0.0.0` | `127.0.0.1:3001`, alcanzable sólo por `tailscaled` |
+| TLS | no hay | Tailscale Funnel, certificado automático |
+| Tenant | header o subdominio | **sólo** header `X-Tenant-Slug` |
+| `TRUST_PROXY` | `0` | `1` (un salto: Funnel) — verificar, ver paso 5 |
 | Logs | sin límite | rotación `10m` × 3 |
 
 ### Lo que había que arreglar para que esto funcionara
@@ -305,8 +398,8 @@ nadie corre en local, así que ninguno de estos caminos se ejercitaba nunca:
    sin emitir headers de CORS. Lo que frena CSRF acá es `sameSite: "strict"` en la
    cookie, no ese filtro.
 
-2. **No había `app.set("trust proxy")`.** Detrás de Caddy, `req.ip` era la IP del
-   proxy, así que los cinco rate limiters de `middleware/rateLimit.js` metían a
+2. **No había `app.set("trust proxy")`.** Detrás de un proxy, `req.ip` era la IP
+   del proxy, así que los cinco rate limiters de `middleware/rateLimit.js` metían a
    todos los visitantes en un mismo balde — 200 req / 15 min **compartidos entre
    toda la tienda**. Ahora sale de `TRUST_PROXY`. Ojo con el tipo: Express
    interpreta un string como *lista de IPs*, no como cantidad de saltos, por eso
@@ -327,7 +420,7 @@ nadie corre en local, así que ninguno de estos caminos se ejercitaba nunca:
    todos los errores y no sólo CORS.
 
 6. **`ORIGINS` vacía en prod rechazaba todo el panel, y la app arrancaba igual.**
-   Ahora es obligatoria y el arranque falla si falta (ver el paso 5). De paso, la
+   Ahora es obligatoria y el arranque falla si falta (ver el paso 3). De paso, la
    barra final se normaliza: `https://panel.com/` nunca hubiera matcheado, porque
    el header `Origin` del browser no la lleva.
 
@@ -338,7 +431,8 @@ nadie corre en local, así que ninguno de estos caminos se ejercitaba nunca:
    lista de tres nombres (`www`/`api`/`app`) y el subdominio le gana al header, así
    que cualquier dominio de ≥3 labels fuera de esa lista rompía **todo `/store/*`**
    con `TENANT_NOT_FOUND`, con el panel admin funcionando normal al lado. Ahora el
-   host propio se descarta comparando contra `BASE_URL` (ver el aviso del paso 5).
+   host propio se descarta comparando contra `BASE_URL` (ver el aviso del paso 3).
+   Con Funnel esto importa más que nunca: su hostname tiene cuatro labels.
 
 Los primeros siete están cubiertos por `tests/production-mode.test.js`; el octavo,
 por `tests/tenant-host-resolution.test.js`.
@@ -350,24 +444,3 @@ El `Dockerfile` hace `COPY package.json pnpm-lock.yaml ./` y
 en el server no lo tiene y **el build falla en el `COPY`**. Además, un lockfile
 ausente vuelve `--frozen-lockfile` decorativo: cada build resolvería versiones
 distintas, y "anda en mi máquina" deja de ser una broma.
-
-Si venís de antes de este cambio, el lockfile todavía no está commiteado:
-
-```bash
-git add pnpm-lock.yaml pnpm-workspace.yaml
-git commit -m "chore: versionar el lockfile, que el build de Docker necesita"
-```
-
----
-
-## Sobre la cuenta de Oracle
-
-- **Recuperación por inactividad**: Oracle puede reclamar instancias Always Free
-  con uso muy bajo de forma sostenida. Una tienda con tráfico real no califica,
-  pero un deploy que queda meses sin visitas sí. Convertir la cuenta a *Pay As You
-  Go* la exime, y los recursos Always Free se siguen sin cobrar (pero ahí sí, un
-  recurso fuera de la cuota gratis se factura: cuidado con lo que creás).
-- **Un solo huevo, una sola canasta**: esta VM es todo el deploy. Si la perdés,
-  lo único que te salva son los backups del paso 9 — y los backups viven en la
-  misma VM. Copialos afuera (`scp` a tu máquina, o a cualquier storage) si los
-  datos del cliente importan.

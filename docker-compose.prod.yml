@@ -1,4 +1,5 @@
-# Compose de PRODUCCIÓN. Pensado para una VM con IP pública (ver docs/DEPLOY.md).
+# Compose de PRODUCCIÓN. Pensado para una máquina propia expuesta con **Tailscale
+# Funnel** (ver docs/DEPLOY.md).
 #
 #   docker compose -f docker-compose.prod.yml up -d
 #
@@ -6,8 +7,14 @@
 # listas `ports:`, así que un archivo de override no tiene forma de despublicar un
 # puerto que el archivo base publica. Y despublicar `postgres` y `redis` es
 # justamente lo que cambia acá — el compose de dev los expone en 0.0.0.0 con
-# credenciales de dev y sin password en Redis, que detrás del NAT de una máquina
-# de desarrollo es tolerable y en una IP pública es una RCE servida.
+# credenciales de dev y sin password en Redis, que en una máquina de desarrollo es
+# tolerable y en algo alcanzable desde afuera es una RCE servida.
+#
+# No hay reverse proxy propio: Funnel termina el TLS afuera y entrega el tráfico a
+# un puerto del HOST, no a la red de compose. Por eso `backend` sí publica —
+# atado a loopback, ver su comentario. Antes acá vivía un servicio `caddy` que
+# sacaba certificados de Let's Encrypt para un dominio propio; con Funnel no hace
+# falta ni dominio ni ACME.
 #
 # Todos los valores salen de `.env`, que en el server tiene los valores de
 # producción (mismo archivo que consume `env_file`, así que hay una sola fuente).
@@ -15,7 +22,7 @@
 name: ecommerce
 
 x-logging: &logging
-  # Sin esto los logs de json-file crecen sin techo y llenan el disco de la VM.
+  # Sin esto los logs de json-file crecen sin techo y llenan el disco.
   driver: json-file
   options:
     max-size: "10m"
@@ -86,11 +93,24 @@ services:
       PORT: "3001"
       DATABASE_URL: postgres://${POSTGRES_USER:-ecommerce}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ecommerce}
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
-      # Un solo salto adelante: Caddy. Ver app.js -> app.set("trust proxy").
+      # Cuántos proxies hay adelante. Con Funnel es `tailscaled`, que entrega la
+      # request al puerto local agregando X-Forwarded-For — o sea 1 salto. Está
+      # sin confirmar contra el deploy real: verificalo mirando qué IP loguea
+      # pino-http en el primer request que entre desde fuera de la tailnet. Si es
+      # la IP real del visitante, este valor está bien; si es una interna de
+      # Tailscale, hay que subirlo. Con el número mal, los cinco rate limiters de
+      # middleware/rateLimit.js meten a TODOS en el mismo balde.
+      # Ver app.js -> app.set("trust proxy") y docs/DEPLOY.md.
       TRUST_PROXY: "1"
-    # Sin `ports:`: el único que llega al backend es Caddy, por la red de compose.
-    expose:
-      - "3001"
+    # Publicado, a diferencia de postgres y redis, porque Funnel corre en el HOST
+    # y no ve la red de compose: sin esto `tailscale funnel 3001` no encuentra
+    # nada escuchando y el síntoma es un 502 con el contenedor en `healthy`.
+    #
+    # El bind explícito a 127.0.0.1 es la mitad importante de la línea: publica
+    # sólo en loopback, así que lo alcanza `tailscaled` y nadie más — ni la LAN
+    # de casa ni la red del router. Un `"3001:3001"` pelado lo abriría a 0.0.0.0.
+    ports:
+      - "127.0.0.1:3001:3001"
     depends_on:
       postgres:
         condition: service_healthy
@@ -99,29 +119,6 @@ services:
     restart: always
     logging: *logging
 
-  caddy:
-    image: caddy:2-alpine
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp" # HTTP/3
-    environment:
-      DOMAIN: ${DOMAIN:?falta DOMAIN en .env}
-      ACME_EMAIL: ${ACME_EMAIL:?falta ACME_EMAIL en .env}
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      # `caddy_data` guarda los certificados y la cuenta ACME. Si se pierde, Caddy
-      # vuelve a pedir todo y Let's Encrypt rate-limitea a 5 certificados por
-      # dominio por semana: no borres este volumen para "empezar limpio".
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - backend
-    restart: always
-    logging: *logging
-
 volumes:
   postgres_data:
   redis_data:
-  caddy_data:
-  caddy_config:
