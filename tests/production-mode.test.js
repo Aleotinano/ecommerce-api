@@ -222,4 +222,71 @@ describe("modo producción", () => {
       expect(res.body.ip).not.toBe("203.0.113.7");
     });
   });
+
+  // El panel vive en un dominio y la API en otro (Vercel + el hostname del
+  // Funnel), así que TODA request del panel es cross-site. Con el `SameSite=Strict`
+  // que había, el browser no manda la cookie nunca: el login no funciona en
+  // producción y en desarrollo anda perfecto, porque ahí los dos lados son
+  // localhost. Ver controllers/users.js.
+  describe("cookie de sesión del panel", () => {
+    let usersController;
+
+    beforeAll(async () => {
+      vi.doMock("../services/users.js", () => ({
+        UserModel: {
+          login: async () => ({
+            user: {
+              id: 1,
+              username: "admin",
+              email: "admin@test.test",
+              role: "ADMIN",
+              tenantId: 1,
+            },
+            tenant: { slug: "un-tenant" },
+          }),
+        },
+      }));
+      vi.resetModules();
+      ({ usersController } = await import("../controllers/users.js"));
+    });
+
+    afterAll(() => {
+      vi.doUnmock("../services/users.js");
+      vi.resetModules();
+    });
+
+    const appAuth = () => {
+      const app = express();
+      app.use(express.json());
+      app.post("/login", usersController.login);
+      app.post("/logout", usersController.logout);
+      return app;
+    };
+
+    const setCookieOf = (res) =>
+      res.headers["set-cookie"].find((c) => c.startsWith("access_token="));
+
+    it("sale SameSite=None; Secure para poder viajar cross-site", async () => {
+      const res = await request(appAuth())
+        .post("/login")
+        .send({ email: "admin@test.test", password: "x" });
+
+      const cookie = setCookieOf(res);
+      expect(cookie).toMatch(/SameSite=None/i);
+      expect(cookie).toMatch(/Secure/i);
+      expect(cookie).toMatch(/HttpOnly/i);
+    });
+
+    // Un Set-Cookie de borrado que no repita los atributos de identidad el browser
+    // lo descarta —cross-site, sin `SameSite=None; Secure` no se acepta— y la
+    // sesión sobrevive al logout.
+    it("el logout repite los atributos, o no borra nada", async () => {
+      const res = await request(appAuth()).post("/logout");
+
+      const cookie = setCookieOf(res);
+      expect(cookie).toMatch(/SameSite=None/i);
+      expect(cookie).toMatch(/Secure/i);
+      expect(cookie).toMatch(/Expires=Thu, 01 Jan 1970/i);
+    });
+  });
 });

@@ -31,8 +31,17 @@ const PREFLIGHT_MAX_AGE = 86400;
 // Rechazarla —que es lo que hacía antes en prod— no protegía nada y rompía tres
 // cosas a la vez: el HEALTHCHECK del Dockerfile dejaba el contenedor unhealthy
 // para siempre, y los dos webhooks entrantes contestaban 500 (Meta desactiva un
-// webhook que falla). Lo que frena CSRF acá es `sameSite: "strict"` en la cookie
-// de sesión, no este filtro. Ver docs/DEPLOY.md.
+// webhook que falla). Ver docs/DEPLOY.md.
+//
+// Y este filtro tampoco es lo que frena CSRF: una request sin `Origin` no la
+// puede originar una página. En producción la defensa de CSRF **es la lista de
+// `ORIGINS` de acá abajo**, desde que la cookie de sesión del panel pasó a
+// `SameSite=None` (controllers/users.js): con el panel en un dominio y la API en
+// otro, `Strict` no dejaba viajar la cookie y el login no funcionaba. Un origen
+// no listado se come 403 en el preflight, y como la API sólo parsea JSON, un POST
+// de formulario —el único que no preflightea— no llega con un body legible.
+// Corolario: agregar un origen a `ORIGINS` es darle permiso de escritura sobre el
+// panel, no sólo de lectura.
 const NO_ORIGIN = false;
 
 export const middleWare = ({ acceptedOrigins = ACCEPTED_ORIGINS } = {}) => {

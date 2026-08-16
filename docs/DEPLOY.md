@@ -149,6 +149,19 @@ compose**: lo que pongas en `.env` para esas cinco no se usa en producción.
 > La barra final se descarta sola (`https://panel.com/` = `https://panel.com`),
 > que era el error de configuración más fácil de cometer y más difícil de ver.
 
+> [!caution] `ORIGINS` es también la defensa de CSRF — no es una lista de lectura
+> La cookie de sesión del panel es `SameSite=None` en producción, y no puede ser
+> otra cosa: el panel vive en un dominio y la API en otro, así que con `Strict` el
+> browser no la manda nunca y el login no funciona (anda en dev porque ahí todo es
+> localhost). Con `None`, lo que impide que un sitio cualquiera opere el panel con
+> la sesión del admin es **esta lista**: un origen no listado se come 403 en el
+> preflight, y la API sólo parsea JSON, así que un POST de formulario —el único
+> que no preflightea— no llega con un body legible.
+>
+> Corolario operativo: **agregar un dominio acá es darle permiso de escritura
+> sobre el panel.** No metas orígenes "por las dudas", y pensalo dos veces antes de
+> agregar dominios de preview deployments, que son efímeros y públicos.
+
 > [!caution] Detrás del rewrite de Vercel el síntoma es peor: catálogo que carga y
 > carrito que no
 > Con `browser → Vercel → Funnel → app` el browser habla *same-origin* contra
@@ -236,6 +249,34 @@ docker compose -f docker-compose.prod.yml logs backend --tail 50
 
 Si la IP del request es la tuya real, `1` está bien. Si aparece una interna de
 Tailscale (rango `100.64.0.0/10`), subí el número.
+
+> [!important] `1` vale mientras el front le pegue **directo** al Funnel
+> Hoy no hay rewrite de Vercel: el browser llama al hostname del Funnel, así que
+> hay un solo salto. Si algún día se agrega un rewrite, Vercel proxea server-side y
+> pasan a ser **dos** — con `1`, Express devuelve la IP del servidor de Vercel como
+> si fuera la del visitante y los limiters cuentan a todo el planeta como un
+> cliente. Verificalo de nuevo **con la cadena completa armada**: medirlo antes de
+> que exista el proxy da un falso positivo, porque con un salto `1` parece
+> correcto igual.
+>
+> | Topología | `TRUST_PROXY` |
+> |---|---|
+> | Local, sin nada adelante | `0` |
+> | `browser → Funnel → app` (hoy) | `1` |
+> | `browser → Vercel (rewrite) → Funnel → app` | `2` |
+>
+> Queda un hecho **sin confirmar**: si Tailscale Funnel *agrega* su entrada a
+> `X-Forwarded-For` o lo *pisa*. Si lo pisa, la IP real del visitante no llega
+> nunca y ningún valor de `TRUST_PROXY` lo arregla — habría que resolver el rate
+> limiting de otra forma.
+
+> [!note] Tres rutas no usan la IP como clave, a propósito
+> `/store/config`, `/store/page` y `/order-statuses` las pide el **servidor** de
+> Vercel en cada render (SSR), no el browser: llegan todas con la IP de egreso de
+> Vercel. En el balde por IP del limiter general eso son ~13 renders por minuto
+> para la tienda entera antes del 429. Van a `ssrReadLimiter`, con clave
+> `<tenant>:<ip>`. Si agregás una ruta nueva que consuma el SSR, sumala a
+> `SSR_PATHS` en `middleware/rateLimit.js` o vas a ver 429 sin explicación.
 
 ## 6. Multi-tenant sin subdominios
 

@@ -144,7 +144,7 @@ Toda request a `/store/*` debe identificar el tenant por:
 | | Panel Admin | Storefront |
 |--|-------------|------------|
 | Login | `POST /auth/login` | `POST /store/auth/login` |
-| Token | Cookie httpOnly `access_token` (sameSite strict) | JWT en el body → mandar `Authorization: Bearer <token>` |
+| Token | Cookie httpOnly `access_token` (en **prod** `SameSite=None; Secure`, porque el panel y la API viven en dominios distintos; `Strict` en dev) | JWT en el body → mandar `Authorization: Bearer <token>` |
 | Almacenamiento | el browser maneja la cookie | el front guarda el token (localStorage/memoria) |
 
 El storefront NO usa cookies. Cada request protegida necesita `Authorization: Bearer <token>` + `X-Tenant-Slug`.

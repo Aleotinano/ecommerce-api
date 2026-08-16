@@ -533,8 +533,14 @@ Hay **dos mecanismos distintos** de resolución de tenant según la familia de r
 
 ### Transporte del token (asimétrico admin vs store)
 - **Admin**: el token se devuelve en una **cookie** `access_token`
-  (`httpOnly: true`, `sameSite: "strict"`, `secure: NODE_ENV==="production"`,
-  `maxAge: 8h`). `verifyToken` **lee solo la cookie** (`req.cookies.access_token`).
+  (`httpOnly: true`, `maxAge: 8h`, y `sameSite: "none" + secure` en producción /
+  `"strict"` fuera). `verifyToken` **lee solo la cookie** (`req.cookies.access_token`).
+  `None` no es opcional en este deploy: el panel vive en un dominio y la API en otro,
+  así que toda request del panel es cross-site y con `Strict` el browser no manda la
+  cookie nunca — el login anda en dev (todo localhost) y muere en producción. El
+  costo es que la defensa de CSRF pasa a ser la lista de `ORIGINS`; ver
+  `middleware/cors.js`. Los atributos se emiten desde una sola función para que
+  `clearCookie` los repita: sin eso el logout no borra nada.
 - **Store**: el login **no setea cookie**; devuelve el `token` en el **body** de la
   respuesta para usarse como `Authorization: Bearer <token>`.
 

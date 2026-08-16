@@ -2,6 +2,40 @@ import { UserModel } from "../services/users.js";
 import { DEFAULTS } from "../config.js";
 import jwt from "jsonwebtoken";
 
+const ACCESS_TOKEN_COOKIE = "access_token";
+const ACCESS_TOKEN_MAX_AGE = 1000 * 60 * 60 * 8; // 8 h, igual que el JWT
+const isProd = DEFAULTS.NODE_ENV === "production";
+
+/**
+ * Atributos de identidad de la cookie de sesión del panel, SIN `maxAge`: son los
+ * que hay que repetir tal cual en `clearCookie`. Un Set-Cookie de borrado que no
+ * los repita el browser lo descarta —cross-site, un Set-Cookie sin
+ * `SameSite=None; Secure` no se acepta— y el logout deja la sesión viva.
+ *
+ * `SameSite=None` en producción no es una relajación gratuita, es la única opción:
+ * el panel vive en un dominio (Vercel) y la API en otro (el hostname del Funnel),
+ * así que TODA request del panel es cross-site. Con `Strict`, que es lo que había
+ * acá, el browser no manda la cookie nunca y **el login no funciona en
+ * producción** — mientras que en desarrollo anda perfecto, porque ahí los dos
+ * lados son localhost y sí son el mismo site. Es el peor perfil de bug posible:
+ * invisible hasta el deploy.
+ *
+ * `None` exige `Secure`, que sobre el http:// de desarrollo rompería, así que
+ * fuera de producción se queda en `Strict`.
+ *
+ * Lo que esto cambia: `Strict` era la defensa de CSRF de este backend — no hay
+ * middleware de CSRF en ningún lado (ver middleware/cors.js). Con `None` la
+ * defensa pasa a ser el allowlist de `ORIGINS`: un origen no listado se come un
+ * 403 en el preflight, y como la API sólo parsea JSON, un POST de formulario
+ * cross-site —el único que no preflightea— no llega a ningún handler con un body
+ * que se pueda leer.
+ */
+const accessTokenCookieAttrs = () => ({
+  httpOnly: true,
+  secure: isProd,
+  sameSite: isProd ? "none" : "strict",
+});
+
 export class usersController {
   static async register(req, res, next) {
     try {
@@ -57,11 +91,9 @@ export class usersController {
       });
 
       return res
-        .cookie("access_token", token, {
-          httpOnly: true,
-          secure: DEFAULTS.NODE_ENV === "production",
-          sameSite: "strict",
-          maxAge: 1000 * 60 * 60 * 8,
+        .cookie(ACCESS_TOKEN_COOKIE, token, {
+          ...accessTokenCookieAttrs(),
+          maxAge: ACCESS_TOKEN_MAX_AGE,
         })
         .json({
           message: `Bienvenido ${dataPublic.username}`,
@@ -98,7 +130,11 @@ export class usersController {
   }
 
   static async logout(req, res) {
-    return res.clearCookie("access_token").json({ message: "Sesion cerrada" });
+    // Los atributos van repetidos a propósito: sin ellos el Set-Cookie de borrado
+    // no matchea la cookie emitida en el login y la sesión sobrevive al logout.
+    return res
+      .clearCookie(ACCESS_TOKEN_COOKIE, accessTokenCookieAttrs())
+      .json({ message: "Sesion cerrada" });
   }
 
   static async verifyEmail(req, res, next) {
