@@ -33,7 +33,7 @@ import { whatsappWebhookRouter } from "./routes/webhooks/whatsapp.js";
 // Middlewares
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { middleWare } from "./middleware/cors.js";
-import { generalLimiter } from "./middleware/rateLimit.js";
+import { generalLimiter, ssrReadLimiter } from "./middleware/rateLimit.js";
 import { tenantConfigRouter } from "./routes/tenant-config.js";
 import { tenantAttributesRouter } from "./routes/tenant-attributes.js";
 
@@ -61,7 +61,9 @@ app.use(httpLogger);
 app.use(generalLimiter);
 
 app.use("/orders", ordersRouter);
-app.use("/order-statuses", orderStatusesRouter);
+// La consume el SSR del storefront (ver middleware/rateLimit.js -> SSR_PATHS), así
+// que no puede compartir el balde por IP del limiter general.
+app.use("/order-statuses", ssrReadLimiter, orderStatusesRouter);
 app.use("/products", productosRouter);
 app.use("/variants", variantRouter);
 app.use("/categories", categoriesRouter);

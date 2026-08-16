@@ -52,7 +52,26 @@ const rateLimitHandler = (req, res, _next, options) => {
   });
 };
 
-let generalStore, loginStore, registerStore, webhookStore, chatStore;
+/**
+ * Las tres rutas que el frontend pide desde el SERVIDOR de Vercel (SSR), no desde
+ * el browser del visitante: `/store/config` y `/store/page` en cada render de la
+ * home, y `/order-statuses` para pintar el estado de un pedido.
+ *
+ * Todas llegan con la IP de egreso de Vercel, la misma para TODOS los visitantes
+ * de TODAS las tiendas. Con la clave por IP del `generalLimiter` eso es un solo
+ * balde de 200 req / 15 min: a dos requests por render, se agota a los ~13 renders
+ * por minuto y el 429 cae sobre el SSR de la tienda entera a la vez. Por eso se
+ * saltean el limiter general y van al suyo, con la clave por tenant.
+ *
+ * Se compara contra `req.path` sin barra final: el middleware global corre antes
+ * que cualquier router, así que ve el path completo.
+ */
+const SSR_PATHS = new Set(["/order-statuses", "/store/config", "/store/page"]);
+
+const isSsrReadPath = (req) =>
+  SSR_PATHS.has(req.path.length > 1 ? req.path.replace(/\/+$/, "") : req.path);
+
+let generalStore, loginStore, registerStore, webhookStore, chatStore, ssrStore;
 
 try {
   generalStore = createStore("rl:general:");
@@ -84,14 +103,51 @@ try {
   chatStore = undefined;
 }
 
+try {
+  ssrStore = createStore("rl:ssr:");
+} catch {
+  ssrStore = undefined;
+}
+
 export const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 200,
   standardHeaders: "draft-8",
   legacyHeaders: false,
-  skip: (req) => !isProd,
+  skip: (req) => !isProd || isSsrReadPath(req),
   keyGenerator: (req) => ipKeyGenerator(req.ip),
   store: generalStore,
+  handler: rateLimitHandler,
+});
+
+/**
+ * Las tres lecturas que hace el SSR (ver `SSR_PATHS`). La clave es
+ * `<tenant>:<ip>`, no la IP sola:
+ *
+ * - Desde el SSR el slug es fijo por tienda y la IP es la de Vercel, así que cada
+ *   tenant tiene su propio balde y ninguno puede tirar abajo el render de otro.
+ * - Desde un browser que le pegue directo, la IP es la del visitante, así que cae
+ *   en un balde distinto del de Vercel: nadie puede consumirle el presupuesto al
+ *   SSR desde afuera.
+ *
+ * El techo es alto porque el consumidor legítimo es una máquina: 3000 / 15 min son
+ * 200 req/min por tienda, o ~100 renders de home por minuto, muy por encima de lo
+ * que un piloto va a ver. Sigue siendo un techo, que es el punto — la alternativa
+ * era dejar las tres rutas sin ninguno.
+ *
+ * El header es del cliente y se puede rotar para conseguir baldes nuevos. Se acepta
+ * a sabiendas: son tres lecturas públicas y cacheadas, sin datos de nadie adentro,
+ * y el `Cache-Control` de `/order-statuses` ya las absorbe.
+ */
+export const ssrReadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 3000,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  skip: () => !isProd,
+  keyGenerator: (req) =>
+    `${req.get("x-tenant-slug") || "sin-tenant"}:${ipKeyGenerator(req.ip)}`,
+  store: ssrStore,
   handler: rateLimitHandler,
 });
 
