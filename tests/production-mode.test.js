@@ -223,6 +223,54 @@ describe("modo producción", () => {
     });
   });
 
+  // Los limiters llevan `skip: !isProd`, así que fuera de este archivo no se
+  // ejercitan nunca. Lo que se fija acá es la SEPARACIÓN de poblaciones: el SSR
+  // (sin `Origin`) y un browser (con `Origin`) no pueden compartir techo, porque la
+  // IP de Vercel agrega una tienda entera y una IP cualquiera es una persona.
+  // Una request por caso, a propósito: agotar un balde dejaría estado en Redis que
+  // sobrevive a la corrida. Ver middleware/rateLimit.js.
+  describe("lecturas del SSR: dos techos según quién llame", () => {
+    let ssrReadLimiter, browserReadLimiter;
+
+    beforeAll(async () => {
+      vi.resetModules();
+      ({ ssrReadLimiter, browserReadLimiter } = await import(
+        "../middleware/rateLimit.js"
+      ));
+    });
+
+    const appRead = () => {
+      const app = express();
+      app.get("/store/page", ssrReadLimiter, browserReadLimiter, (_req, res) =>
+        res.json({ ok: true })
+      );
+      return app;
+    };
+
+    const policyOf = (res) =>
+      res.headers["ratelimit-policy"] || res.headers["ratelimit"];
+
+    it("sin Origin cae en el balde de máquina", async () => {
+      const res = await request(appRead())
+        .get("/store/page")
+        .set("X-Tenant-Slug", "un-tenant");
+
+      expect(res.status).toBe(200);
+      expect(policyOf(res)).toContain("3000");
+    });
+
+    it("con Origin cae en el balde humano, que es mucho más bajo", async () => {
+      const res = await request(appRead())
+        .get("/store/page")
+        .set("X-Tenant-Slug", "un-tenant")
+        .set("Origin", "https://tienda.permitida.test");
+
+      expect(res.status).toBe(200);
+      expect(policyOf(res)).toContain("120");
+      expect(policyOf(res)).not.toContain("3000");
+    });
+  });
+
   // El panel vive en un dominio y la API en otro (Vercel + el hostname del
   // Funnel), así que TODA request del panel es cross-site. Con el `SameSite=Strict`
   // que había, el browser no manda la cookie nunca: el login no funciona en

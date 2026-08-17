@@ -270,13 +270,31 @@ Tailscale (rango `100.64.0.0/10`), subí el número.
 > nunca y ningún valor de `TRUST_PROXY` lo arregla — habría que resolver el rate
 > limiting de otra forma.
 
-> [!note] Tres rutas no usan la IP como clave, a propósito
+> [!note] Tres rutas tienen dos techos, según quién llame
 > `/store/config`, `/store/page` y `/order-statuses` las pide el **servidor** de
 > Vercel en cada render (SSR), no el browser: llegan todas con la IP de egreso de
 > Vercel. En el balde por IP del limiter general eso son ~13 renders por minuto
-> para la tienda entera antes del 429. Van a `ssrReadLimiter`, con clave
-> `<tenant>:<ip>`. Si agregás una ruta nueva que consuma el SSR, sumala a
-> `SSR_PATHS` en `middleware/rateLimit.js` o vas a ver 429 sin explicación.
+> para la tienda entera antes del 429, así que se saltean el general.
+>
+> No pueden compartir un solo techo, porque son dos poblaciones distintas: la IP de
+> Vercel agrega a **todos** los visitantes de una tienda, y una IP cualquiera es
+> **una persona**. Se separan por el header `Origin` —el fetch server-to-server de
+> Next no lo manda, un browser cross-origin siempre sí— y cada request pasa por
+> exactamente uno:
+>
+> | Población | Limiter | Clave | Techo / 15 min |
+> |---|---|---|---|
+> | SSR (sin `Origin`) | `ssrReadLimiter` | `<tenant>:<ip>` | 3000 |
+> | Browser (con `Origin`) | `browserReadLimiter` | `<ip>` | 120 |
+>
+> Si agregás una ruta nueva que consuma el SSR, sumala a `SSR_PATHS` en
+> `middleware/rateLimit.js` **y montale los dos limiters**, o vas a ver 429 sin
+> explicación.
+>
+> Queda un agujero conocido: `Origin` se puede omitir con curl y caer así en el
+> balde de máquina — acotado a la IP de quien lo haga, no al de Vercel. Cerrarlo
+> pide un secreto compartido entre el server de Next y la API, o sea coordinarlo
+> con el repo del frontend. No es bloqueante para el piloto.
 
 ## 6. Multi-tenant sin subdominios
 

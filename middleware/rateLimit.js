@@ -61,7 +61,7 @@ const rateLimitHandler = (req, res, _next, options) => {
  * de TODAS las tiendas. Con la clave por IP del `generalLimiter` eso es un solo
  * balde de 200 req / 15 min: a dos requests por render, se agota a los ~13 renders
  * por minuto y el 429 cae sobre el SSR de la tienda entera a la vez. Por eso se
- * saltean el limiter general y van al suyo, con la clave por tenant.
+ * saltean el limiter general y van a los dos de acá abajo.
  *
  * Se compara contra `req.path` sin barra final: el middleware global corre antes
  * que cualquier router, así que ve el path completo.
@@ -71,7 +71,38 @@ const SSR_PATHS = new Set(["/order-statuses", "/store/config", "/store/page"]);
 const isSsrReadPath = (req) =>
   SSR_PATHS.has(req.path.length > 1 ? req.path.replace(/\/+$/, "") : req.path);
 
-let generalStore, loginStore, registerStore, webhookStore, chatStore, ssrStore;
+/**
+ * Estas tres rutas las pegan DOS poblaciones con perfiles de consumo incompatibles,
+ * y por eso no pueden compartir un techo:
+ *
+ * - El **SSR**: una sola IP (la de egreso de Vercel) que agrega a todos los
+ *   visitantes de una tienda. Su techo es de máquina.
+ * - Un **browser suelto**: una persona. Un techo de máquina acá no limita nada —
+ *   3000 req / 15 min son 3,3 req/s sostenidos, absurdo para un visitante y de
+ *   sobra para voltear un J1900 con disco mecánico.
+ *
+ * El discriminador es el header `Origin`: un fetch server-to-server de Next no lo
+ * manda, y un browser en cross-origin lo manda SIEMPRE — que es el caso, porque no
+ * hay rewrite de Vercel y el front le pega directo al Funnel. Es el mismo criterio
+ * que ya usa middleware/cors.js para distinguir "esto no es un browser".
+ *
+ * Los dos limiters se montan juntos y cada uno se saltea a la población del otro,
+ * así que toda request pasa por exactamente uno.
+ *
+ * Lo que esto NO cierra: `Origin` se puede omitir con curl, y ahí se cae en el
+ * balde de máquina —acotado a la IP del que lo haga, no al de Vercel—. Cerrarlo del
+ * todo pide un secreto compartido entre el server de Next y la API, o sea coordinar
+ * con el repo del front; ver docs/DEPLOY.md.
+ */
+const isBrowserRequest = (req) => Boolean(req.get("origin"));
+
+let generalStore,
+  loginStore,
+  registerStore,
+  webhookStore,
+  chatStore,
+  ssrStore,
+  browserReadStore;
 
 try {
   generalStore = createStore("rl:general:");
@@ -109,6 +140,12 @@ try {
   ssrStore = undefined;
 }
 
+try {
+  browserReadStore = createStore("rl:read:");
+} catch {
+  browserReadStore = undefined;
+}
+
 export const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 200,
@@ -121,33 +158,55 @@ export const generalLimiter = rateLimit({
 });
 
 /**
- * Las tres lecturas que hace el SSR (ver `SSR_PATHS`). La clave es
- * `<tenant>:<ip>`, no la IP sola:
+ * Mitad de máquina: las tres lecturas de `SSR_PATHS` que llegan SIN `Origin`.
  *
- * - Desde el SSR el slug es fijo por tienda y la IP es la de Vercel, así que cada
- *   tenant tiene su propio balde y ninguno puede tirar abajo el render de otro.
- * - Desde un browser que le pegue directo, la IP es la del visitante, así que cae
- *   en un balde distinto del de Vercel: nadie puede consumirle el presupuesto al
- *   SSR desde afuera.
+ * La clave es `<tenant>:<ip>`, no la IP sola. Desde el SSR el slug es fijo por
+ * tienda y la IP es la de Vercel, así que cada tenant tiene su propio balde y
+ * ninguno puede tirar abajo el render de otro. La IP sigue en la clave para que
+ * quien omita `Origin` a mano caiga en el suyo y no en el de Vercel.
  *
- * El techo es alto porque el consumidor legítimo es una máquina: 3000 / 15 min son
- * 200 req/min por tienda, o ~100 renders de home por minuto, muy por encima de lo
- * que un piloto va a ver. Sigue siendo un techo, que es el punto — la alternativa
- * era dejar las tres rutas sin ninguno.
+ * 3000 / 15 min son 200 req/min por tienda, o ~100 renders de home por minuto. Es
+ * el techo del AGREGADO de una tienda entera, no de una persona: por eso el número
+ * grande vive acá y no en el limiter de browser. Si el J1900 sufre antes de llegar
+ * a eso, este es el número a bajar.
  *
- * El header es del cliente y se puede rotar para conseguir baldes nuevos. Se acepta
- * a sabiendas: son tres lecturas públicas y cacheadas, sin datos de nadie adentro,
- * y el `Cache-Control` de `/order-statuses` ya las absorbe.
+ * El header de tenant es del cliente y se puede rotar para conseguir baldes nuevos.
+ * Se acepta a sabiendas: son tres lecturas públicas y cacheadas, sin datos de nadie
+ * adentro, y el `Cache-Control` de `/order-statuses` ya las absorbe.
  */
 export const ssrReadLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 3000,
   standardHeaders: "draft-8",
   legacyHeaders: false,
-  skip: () => !isProd,
+  skip: (req) => !isProd || isBrowserRequest(req),
   keyGenerator: (req) =>
     `${req.get("x-tenant-slug") || "sin-tenant"}:${ipKeyGenerator(req.ip)}`,
   store: ssrStore,
+  handler: rateLimitHandler,
+});
+
+/**
+ * Mitad humana: las mismas tres rutas cuando llegan CON `Origin`, o sea desde un
+ * browser. Clave por IP a secas — acá un visitante es un visitante.
+ *
+ * 120 / 15 min es holgado para lo que se espera, que es casi nada: las tres las pide
+ * el SSR, no el browser. `/order-statuses` es lo único que un front podría pedir del
+ * lado del cliente, y sale con `Cache-Control: public, max-age=3600`, así que ni
+ * siquiera debería volver a pedirla dentro de la ventana.
+ *
+ * Deliberadamente MÁS BAJO que el techo general de 200: son lecturas baratas pero
+ * repetitivas contra un J1900 con disco mecánico, y no hay caso de uso legítimo que
+ * necesite más.
+ */
+export const browserReadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 120,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  skip: (req) => !isProd || !isBrowserRequest(req),
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
+  store: browserReadStore,
   handler: rateLimitHandler,
 });
 
