@@ -33,6 +33,17 @@ const envShape = z.object({
   // DEFAULTS y no la consume ninguna línea del código.
   PUBLIC_KEY: z.string().min(1).optional(),
   ACCESS_TOKEN: z.string().min(1).optional(),
+
+  // Con el que se verifica que un webhook de pago viene de verdad de MercadoPago.
+  // Opcional porque el módulo entero lo es: sin `ACCESS_TOKEN` no se pueden crear
+  // preferencias, así que no hay pagos de los que recibir aviso.
+  //
+  // Que falte NO abre un agujero. `mercadopagoController.getWebhook` corta con 500
+  // ANTES de verificar nada: no saltea la verificación, la niega. Un POST inventado
+  // contra la URL pública no puede marcar una orden como pagada. Estaba sólo en
+  // `.env.test` y se leía con `process.env` directo, salteando este schema; entra
+  // acá para que exista en un solo lugar y aparezca en `.env.example`.
+  MP_WEBHOOK_SECRET: z.string().min(1).optional(),
   // Cuenta de Cloudinary de la PLATAFORMA. Opcionales a propósito: cada cliente de
   // producción carga la suya en `TenantConfig` (ver lib/cloudinary.js), así que un
   // deploy donde todas las tiendas tienen cuenta propia no necesita ninguna acá — y

@@ -454,12 +454,13 @@ docker compose -f docker-compose.prod.yml exec backend node prisma/create-tenant
 > Hace un **TRUNCATE completo** antes de sembrar. En el server con datos del
 > cliente cargados, eso es la pérdida total.
 
-## 8. MercadoPago y WhatsApp: no se configuran
+## 8. Lo que NO entra en la V1
 
-**Los dos módulos quedan apagados en este deploy.** Están implementados desde el
-principio del desarrollo, pero ningún tenant los usa: el cobro es en efectivo o
-por transferencia (flujo manual, lo confirma una persona) y el canal con el
-comprador es WhatsApp por fuera de la API.
+**Tres módulos quedan apagados en este deploy.** Están implementados —no hay nada
+a medio hacer— pero ningún tenant los usa: el cobro es en efectivo o por
+transferencia (flujo manual, lo confirma una persona), el canal con el comprador es
+WhatsApp por fuera de la API, y las sugerencias de contenido son una herramienta
+interna que no hace falta para vender.
 
 Apagados no es un estado degradado, es el estado normal: **no pongas sus
 credenciales en `.env` y listo.**
@@ -468,6 +469,19 @@ credenciales en `.env` y listo.**
 |---|---|---|
 | MercadoPago | sin `ACCESS_TOKEN` | `MERCADOPAGO_NOT_CONFIGURED` (503) al crear una preferencia. El resto de la app arranca y funciona igual |
 | WhatsApp | sin `WHATSAPP_APP_SECRET` / `WHATSAPP_ACCESS_TOKEN` | el webhook responde inactivo; ya estaba diseñado así |
+| Sugerencias de contenido | sin la key del proveedor LLM | el endpoint falla; nada más del backoffice depende de él |
+
+> [!important] No hay interruptor por módulo: el chat y las sugerencias comparten la key
+> `services/chat/` y `services/content-suggestions/` importan **el mismo** cliente
+> (`lib/llm/index.js`), que elige proveedor con `LLM_PROVIDER` (`gemini` por
+> default, `anthropic` la otra opción). O sea que la key —`GEMINI_API_KEY` o
+> `ANTHROPIC_API_KEY`— los prende y los apaga a los dos juntos.
+>
+> Consecuencia práctica para la V1: si querés el **chat de la tienda** prendido, la
+> key va igual, y las sugerencias quedan disponibles aunque no las uses. No es un
+> problema de seguridad —son endpoints del panel, detrás de auth— pero sí de costo:
+> las dos consumen del mismo presupuesto de LLM. El cost-guard por tenant
+> (`services/chat/cost-guard.js`) y `CHAT_DAILY_LIMIT` son lo que pone el techo.
 
 No hay nada que registrar en Meta ni en MercadoPago, y **el catálogo, las órdenes,
 la caja y el storefront no dependen de ninguno de los dos**: el modelo de datos ya

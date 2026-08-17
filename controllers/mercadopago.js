@@ -1,5 +1,7 @@
 import { mercadopagoModel } from "../services/mercadopago.js";
 import { validateWebhookSignature } from "../helpers/mercadopago.js";
+import { DEFAULTS } from "../config.js";
+import { logger } from "../lib/logger.js";
 
 export class mercadopagoController {
   static async create(req, res, next) {
@@ -30,10 +32,17 @@ export class mercadopagoController {
       if (!paymentId) return res.sendStatus(204);
       if (eventType !== "payment") return res.sendStatus(200);
 
-      const webhookSecret = process.env.MP_WEBHOOK_SECRET;
+      const webhookSecret = DEFAULTS.MP_WEBHOOK_SECRET;
 
+      // Sin secreto NO se procesa: se corta antes de verificar. Es lo que impide
+      // que un POST inventado contra la URL pública marque una orden como pagada.
+      // El 500 hace que MercadoPago reintente, que es lo correcto — el aviso no se
+      // pierde y llega cuando el secreto esté puesto.
       if (!webhookSecret) {
-        console.error("[MP][webhook] MP_WEBHOOK_SECRET no configurado");
+        logger.error(
+          { module: "mercadopago:webhook", paymentId },
+          "MP_WEBHOOK_SECRET no configurado: el webhook se rechaza sin procesar"
+        );
         return res.sendStatus(500);
       }
 
@@ -45,7 +54,10 @@ export class mercadopagoController {
       });
 
       if (!isValid) {
-        console.warn("[MP][webhook] Firma inválida");
+        logger.warn(
+          { module: "mercadopago:webhook", paymentId },
+          "firma de webhook invalida"
+        );
         return res.sendStatus(401);
       }
 
