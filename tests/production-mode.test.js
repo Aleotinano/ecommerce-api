@@ -271,6 +271,67 @@ describe("modo producción", () => {
     });
   });
 
+  // Con el secreto seteado la separación deja de inferirse del header `Origin`, que
+  // se puede omitir con curl y que además se da vuelta si aparece un rewrite de
+  // Vercel. Módulo aparte porque `ssrSecret` se lee al importar.
+  describe("lecturas del SSR con SSR_SHARED_SECRET", () => {
+    let ssrReadLimiter, browserReadLimiter;
+    const SECRET = "un-secreto-de-prueba";
+
+    beforeAll(async () => {
+      vi.stubEnv("SSR_SHARED_SECRET", SECRET);
+      vi.resetModules();
+      ({ ssrReadLimiter, browserReadLimiter } = await import(
+        "../middleware/rateLimit.js"
+      ));
+    });
+
+    afterAll(() => {
+      vi.stubEnv("SSR_SHARED_SECRET", "");
+      vi.resetModules();
+    });
+
+    const appRead = () => {
+      const app = express();
+      app.get("/store/page", ssrReadLimiter, browserReadLimiter, (_req, res) =>
+        res.json({ ok: true })
+      );
+      return app;
+    };
+
+    const policyOf = (res) =>
+      res.headers["ratelimit-policy"] || res.headers["ratelimit"];
+
+    it("con la clave correcta entra al balde de máquina", async () => {
+      const res = await request(appRead())
+        .get("/store/page")
+        .set("X-Tenant-Slug", "un-tenant")
+        .set("X-SSR-Key", SECRET);
+
+      expect(policyOf(res)).toContain("3000");
+    });
+
+    // El agujero que cierra el secreto: sin Origin y sin clave, antes caía en el
+    // balde de máquina sólo por no ser un browser.
+    it("sin clave y sin Origin cae al balde humano igual", async () => {
+      const res = await request(appRead())
+        .get("/store/page")
+        .set("X-Tenant-Slug", "un-tenant");
+
+      expect(policyOf(res)).toContain("120");
+      expect(policyOf(res)).not.toContain("3000");
+    });
+
+    it("con una clave incorrecta no alcanza el balde de máquina", async () => {
+      const res = await request(appRead())
+        .get("/store/page")
+        .set("X-Tenant-Slug", "un-tenant")
+        .set("X-SSR-Key", "otra-cosa-del-mismo-largo");
+
+      expect(policyOf(res)).toContain("120");
+    });
+  });
+
   // El panel vive en un dominio y la API en otro (Vercel + el hostname del
   // Funnel), así que TODA request del panel es cross-site. Con el `SameSite=Strict`
   // que había, el browser no manda la cookie nunca: el login no funciona en

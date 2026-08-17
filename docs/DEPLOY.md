@@ -241,11 +241,28 @@ El compose deja `TRUST_PROXY: "1"` asumiendo un salto (`tailscaled` agregando
 req / 15 min compartidos entre toda la tienda.
 
 Pegale al hostname público **desde fuera de la tailnet** (datos del celular, por
-ejemplo) y mirá qué IP loguea la app:
+ejemplo) y buscá la línea que la app loguea **una sola vez**, en el primer request:
 
 ```bash
-docker compose -f docker-compose.prod.yml logs backend --tail 50
+docker compose -f docker-compose.prod.yml logs backend | grep "cadena de proxies"
 ```
+
+Sale algo así, y se lee entero:
+
+```json
+{"xForwardedFor":"203.0.113.7","hops":1,"reqIp":"203.0.113.7",
+ "socketRemoteAddress":"127.0.0.1","trustProxy":1,...}
+```
+
+| Qué ves | Qué significa |
+|---|---|
+| `hops` = `trustProxy` y `reqIp` = la IP real | Está bien |
+| `xForwardedFor` es `null` | **Funnel no propaga el header.** La IP real no llega nunca y ningún `TRUST_PROXY` lo arregla: hay que replantear el rate limiting |
+| `hops` > `trustProxy` | Alguien sumó un salto (un rewrite de Vercel, típicamente). Subí el número |
+| `reqIp` = `socketRemoteAddress` habiendo `xForwardedFor` | Express no está confiando en el header: `TRUST_PROXY` quedó corto |
+
+Es una línea por proceso, así que si ya la pasaste, reiniciá el backend para
+volver a verla.
 
 Si la IP del request es la tuya real, `1` está bien. Si aparece una interna de
 Tailscale (rango `100.64.0.0/10`), subí el número.
@@ -291,10 +308,16 @@ Tailscale (rango `100.64.0.0/10`), subí el número.
 > `middleware/rateLimit.js` **y montale los dos limiters**, o vas a ver 429 sin
 > explicación.
 >
-> Queda un agujero conocido: `Origin` se puede omitir con curl y caer así en el
-> balde de máquina — acotado a la IP de quien lo haga, no al de Vercel. Cerrarlo
-> pide un secreto compartido entre el server de Next y la API, o sea coordinarlo
-> con el repo del frontend. No es bloqueante para el piloto.
+> Con `SSR_SHARED_SECRET` seteada en los dos lados, la separación deja de inferirse:
+> sólo entra al balde de máquina quien mande ese secreto en `X-SSR-Key`. Vale la
+> pena setearla por algo más que el curl — **si algún día se agrega un rewrite de
+> Vercel, la heurística de `Origin` se da vuelta en silencio**: un GET same-origin
+> del browser tampoco manda `Origin`, así que todo el tráfico de visitantes caería
+> en el balde de máquina y el techo humano no se activaría nunca. El secreto no
+> depende de eso.
+>
+> Del lado de Next la variable **no** puede llamarse `NEXT_PUBLIC_*`: esas se
+> inlinean en el bundle del browser y el secreto viajaría a cada visitante.
 
 ## 6. Multi-tenant sin subdominios
 

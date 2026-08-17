@@ -49,6 +49,20 @@ const envShape = z.object({
 
   ORIGINS: z.string().optional(),
 
+  // Secreto compartido con el SERVIDOR del frontend (no con el browser). Las tres
+  // lecturas que hace el SSR lo mandan en `X-SSR-Key` y eso las manda al balde de
+  // rate limit de máquina, mucho más alto que el de una persona
+  // (middleware/rateLimit.js).
+  //
+  // Opcional a propósito: sin ella se cae a distinguir por el header `Origin`, que
+  // es lo que se hacía antes y funciona, sólo que se puede omitir con curl.
+  //
+  // No da acceso a nada: las tres rutas son públicas y cacheadas. Lo único que
+  // compra es un techo más alto, así que filtrarlo es molesto, no grave. Del lado
+  // de Next NO puede llamarse `NEXT_PUBLIC_*`: esas se inlinean en el bundle del
+  // browser y el secreto viajaría a cada visitante.
+  SSR_SHARED_SECRET: z.string().optional(),
+
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().int().positive().optional(),
   SMTP_USER: z.string().optional(),

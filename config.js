@@ -32,6 +32,7 @@ export const DEFAULTS = {
   SECRET_JWT_KEY: env.SECRET_JWT_KEY,
   NODE_ENV: env.NODE_ENV,
   ORIGINS: parseOrigins(env.ORIGINS),
+  SSR_SHARED_SECRET: env.SSR_SHARED_SECRET?.trim() || undefined,
   BASE_URL: env.BASE_URL,
   APP_URL: env.APP_URL || env.BASE_URL,
   STORE_APP_URL: env.STORE_APP_URL || "http://localhost:3000",

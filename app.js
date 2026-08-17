@@ -33,6 +33,7 @@ import { whatsappWebhookRouter } from "./routes/webhooks/whatsapp.js";
 // Middlewares
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { middleWare } from "./middleware/cors.js";
+import { logProxyChainOnce } from "./middleware/proxyChain.js";
 import {
   generalLimiter,
   ssrReadLimiter,
@@ -49,6 +50,10 @@ const app = express();
 // dejan de discriminar y un solo balde compartido tira 429 a toda la tienda.
 // Ver schemas/env.schema.js -> TRUST_PROXY y docs/DEPLOY.md.
 app.set("trust proxy", DEFAULTS.TRUST_PROXY);
+
+// Una línea por proceso con la cadena de proxies tal como llega, para poder
+// confirmar el valor de arriba contra el deploy real en vez de suponerlo.
+app.use(logProxyChainOnce);
 
 app.use(helmet());
 app.use(middleWare());

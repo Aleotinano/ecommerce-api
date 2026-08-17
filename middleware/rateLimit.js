@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { rateLimit, ipKeyGenerator } from "express-rate-limit";
 import RedisStore from "rate-limit-redis";
 import { getRedis } from "../lib/redis.js";
@@ -81,20 +82,45 @@ const isSsrReadPath = (req) =>
  *   3000 req / 15 min son 3,3 req/s sostenidos, absurdo para un visitante y de
  *   sobra para voltear un J1900 con disco mecánico.
  *
- * El discriminador es el header `Origin`: un fetch server-to-server de Next no lo
- * manda, y un browser en cross-origin lo manda SIEMPRE — que es el caso, porque no
- * hay rewrite de Vercel y el front le pega directo al Funnel. Es el mismo criterio
- * que ya usa middleware/cors.js para distinguir "esto no es un browser".
+ * Se separan de dos formas, en orden de preferencia:
+ *
+ * 1. **`SSR_SHARED_SECRET` seteada** (lo bueno): sólo entra al balde de máquina
+ *    quien presente ese secreto en `X-SSR-Key`. Es explícito, no se puede fingir
+ *    sin el secreto, y —lo más valioso— no depende de la semántica de ningún header
+ *    del browser: si algún día se agrega un rewrite de Vercel, esta separación
+ *    sobrevive intacta.
+ * 2. **Sin secreto** (el fallback): se infiere por el header `Origin`. Un fetch
+ *    server-to-server de Next no lo manda y un browser en cross-origin lo manda
+ *    siempre — que es el caso hoy, porque no hay rewrite y el front le pega directo
+ *    al Funnel. Mismo criterio que middleware/cors.js usa para "esto no es un
+ *    browser". Funciona, pero `Origin` se puede omitir con curl.
+ *
+ * Con el rewrite puesto y SIN secreto, el modo 2 se da vuelta y falla en silencio:
+ * un GET same-origin del browser tampoco manda `Origin`, así que TODO el tráfico de
+ * browser caería en el balde de máquina. Ese es el argumento fuerte para setear el
+ * secreto, más que el curl. Ver docs/DEPLOY.md.
  *
  * Los dos limiters se montan juntos y cada uno se saltea a la población del otro,
  * así que toda request pasa por exactamente uno.
- *
- * Lo que esto NO cierra: `Origin` se puede omitir con curl, y ahí se cae en el
- * balde de máquina —acotado a la IP del que lo haga, no al de Vercel—. Cerrarlo del
- * todo pide un secreto compartido entre el server de Next y la API, o sea coordinar
- * con el repo del front; ver docs/DEPLOY.md.
  */
+const SSR_KEY_HEADER = "x-ssr-key";
+const ssrSecret = DEFAULTS.SSR_SHARED_SECRET;
+
+const hasValidSsrKey = (req) => {
+  const provided = req.get(SSR_KEY_HEADER);
+  if (!provided) return false;
+
+  const a = Buffer.from(provided);
+  const b = Buffer.from(ssrSecret);
+  // `timingSafeEqual` TIRA si los largos difieren, así que hay que cortar antes.
+  // Se filtra el largo del secreto, que no alcanza para deducirlo.
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+};
+
 const isBrowserRequest = (req) => Boolean(req.get("origin"));
+
+const isMachineRequest = (req) =>
+  ssrSecret ? hasValidSsrKey(req) : !isBrowserRequest(req);
 
 let generalStore,
   loginStore,
@@ -158,12 +184,14 @@ export const generalLimiter = rateLimit({
 });
 
 /**
- * Mitad de máquina: las tres lecturas de `SSR_PATHS` que llegan SIN `Origin`.
+ * Mitad de máquina: las tres lecturas de `SSR_PATHS` que vienen del SSR (ver
+ * `isMachineRequest`).
  *
  * La clave es `<tenant>:<ip>`, no la IP sola. Desde el SSR el slug es fijo por
  * tienda y la IP es la de Vercel, así que cada tenant tiene su propio balde y
- * ninguno puede tirar abajo el render de otro. La IP sigue en la clave para que
- * quien omita `Origin` a mano caiga en el suyo y no en el de Vercel.
+ * ninguno puede tirar abajo el render de otro. La IP sigue en la clave para que,
+ * con el fallback de `Origin` activo, quien lo omita a mano caiga en el suyo y no
+ * en el de Vercel.
  *
  * 3000 / 15 min son 200 req/min por tienda, o ~100 renders de home por minuto. Es
  * el techo del AGREGADO de una tienda entera, no de una persona: por eso el número
@@ -179,7 +207,7 @@ export const ssrReadLimiter = rateLimit({
   limit: 3000,
   standardHeaders: "draft-8",
   legacyHeaders: false,
-  skip: (req) => !isProd || isBrowserRequest(req),
+  skip: (req) => !isProd || !isMachineRequest(req),
   keyGenerator: (req) =>
     `${req.get("x-tenant-slug") || "sin-tenant"}:${ipKeyGenerator(req.ip)}`,
   store: ssrStore,
@@ -187,8 +215,10 @@ export const ssrReadLimiter = rateLimit({
 });
 
 /**
- * Mitad humana: las mismas tres rutas cuando llegan CON `Origin`, o sea desde un
- * browser. Clave por IP a secas — acá un visitante es un visitante.
+ * Mitad humana: las mismas tres rutas cuando NO son del SSR. Clave por IP a secas —
+ * acá un visitante es un visitante. Con el secreto seteado, acá cae también quien
+ * llegue sin `X-SSR-Key` aunque tampoco mande `Origin`: es el cierre del agujero de
+ * curl.
  *
  * 120 / 15 min es holgado para lo que se espera, que es casi nada: las tres las pide
  * el SSR, no el browser. `/order-statuses` es lo único que un front podría pedir del
@@ -204,7 +234,7 @@ export const browserReadLimiter = rateLimit({
   limit: 120,
   standardHeaders: "draft-8",
   legacyHeaders: false,
-  skip: (req) => !isProd || !isBrowserRequest(req),
+  skip: (req) => !isProd || isMachineRequest(req),
   keyGenerator: (req) => ipKeyGenerator(req.ip),
   store: browserReadStore,
   handler: rateLimitHandler,
