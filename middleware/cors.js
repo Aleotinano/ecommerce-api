@@ -62,6 +62,16 @@ export const middleWare = ({ acceptedOrigins = ACCEPTED_ORIGINS } = {}) => {
       // servidor" (errorHandler.js). O sea que el front recibía un INTERNAL_ERROR
       // opaco para lo que en realidad es un origen mal configurado — el error más
       // fácil de arreglar si te lo dicen, y el más caro de diagnosticar si no.
+      //
+      // ⚠️ No cambiar esto por un `callback(null, false)` "más estándar". Cortar la
+      // request acá, y no sólo omitir headers, es lo que tapa la fuga clásica de
+      // `SameSite=None`: las requests SIMPLES no disparan preflight, así que un
+      // formulario en cualquier sitio puede hacer un POST cross-site y el browser
+      // recién bloquea la LECTURA de la respuesta — el efecto ya ocurrió. El caso
+      // concreto es `POST /orders/:id/confirm-transfer`, que acepta multipart
+      // (content-type simple, sin preflight) y cuyo schema tolera body vacío: sin
+      // este 403 sería marcar órdenes como pagadas desde afuera. Omitir headers
+      // deja pasar la escritura; este 403 no.
       return callback(
         createError(
           "El origen no está permitido",
