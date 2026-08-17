@@ -94,9 +94,15 @@ openssl rand -hex 32
 
 Editá `.env`. Lo mínimo que **tiene** que cambiar respecto del ejemplo:
 
+> [!note] La URL pública ya la sabés, no hace falta esperar al Funnel
+> El hostname se asigna cuando el nodo entra a la tailnet (`tailscale up`, paso 2).
+> `tailscale funnel` sólo lo expone: no lo cambia. Así que el `.env` se completa
+> entero de una, sin volver después.
+
 ```ini
 NODE_ENV=production
 BASE_URL=https://<tu-host>.<tailnet>.ts.net
+STORE_APP_URL=https://tienda.midominio.com
 ORIGINS=https://panel.midominio.com,https://tienda.midominio.com
 
 SECRET_JWT_KEY=<algo largo y random>
@@ -176,29 +182,107 @@ compose**: lo que pongas en `.env` para esas cinco no se usa en producción.
 
 ## 4. Levantar y exponer
 
+De a una pieza y verificando cada una, en vez de un `up -d` de todo junto. En un
+J1900 con disco mecánico el arranque simultáneo de Postgres, Redis y el backend
+tarda lo suficiente como para que un fallo parezca lentitud.
+
+Primero, construir la imagen. Tarda varios minutos en este hardware:
+
 ```bash
 docker compose -f docker-compose.prod.yml build
-docker compose -f docker-compose.prod.yml run --rm migrate
-docker compose -f docker-compose.prod.yml up -d
 ```
 
-El backend publica en `127.0.0.1:3001` — sólo loopback, así que hasta acá no lo
-alcanza nadie de la red de casa. Comprobalo antes de exponerlo:
+### 4.1 Postgres y Redis, solos
+
+```bash
+docker compose -f docker-compose.prod.yml up -d postgres redis
+```
+
+**Esperar** hasta que Postgres figure `healthy` — el backend depende de eso para
+arrancar:
+
+```bash
+docker compose -f docker-compose.prod.yml ps
+```
+
+Verificá **cada uno por separado**, no alcanza con que el contenedor esté `Up`:
+
+```bash
+docker compose -f docker-compose.prod.yml exec postgres pg_isready -U ecommerce -d ecommerce
+```
+
+> Esperado: `accepting connections`. Si dice `no response`, todavía está
+> inicializando el datadir — es la primera vez, dale un minuto. Si el contenedor
+> se reinicia en loop, mirá `logs postgres`: casi siempre es un `POSTGRES_PASSWORD`
+> con un `$` sin escapar (se escribe `$$`, ver arriba).
+
+Redis, y acá van **dos** comandos, porque el que importa es el que tiene que
+fallar:
+
+```bash
+docker compose -f docker-compose.prod.yml exec redis redis-cli ping
+```
+
+> Esperado: **`NOAUTH Authentication required.`** Si contesta `PONG`, el
+> `--requirepass` no está activo y el Redis está sin password. Frená acá.
+
+```bash
+docker compose -f docker-compose.prod.yml exec \
+  -e REDISCLI_AUTH="$(grep -m1 '^REDIS_PASSWORD=' .env | cut -d= -f2-)" \
+  redis redis-cli ping
+```
+
+> Esperado: `PONG`. Si da `WRONGPASS`, el valor del `.env` no es el que levantó el
+> contenedor: recreá con `up -d --force-recreate redis`.
+
+### 4.2 Migraciones
+
+```bash
+docker compose -f docker-compose.prod.yml run --rm migrate
+```
+
+> Esperado, en un deploy nuevo: la lista de migraciones aplicadas y
+> `All migrations have been successfully applied`. En uno que ya corrió:
+> `No pending migrations to apply`.
+>
+> Si dice `Can't reach database server`, Postgres no terminó de arrancar —
+> esperá a que `ps` lo muestre `healthy` y repetí. El contenedor es one-shot y no
+> deja nada a medias: se puede reintentar sin miedo.
+
+### 4.3 El backend
+
+```bash
+docker compose -f docker-compose.prod.yml up -d backend
+```
+
+Publica en `127.0.0.1:3001` — sólo loopback, así que hasta acá no lo alcanza nadie
+de la red de casa. Comprobalo **antes** de exponerlo:
 
 ```bash
 curl http://127.0.0.1:3001/health
 ```
 
-Recién ahora, el Funnel:
+> Esperado: `{"status":"ok"}`. Si no contesta, `logs backend`. El modo de falla más
+> común es el arranque abortado por una env faltante: el mensaje de zod dice cuál,
+> y el contenedor no queda a medias — se niega a levantar entero.
+
+Y confirmá que Redis conectó **desde la app**, que es distinto de que el
+contenedor esté arriba:
+
+```bash
+docker compose -f docker-compose.prod.yml logs backend | grep -i redis
+```
+
+> Esperado: `redis connected` y `redis ready`. Si ves
+> `redis initial connection failed, will retry`, la password de `REDIS_URL` no
+> coincide con la del contenedor. **Esto no rompe nada visible**: la app degrada a
+> memoria y sigue andando, más lenta y sin cache compartido, para siempre. Es el
+> fallo más fácil de no ver de todo el deploy.
+
+### 4.4 Recién ahora, el Funnel
 
 ```bash
 sudo tailscale funnel --bg 3001
-```
-
-Y la verificación de punta a punta:
-
-```bash
-curl https://<tu-host>.<tailnet>.ts.net/health
 ```
 
 ```bash
@@ -207,6 +291,16 @@ docker compose -f docker-compose.prod.yml ps
 
 El backend tiene que figurar en `healthy`. Si queda en `unhealthy`, mirá los
 logs: `docker compose -f docker-compose.prod.yml logs backend`.
+
+Y la verificación de punta a punta, **desde fuera de la tailnet**:
+
+```bash
+curl https://<tu-host>.<tailnet>.ts.net/health
+```
+
+> Esperado: `{"status":"ok"}`. Un **502** con el contenedor `healthy` significa que
+> Funnel no encuentra nada escuchando en 3001: revisá que el `ports:` del backend
+> siga publicando en loopback.
 
 Y la verificación de CORS, que `/health` **no** cubre: `curl` sin `Origin` cae en
 la rama "no es un browser" y pasa siempre, así que hay que mandar el header a
