@@ -11,11 +11,12 @@ import { logger } from "../lib/logger.js";
  *
  * Contesta dos preguntas de una:
  *
- * 1. **Si Tailscale Funnel agrega su entrada a `X-Forwarded-For` o lo pisa.** Es un
- *    hecho que no se puede deducir leyendo este repo. Si `xForwardedFor` sale
- *    `null`, Funnel no lo propaga y la IP real del visitante NO llega nunca —
- *    ningún valor de `TRUST_PROXY` lo arregla y habría que replantear el rate
- *    limiting.
+ * 1. **Si Tailscale Funnel agrega su entrada a `X-Forwarded-For` o lo pisa.**
+ *    CONFIRMADO el 2026-08-18 contra el deploy de `micahost`: lo AGREGA. Llega una
+ *    sola entrada, es la IP real del cliente, y `req.ip` la refleja — así que
+ *    `TRUST_PROXY=1` es el valor correcto para `browser → Funnel → app`. Si algún
+ *    día `xForwardedFor` sale `null`, Funnel dejó de propagarla: ningún valor de
+ *    `TRUST_PROXY` lo arregla y habría que replantear el rate limiting.
  * 2. **Si alguien agregó un salto después** (el caso típico: un rewrite de Vercel
  *    delante del Funnel). Ahí `hops` pasa a 2 y `TRUST_PROXY` se queda en 1.
  *

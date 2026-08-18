@@ -83,6 +83,30 @@ tailscale status --json
 El `DNSName` sale con la forma `<tu-host>.<tailnet>.ts.net`. **Ese valor va a
 `BASE_URL`** en el paso siguiente, y tiene que coincidir carácter por carácter.
 
+> [!warning] El nombre no existe para el resto de internet hasta que Funnel esté arriba
+> `<tu-host>.<tailnet>.ts.net` se publica en el DNS **público** recién cuando Funnel
+> queda activo (paso 4.4), y la propagación no es instantánea. Hasta entonces el
+> nombre resuelve **sólo dentro de la tailnet**, por MagicDNS.
+>
+> El síntoma desde afuera es un **error de DNS del browser** — "no se encontró la
+> dirección del servidor" — o un mensaje de Tailscale sobre configuración y permisos
+> de DNS, y se confunde muy fácil con un problema de permisos de la tailnet o con un
+> rechazo del backend. No es ninguna de las dos: mientras falle el DNS **no hay
+> conexión TCP**, así que es imposible ver un 403 de CORS ni ningún otro código de la
+> app. Desde el server se ve todo bien, porque ahí resuelve por MagicDNS — por eso el
+> error se siente como "anda acá pero no allá".
+>
+> Cómo distinguirlo, desde una máquina **fuera** de la tailnet:
+>
+> ```bash
+> dig +short <tu-host>.<tailnet>.ts.net @1.1.1.1
+> ```
+>
+> Tiene que devolver IPs **públicas** de los ingress de Tailscale (`199.38.181.x`,
+> `209.177.145.x` y similares). Si no devuelve nada, todavía no se publicó: esperá y
+> repetí. Si devuelve una `100.x`, estás resolviendo por MagicDNS y esa máquina no
+> está afuera de la tailnet, así que la prueba no vale.
+
 ## 3. Clonar y configurar
 
 ```bash
@@ -354,12 +378,20 @@ Sale algo así, y se lee entero:
 | `xForwardedFor` es `null` | **Funnel no propaga el header.** La IP real no llega nunca y ningún `TRUST_PROXY` lo arregla: hay que replantear el rate limiting |
 | `hops` > `trustProxy` | Alguien sumó un salto (un rewrite de Vercel, típicamente). Subí el número |
 | `reqIp` = `socketRemoteAddress` habiendo `xForwardedFor` | Express no está confiando en el header: `TRUST_PROXY` quedó corto |
+| `reqIp` en `100.64.0.0/10` con `hops` = `trustProxy` | El request entró **desde tu propia tailnet**, y esa ES la IP real de ese cliente. No tocar nada |
 
 Es una línea por proceso, así que si ya la pasaste, reiniciá el backend para
 volver a verla.
 
-Si la IP del request es la tuya real, `1` está bien. Si aparece una interna de
-Tailscale (rango `100.64.0.0/10`), subí el número.
+Si la IP del request es la tuya real, `1` está bien.
+
+> [!warning] Una IP del rango `100.64.0.0/10` NO es motivo para subir el número
+> Ese rango es el CGNAT de Tailscale, y en este log aparece cuando el request entró
+> **desde otro nodo de tu tailnet**: esa es la IP real de ese cliente y la cadena está
+> bien. Subir `TRUST_PROXY` por verla es peor que no hacer nada — con el número más
+> alto que los saltos reales, Express toma una entrada de `X-Forwarded-For` que
+> escribe el cliente, y cualquiera puede falsear su IP para saltearse los rate
+> limiters. Lo que decide es `hops`, no de qué rango sea la IP.
 
 > [!important] `1` vale mientras el front le pegue **directo** al Funnel
 > Hoy no hay rewrite de Vercel: el browser llama al hostname del Funnel, así que
@@ -376,10 +408,11 @@ Tailscale (rango `100.64.0.0/10`), subí el número.
 > | `browser → Funnel → app` (hoy) | `1` |
 > | `browser → Vercel (rewrite) → Funnel → app` | `2` |
 >
-> Queda un hecho **sin confirmar**: si Tailscale Funnel *agrega* su entrada a
-> `X-Forwarded-For` o lo *pisa*. Si lo pisa, la IP real del visitante no llega
-> nunca y ningún valor de `TRUST_PROXY` lo arregla — habría que resolver el rate
-> limiting de otra forma.
+> **Confirmado el 2026-08-18 contra el deploy de `micahost`**: Funnel *agrega* su
+> entrada, no la pisa. Llega una sola, con la IP real del cliente, y `reqIp` la
+> refleja. O sea que `1` es correcto para la topología de hoy y el rate limiting por
+> IP discrimina de verdad. Lo que sigue **sin medir** es la fila de dos saltos: eso
+> hay que verificarlo con el rewrite ya armado, no antes.
 
 > [!note] Tres rutas tienen dos techos, según quién llame
 > `/store/config`, `/store/page` y `/order-statuses` las pide el **servidor** de
@@ -430,6 +463,35 @@ de hacer la request si no puede resolver el slug.
 
 La única ruta que no necesita tenant es `/order-statuses`, y es a propósito: es
 una tabla estática del sistema, sin datos de nadie.
+
+### Probar con el frontend en localhost
+
+Mientras los fronts no estén deployados se los puede correr en local contra esta API,
+pero hay una trampa: con `NODE_ENV=production` la rama de `middleware/cors.js` que
+acepta cualquier `*.localhost` **está apagada** (la condición es `!isProd &&
+isLocalhostOrigin(origin)`). Contra este server un origen de localhost pasa sólo si
+está listado **explícitamente**:
+
+```ini
+ORIGINS=https://panel.midominio.com,http://localhost:3000
+```
+
+Y si el storefront local entra por subdominio de tenant, `http://<slug>.localhost:3000`
+es **otro origen distinto** y también hay que listarlo, uno por cada tenant que quieras
+probar. Se evita corriendo el front en `localhost:3000` pelado y mandando el header
+`X-Tenant-Slug`, que además es como funciona este deploy.
+
+> [!caution] Sacá los orígenes de localhost cuando entren los dominios reales
+> `ORIGINS` es la defensa de CSRF del panel, no una lista de lectura: cada entrada es
+> permiso de escritura. Un `http://localhost:3000` listado en producción se lo queda
+> cualquier cosa que corra en la máquina de quien tenga sesión de admin.
+
+La cookie de sesión del panel es `Secure; SameSite=None` en producción
+(`controllers/users.js`). Desde una página `http://localhost:3000` contra
+`https://<tu-host>.<tailnet>.ts.net` debería viajar — `http://localhost` cuenta como
+contexto seguro — pero confirmalo en devtools, Application → Cookies: si el login
+devuelve 200 y la request siguiente sale 401, la cookie no se está guardando y no hay
+ningún error que lo diga.
 
 Probalo con un tenant real antes de dar el deploy por bueno:
 

@@ -1,5 +1,8 @@
-.env
-.env.test
+# Cualquier variante de .env, no solo estos dos nombres exactos: un
+# `cp .env .env.bak` antes de editar el .env del server dejaba los secretos de
+# produccion listos para commitear. La negacion mantiene el template versionado.
+.env*
+!.env.example
 node_modules
 generated
 nota.md

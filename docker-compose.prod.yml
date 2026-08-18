@@ -94,12 +94,15 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-ecommerce}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ecommerce}
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
       # Cuántos proxies hay adelante. Con Funnel es `tailscaled`, que entrega la
-      # request al puerto local agregando X-Forwarded-For — o sea 1 salto. Está
-      # sin confirmar contra el deploy real: verificalo mirando qué IP loguea
-      # pino-http en el primer request que entre desde fuera de la tailnet. Si es
-      # la IP real del visitante, este valor está bien; si es una interna de
-      # Tailscale, hay que subirlo. Con el número mal, los cinco rate limiters de
-      # middleware/rateLimit.js meten a TODOS en el mismo balde.
+      # request al puerto local agregando X-Forwarded-For — o sea 1 salto.
+      # CONFIRMADO contra el deploy real (2026-08-18): llega una sola entrada de
+      # X-Forwarded-For y es la IP real del cliente.
+      #
+      # NO lo subas sin haber agregado un proxy de verdad. Con el número MÁS ALTO
+      # que los saltos reales, Express empieza a leer una entrada que escribe el
+      # cliente, y cualquiera puede falsear su IP para evadir los limiters. Con el
+      # número MÁS BAJO, los cinco rate limiters de middleware/rateLimit.js meten a
+      # TODOS en el mismo balde. Se verifica mirando `hops` en el log de arranque.
       # Ver app.js -> app.set("trust proxy") y docs/DEPLOY.md.
       TRUST_PROXY: "1"
     # Publicado, a diferencia de postgres y redis, porque Funnel corre en el HOST
