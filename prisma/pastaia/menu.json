@@ -36,11 +36,11 @@
     "_nota": "base = precio de la caja con masa Clásica y sin recargo de relleno. Los recargos son POR UNIDAD y se multiplican por las unidades de la caja. El build redondea a la centena.",
     "masaSinRecargo": "Clásica",
     "base": {
-      "Sorrentinos": { "12 unidades": null, "24 unidades": null, "48 unidades": null },
-      "Ravioles": { "12 unidades": null, "24 unidades": null, "48 unidades": null },
-      "Raviolones": { "12 unidades": null, "24 unidades": null, "48 unidades": null }
+      "Sorrentinos": { "12 unidades": 15000, "24 unidades": 26000, "48 unidades": 35000 },
+      "Ravioles": { "12 unidades": 15000, "24 unidades": 26000, "48 unidades": 35000 },
+      "Raviolones": { "12 unidades": 16000, "24 unidades": 28000, "48 unidades": 38000 }
     },
-    "recargoMasaPorUnidad": null,
+    "recargoMasaPorUnidad": 50,
     "recargoRellenoPorUnidad": {
       "_nota": "Solo los rellenos con sobreprecio. El que no figure va sin recargo. Ej: \"pollo y verdura\": 120"
     }
@@ -50,9 +50,9 @@
     "categoria": { "name": "Salsas", "icon": "cooking-pot", "description": "Salsas caseras para acompañar." },
     "_nota": "Si hay más de un tamaño de pote, dejan de ser productos de una variante: se suma un atributo `pote` en ./atributos.js y una variante por tamaño.",
     "productos": [
-      { "name": "Salsa blanca", "description": null, "price": null },
-      { "name": "Salsa tuco", "description": null, "price": null },
-      { "name": "Salsa mixta", "description": null, "price": null }
+      { "name": "Salsa blanca", "description": null, "price": 2000 },
+      { "name": "Salsa tuco", "description": null, "price": 2000 },
+      { "name": "Salsa mixta", "description": null, "price": 2000 }
     ]
   }
 }

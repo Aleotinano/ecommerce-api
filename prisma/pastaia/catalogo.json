@@ -1,0 +1,1240 @@
+{
+  "categorias": [
+    {
+      "name": "Sorrentinos",
+      "parent": null,
+      "position": 0,
+      "icon": "circle-dot",
+      "description": "Sorrentinos caseros congelados, en masa y relleno a elección."
+    },
+    {
+      "name": "Ravioles",
+      "parent": null,
+      "position": 1,
+      "icon": "grid-2x2",
+      "description": "Ravioles caseros congelados, en masa y relleno a elección."
+    },
+    {
+      "name": "Raviolones",
+      "parent": null,
+      "position": 2,
+      "icon": "layout-grid",
+      "description": "Raviolones caseros congelados, en masa y relleno a elección."
+    },
+    {
+      "name": "Salsas",
+      "parent": null,
+      "position": 3,
+      "icon": "cooking-pot",
+      "description": "Salsas caseras para acompañar."
+    }
+  ],
+  "productos": [
+    {
+      "name": "Sorrentinos de jamón y queso",
+      "category": "Sorrentinos",
+      "description": "Sorrentinos rellenos de jamón y queso. Elegí la masa y el tamaño de la caja. Se entregan congelados, listos para cocinar.",
+      "variants": [
+        {
+          "sku": "PA-SORRENTINOS-DE-JAMON-Y-QUESO-CLASICA-X12",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "12 unidades"
+          },
+          "price": 15000,
+          "stock": 999,
+          "isDefault": true
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-JAMON-Y-QUESO-CLASICA-X24",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "24 unidades"
+          },
+          "price": 26000,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-JAMON-Y-QUESO-CLASICA-X48",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "48 unidades"
+          },
+          "price": 35000,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-JAMON-Y-QUESO-REMOLACHA-X12",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "12 unidades"
+          },
+          "price": 15600,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-JAMON-Y-QUESO-REMOLACHA-X24",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "24 unidades"
+          },
+          "price": 27200,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-JAMON-Y-QUESO-REMOLACHA-X48",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "48 unidades"
+          },
+          "price": 37400,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-JAMON-Y-QUESO-ALBAHACA-X12",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "12 unidades"
+          },
+          "price": 15600,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-JAMON-Y-QUESO-ALBAHACA-X24",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "24 unidades"
+          },
+          "price": 27200,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-JAMON-Y-QUESO-ALBAHACA-X48",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "48 unidades"
+          },
+          "price": 37400,
+          "stock": 999,
+          "isDefault": false
+        }
+      ]
+    },
+    {
+      "name": "Sorrentinos de ricota y nuez",
+      "category": "Sorrentinos",
+      "description": "Sorrentinos rellenos de ricota y nuez. Elegí la masa y el tamaño de la caja. Se entregan congelados, listos para cocinar.",
+      "variants": [
+        {
+          "sku": "PA-SORRENTINOS-DE-RICOTA-Y-NUEZ-CLASICA-X12",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "12 unidades"
+          },
+          "price": 15000,
+          "stock": 999,
+          "isDefault": true
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-RICOTA-Y-NUEZ-CLASICA-X24",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "24 unidades"
+          },
+          "price": 26000,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-RICOTA-Y-NUEZ-CLASICA-X48",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "48 unidades"
+          },
+          "price": 35000,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-RICOTA-Y-NUEZ-REMOLACHA-X12",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "12 unidades"
+          },
+          "price": 15600,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-RICOTA-Y-NUEZ-REMOLACHA-X24",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "24 unidades"
+          },
+          "price": 27200,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-RICOTA-Y-NUEZ-REMOLACHA-X48",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "48 unidades"
+          },
+          "price": 37400,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-RICOTA-Y-NUEZ-ALBAHACA-X12",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "12 unidades"
+          },
+          "price": 15600,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-RICOTA-Y-NUEZ-ALBAHACA-X24",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "24 unidades"
+          },
+          "price": 27200,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-RICOTA-Y-NUEZ-ALBAHACA-X48",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "48 unidades"
+          },
+          "price": 37400,
+          "stock": 999,
+          "isDefault": false
+        }
+      ]
+    },
+    {
+      "name": "Sorrentinos de pollo y verdura",
+      "category": "Sorrentinos",
+      "description": "Sorrentinos rellenos de pollo y verdura. Elegí la masa y el tamaño de la caja. Se entregan congelados, listos para cocinar.",
+      "variants": [
+        {
+          "sku": "PA-SORRENTINOS-DE-POLLO-Y-VERDURA-CLASICA-X12",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "12 unidades"
+          },
+          "price": 15000,
+          "stock": 999,
+          "isDefault": true
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-POLLO-Y-VERDURA-CLASICA-X24",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "24 unidades"
+          },
+          "price": 26000,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-POLLO-Y-VERDURA-CLASICA-X48",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "48 unidades"
+          },
+          "price": 35000,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-POLLO-Y-VERDURA-REMOLACHA-X12",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "12 unidades"
+          },
+          "price": 15600,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-POLLO-Y-VERDURA-REMOLACHA-X24",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "24 unidades"
+          },
+          "price": 27200,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-POLLO-Y-VERDURA-REMOLACHA-X48",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "48 unidades"
+          },
+          "price": 37400,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-POLLO-Y-VERDURA-ALBAHACA-X12",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "12 unidades"
+          },
+          "price": 15600,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-POLLO-Y-VERDURA-ALBAHACA-X24",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "24 unidades"
+          },
+          "price": 27200,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-POLLO-Y-VERDURA-ALBAHACA-X48",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "48 unidades"
+          },
+          "price": 37400,
+          "stock": 999,
+          "isDefault": false
+        }
+      ]
+    },
+    {
+      "name": "Sorrentinos de calabaza y queso",
+      "category": "Sorrentinos",
+      "description": "Sorrentinos rellenos de calabaza y queso. Elegí la masa y el tamaño de la caja. Se entregan congelados, listos para cocinar.",
+      "variants": [
+        {
+          "sku": "PA-SORRENTINOS-DE-CALABAZA-Y-QUESO-CLASICA-X12",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "12 unidades"
+          },
+          "price": 15000,
+          "stock": 999,
+          "isDefault": true
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-CALABAZA-Y-QUESO-CLASICA-X24",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "24 unidades"
+          },
+          "price": 26000,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-CALABAZA-Y-QUESO-CLASICA-X48",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "48 unidades"
+          },
+          "price": 35000,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-CALABAZA-Y-QUESO-REMOLACHA-X12",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "12 unidades"
+          },
+          "price": 15600,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-CALABAZA-Y-QUESO-REMOLACHA-X24",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "24 unidades"
+          },
+          "price": 27200,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-CALABAZA-Y-QUESO-REMOLACHA-X48",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "48 unidades"
+          },
+          "price": 37400,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-CALABAZA-Y-QUESO-ALBAHACA-X12",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "12 unidades"
+          },
+          "price": 15600,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-CALABAZA-Y-QUESO-ALBAHACA-X24",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "24 unidades"
+          },
+          "price": 27200,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-SORRENTINOS-DE-CALABAZA-Y-QUESO-ALBAHACA-X48",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "48 unidades"
+          },
+          "price": 37400,
+          "stock": 999,
+          "isDefault": false
+        }
+      ]
+    },
+    {
+      "name": "Ravioles de jamón y queso",
+      "category": "Ravioles",
+      "description": "Ravioles rellenos de jamón y queso. Elegí la masa y el tamaño de la caja. Se entregan congelados, listos para cocinar.",
+      "variants": [
+        {
+          "sku": "PA-RAVIOLES-DE-JAMON-Y-QUESO-CLASICA-X12",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "12 unidades"
+          },
+          "price": 15000,
+          "stock": 999,
+          "isDefault": true
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-JAMON-Y-QUESO-CLASICA-X24",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "24 unidades"
+          },
+          "price": 26000,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-JAMON-Y-QUESO-CLASICA-X48",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "48 unidades"
+          },
+          "price": 35000,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-JAMON-Y-QUESO-REMOLACHA-X12",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "12 unidades"
+          },
+          "price": 15600,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-JAMON-Y-QUESO-REMOLACHA-X24",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "24 unidades"
+          },
+          "price": 27200,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-JAMON-Y-QUESO-REMOLACHA-X48",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "48 unidades"
+          },
+          "price": 37400,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-JAMON-Y-QUESO-ALBAHACA-X12",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "12 unidades"
+          },
+          "price": 15600,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-JAMON-Y-QUESO-ALBAHACA-X24",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "24 unidades"
+          },
+          "price": 27200,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-JAMON-Y-QUESO-ALBAHACA-X48",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "48 unidades"
+          },
+          "price": 37400,
+          "stock": 999,
+          "isDefault": false
+        }
+      ]
+    },
+    {
+      "name": "Ravioles de ricota y nuez",
+      "category": "Ravioles",
+      "description": "Ravioles rellenos de ricota y nuez. Elegí la masa y el tamaño de la caja. Se entregan congelados, listos para cocinar.",
+      "variants": [
+        {
+          "sku": "PA-RAVIOLES-DE-RICOTA-Y-NUEZ-CLASICA-X12",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "12 unidades"
+          },
+          "price": 15000,
+          "stock": 999,
+          "isDefault": true
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-RICOTA-Y-NUEZ-CLASICA-X24",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "24 unidades"
+          },
+          "price": 26000,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-RICOTA-Y-NUEZ-CLASICA-X48",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "48 unidades"
+          },
+          "price": 35000,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-RICOTA-Y-NUEZ-REMOLACHA-X12",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "12 unidades"
+          },
+          "price": 15600,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-RICOTA-Y-NUEZ-REMOLACHA-X24",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "24 unidades"
+          },
+          "price": 27200,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-RICOTA-Y-NUEZ-REMOLACHA-X48",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "48 unidades"
+          },
+          "price": 37400,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-RICOTA-Y-NUEZ-ALBAHACA-X12",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "12 unidades"
+          },
+          "price": 15600,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-RICOTA-Y-NUEZ-ALBAHACA-X24",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "24 unidades"
+          },
+          "price": 27200,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-RICOTA-Y-NUEZ-ALBAHACA-X48",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "48 unidades"
+          },
+          "price": 37400,
+          "stock": 999,
+          "isDefault": false
+        }
+      ]
+    },
+    {
+      "name": "Ravioles de pollo y verdura",
+      "category": "Ravioles",
+      "description": "Ravioles rellenos de pollo y verdura. Elegí la masa y el tamaño de la caja. Se entregan congelados, listos para cocinar.",
+      "variants": [
+        {
+          "sku": "PA-RAVIOLES-DE-POLLO-Y-VERDURA-CLASICA-X12",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "12 unidades"
+          },
+          "price": 15000,
+          "stock": 999,
+          "isDefault": true
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-POLLO-Y-VERDURA-CLASICA-X24",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "24 unidades"
+          },
+          "price": 26000,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-POLLO-Y-VERDURA-CLASICA-X48",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "48 unidades"
+          },
+          "price": 35000,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-POLLO-Y-VERDURA-REMOLACHA-X12",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "12 unidades"
+          },
+          "price": 15600,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-POLLO-Y-VERDURA-REMOLACHA-X24",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "24 unidades"
+          },
+          "price": 27200,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-POLLO-Y-VERDURA-REMOLACHA-X48",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "48 unidades"
+          },
+          "price": 37400,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-POLLO-Y-VERDURA-ALBAHACA-X12",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "12 unidades"
+          },
+          "price": 15600,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-POLLO-Y-VERDURA-ALBAHACA-X24",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "24 unidades"
+          },
+          "price": 27200,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-POLLO-Y-VERDURA-ALBAHACA-X48",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "48 unidades"
+          },
+          "price": 37400,
+          "stock": 999,
+          "isDefault": false
+        }
+      ]
+    },
+    {
+      "name": "Ravioles de calabaza y queso",
+      "category": "Ravioles",
+      "description": "Ravioles rellenos de calabaza y queso. Elegí la masa y el tamaño de la caja. Se entregan congelados, listos para cocinar.",
+      "variants": [
+        {
+          "sku": "PA-RAVIOLES-DE-CALABAZA-Y-QUESO-CLASICA-X12",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "12 unidades"
+          },
+          "price": 15000,
+          "stock": 999,
+          "isDefault": true
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-CALABAZA-Y-QUESO-CLASICA-X24",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "24 unidades"
+          },
+          "price": 26000,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-CALABAZA-Y-QUESO-CLASICA-X48",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "48 unidades"
+          },
+          "price": 35000,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-CALABAZA-Y-QUESO-REMOLACHA-X12",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "12 unidades"
+          },
+          "price": 15600,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-CALABAZA-Y-QUESO-REMOLACHA-X24",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "24 unidades"
+          },
+          "price": 27200,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-CALABAZA-Y-QUESO-REMOLACHA-X48",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "48 unidades"
+          },
+          "price": 37400,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-CALABAZA-Y-QUESO-ALBAHACA-X12",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "12 unidades"
+          },
+          "price": 15600,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-CALABAZA-Y-QUESO-ALBAHACA-X24",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "24 unidades"
+          },
+          "price": 27200,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLES-DE-CALABAZA-Y-QUESO-ALBAHACA-X48",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "48 unidades"
+          },
+          "price": 37400,
+          "stock": 999,
+          "isDefault": false
+        }
+      ]
+    },
+    {
+      "name": "Raviolones de jamón y queso",
+      "category": "Raviolones",
+      "description": "Raviolones rellenos de jamón y queso. Elegí la masa y el tamaño de la caja. Se entregan congelados, listos para cocinar.",
+      "variants": [
+        {
+          "sku": "PA-RAVIOLONES-DE-JAMON-Y-QUESO-CLASICA-X12",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "12 unidades"
+          },
+          "price": 16000,
+          "stock": 999,
+          "isDefault": true
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-JAMON-Y-QUESO-CLASICA-X24",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "24 unidades"
+          },
+          "price": 28000,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-JAMON-Y-QUESO-CLASICA-X48",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "48 unidades"
+          },
+          "price": 38000,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-JAMON-Y-QUESO-REMOLACHA-X12",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "12 unidades"
+          },
+          "price": 16600,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-JAMON-Y-QUESO-REMOLACHA-X24",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "24 unidades"
+          },
+          "price": 29200,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-JAMON-Y-QUESO-REMOLACHA-X48",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "48 unidades"
+          },
+          "price": 40400,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-JAMON-Y-QUESO-ALBAHACA-X12",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "12 unidades"
+          },
+          "price": 16600,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-JAMON-Y-QUESO-ALBAHACA-X24",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "24 unidades"
+          },
+          "price": 29200,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-JAMON-Y-QUESO-ALBAHACA-X48",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "48 unidades"
+          },
+          "price": 40400,
+          "stock": 999,
+          "isDefault": false
+        }
+      ]
+    },
+    {
+      "name": "Raviolones de ricota y nuez",
+      "category": "Raviolones",
+      "description": "Raviolones rellenos de ricota y nuez. Elegí la masa y el tamaño de la caja. Se entregan congelados, listos para cocinar.",
+      "variants": [
+        {
+          "sku": "PA-RAVIOLONES-DE-RICOTA-Y-NUEZ-CLASICA-X12",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "12 unidades"
+          },
+          "price": 16000,
+          "stock": 999,
+          "isDefault": true
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-RICOTA-Y-NUEZ-CLASICA-X24",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "24 unidades"
+          },
+          "price": 28000,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-RICOTA-Y-NUEZ-CLASICA-X48",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "48 unidades"
+          },
+          "price": 38000,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-RICOTA-Y-NUEZ-REMOLACHA-X12",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "12 unidades"
+          },
+          "price": 16600,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-RICOTA-Y-NUEZ-REMOLACHA-X24",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "24 unidades"
+          },
+          "price": 29200,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-RICOTA-Y-NUEZ-REMOLACHA-X48",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "48 unidades"
+          },
+          "price": 40400,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-RICOTA-Y-NUEZ-ALBAHACA-X12",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "12 unidades"
+          },
+          "price": 16600,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-RICOTA-Y-NUEZ-ALBAHACA-X24",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "24 unidades"
+          },
+          "price": 29200,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-RICOTA-Y-NUEZ-ALBAHACA-X48",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "48 unidades"
+          },
+          "price": 40400,
+          "stock": 999,
+          "isDefault": false
+        }
+      ]
+    },
+    {
+      "name": "Raviolones de pollo y verdura",
+      "category": "Raviolones",
+      "description": "Raviolones rellenos de pollo y verdura. Elegí la masa y el tamaño de la caja. Se entregan congelados, listos para cocinar.",
+      "variants": [
+        {
+          "sku": "PA-RAVIOLONES-DE-POLLO-Y-VERDURA-CLASICA-X12",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "12 unidades"
+          },
+          "price": 16000,
+          "stock": 999,
+          "isDefault": true
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-POLLO-Y-VERDURA-CLASICA-X24",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "24 unidades"
+          },
+          "price": 28000,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-POLLO-Y-VERDURA-CLASICA-X48",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "48 unidades"
+          },
+          "price": 38000,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-POLLO-Y-VERDURA-REMOLACHA-X12",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "12 unidades"
+          },
+          "price": 16600,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-POLLO-Y-VERDURA-REMOLACHA-X24",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "24 unidades"
+          },
+          "price": 29200,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-POLLO-Y-VERDURA-REMOLACHA-X48",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "48 unidades"
+          },
+          "price": 40400,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-POLLO-Y-VERDURA-ALBAHACA-X12",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "12 unidades"
+          },
+          "price": 16600,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-POLLO-Y-VERDURA-ALBAHACA-X24",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "24 unidades"
+          },
+          "price": 29200,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-POLLO-Y-VERDURA-ALBAHACA-X48",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "48 unidades"
+          },
+          "price": 40400,
+          "stock": 999,
+          "isDefault": false
+        }
+      ]
+    },
+    {
+      "name": "Raviolones de calabaza y queso",
+      "category": "Raviolones",
+      "description": "Raviolones rellenos de calabaza y queso. Elegí la masa y el tamaño de la caja. Se entregan congelados, listos para cocinar.",
+      "variants": [
+        {
+          "sku": "PA-RAVIOLONES-DE-CALABAZA-Y-QUESO-CLASICA-X12",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "12 unidades"
+          },
+          "price": 16000,
+          "stock": 999,
+          "isDefault": true
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-CALABAZA-Y-QUESO-CLASICA-X24",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "24 unidades"
+          },
+          "price": 28000,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-CALABAZA-Y-QUESO-CLASICA-X48",
+          "attributes": {
+            "masa": "Clásica",
+            "caja": "48 unidades"
+          },
+          "price": 38000,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-CALABAZA-Y-QUESO-REMOLACHA-X12",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "12 unidades"
+          },
+          "price": 16600,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-CALABAZA-Y-QUESO-REMOLACHA-X24",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "24 unidades"
+          },
+          "price": 29200,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-CALABAZA-Y-QUESO-REMOLACHA-X48",
+          "attributes": {
+            "masa": "Remolacha",
+            "caja": "48 unidades"
+          },
+          "price": 40400,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-CALABAZA-Y-QUESO-ALBAHACA-X12",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "12 unidades"
+          },
+          "price": 16600,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-CALABAZA-Y-QUESO-ALBAHACA-X24",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "24 unidades"
+          },
+          "price": 29200,
+          "stock": 999,
+          "isDefault": false
+        },
+        {
+          "sku": "PA-RAVIOLONES-DE-CALABAZA-Y-QUESO-ALBAHACA-X48",
+          "attributes": {
+            "masa": "Albahaca",
+            "caja": "48 unidades"
+          },
+          "price": 40400,
+          "stock": 999,
+          "isDefault": false
+        }
+      ]
+    },
+    {
+      "name": "Salsa blanca",
+      "category": "Salsas",
+      "description": null,
+      "variants": [
+        {
+          "sku": "PA-SALSA-BLANCA",
+          "attributes": {},
+          "price": 2000,
+          "stock": 999,
+          "isDefault": true
+        }
+      ]
+    },
+    {
+      "name": "Salsa tuco",
+      "category": "Salsas",
+      "description": null,
+      "variants": [
+        {
+          "sku": "PA-SALSA-TUCO",
+          "attributes": {},
+          "price": 2000,
+          "stock": 999,
+          "isDefault": true
+        }
+      ]
+    },
+    {
+      "name": "Salsa mixta",
+      "category": "Salsas",
+      "description": null,
+      "variants": [
+        {
+          "sku": "PA-SALSA-MIXTA",
+          "attributes": {},
+          "price": 2000,
+          "stock": 999,
+          "isDefault": true
+        }
+      ]
+    }
+  ]
+}
