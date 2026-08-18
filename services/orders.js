@@ -728,8 +728,9 @@ export const OrderModel = {
           customerPhoneMode: true,
           customerPhoneCountry: true,
           customerPhoneArea: true,
-          // Flujo de venta del tenant: qué métodos acepta y si cobra seña. Viaja
-          // en este mismo round-trip, que ya existía para el teléfono.
+          // Flujo de venta del tenant: si vende, qué métodos acepta y si cobra
+          // seña. Viaja en este mismo round-trip, que ya existía para el teléfono.
+          storeMode: true,
           paymentMethodsEnabled: true,
           fulfillmentMethodsEnabled: true,
           depositEnabled: true,
@@ -771,6 +772,21 @@ export const OrderModel = {
 
     // Antes de la transacción a propósito: un método no habilitado tiene que
     // cortar el checkout sin haber tocado stock ni vaciado el carrito.
+    //
+    // La tienda que no vende corta primero: es más fuerte que cualquier método
+    // habilitado. Solo aplica al pedido del CLIENTE (`STORE`) — en modo carta el
+    // pedido se cierra por fuera, así que el mostrador (`ADMIN`) y los borradores
+    // del bot siguen naciendo igual. La primera llave está en
+    // `middleware/storeMode.js`, montada en la ruta; esta es la que protege de la
+    // próxima ruta que monte este service sin acordarse de aquélla.
+    if (origin === "STORE" && config?.storeMode === "MENU") {
+      throw createError(
+        "Esta tienda no vende online: su catálogo es una carta",
+        "STORE_MODE_MENU",
+        404
+      );
+    }
+
     assertMethodEnabled(config?.paymentMethodsEnabled, paymentMethod, "PAYMENT");
     assertMethodEnabled(
       config?.fulfillmentMethodsEnabled,

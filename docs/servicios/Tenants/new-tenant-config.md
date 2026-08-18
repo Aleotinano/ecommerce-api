@@ -127,10 +127,12 @@ En un tenant `carta` el stock no gobierna nada (no nacen órdenes), así que va 
   queda sucio. Y cerrar con `closeRedis()` o el script no termina nunca.
 - **`showOutOfStock: false` es el default** y esconde todo lo que esté en `stock: 0`. Un
   catálogo entero en 0 con el default puesto se ve vacío.
-- **`storeMode: MENU` no lo aplica el backend.** No hay guard: `POST /orders` sigue funcionando.
-  El que apaga el carrito y `/checkout` es el storefront, leyendo el campo del
-  `GET /tenant-config/:tenantId` (que es público, `attachUser` y no `verifyToken`). Si el front
-  no lo lee, el tenant "carta" vende igual.
+- **`storeMode: MENU` lo aplica el backend desde 2026-08-07, pero solo en el storefront.**
+  `/store/cart` y `/store/orders` responden 404 `STORE_MODE_MENU`; `POST /orders` (el mostrador
+  del admin) y los borradores del bot **siguen funcionando a propósito**, porque en una carta el
+  pedido se cierra por fuera y alguien lo tiene que poder anotar. El front igual sigue leyendo
+  `storeMode` del `GET /tenant-config/:tenantId` (público, `attachUser` y no `verifyToken`) para
+  no dibujar un carrito que el server va a rechazar.
 - **En modo `MENU`, `paymentMethodsEnabled` y `fulfillmentMethodsEnabled` quedan poblados a
   propósito.** No gobiernan nada ahí; el campo que define qué es el tenant es `storeMode`, uno
   solo. Vaciarlos obligaría a `OrderModel.create` a distinguir "sin métodos habilitados" de "no

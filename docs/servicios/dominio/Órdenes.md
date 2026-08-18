@@ -196,6 +196,19 @@ Fuente: `prisma/schema.prisma` (modelos `Order`, `OrderItem`, `OrderStatusHistor
   orden creada directamente por el bot (`createDraft`) o vía llamada directa al servicio (tests,
   scripts) puede nacer sin estos campos; el guard de producción (ver "Máquina de estados") es lo que
   los vuelve obligatorios antes de `PROCESSING`/`COMPLETED`, no la creación en sí.
+- **Una tienda en modo carta no vende por el storefront** (2026-08-07). Si
+  `TenantConfig.storeMode` es `MENU` —restó, cafetería: el catálogo se lee—, `/store/cart` y
+  `/store/orders` responden **404 `STORE_MODE_MENU`** (`middleware/storeMode.js`, montado en
+  `routes/store/index.js`). 404 y no 403 porque para ese tenant el checkout **no existe**, mismo
+  criterio que `CASH_REGISTER_DISABLED`; el flag se lee de la base y no del cache de
+  `TenantConfigModel.get`, porque diez minutos de TTL son diez minutos vendiendo después de
+  apagar la tienda. `OrderModel.create` repite el chequeo cuando `origin === "STORE"`, con el
+  `storeMode` que ya viaja en el `select` de config que se hacía igual: es la llave que cubre a
+  la próxima ruta que monte este service sin acordarse del middleware.
+  **Lo que sigue funcionando es tan importante como lo que se corta**: el mostrador
+  (`POST /orders`, `origin: ADMIN`) y los borradores del bot (`createDraft`) crean órdenes igual.
+  En una carta el pedido se cierra por fuera —WhatsApp, mostrador—, y no dejar que el local
+  anote esa venta sería romperle la [[Caja]], no protegerlo.
 - **Qué métodos se aceptan depende del TENANT** (2026-07-29). Los enums de Zod son los valores
   posibles del sistema; los habilitados salen de `TenantConfig.paymentMethodsEnabled` y
   `fulfillmentMethodsEnabled` (ver [[TenantConfig]] → "Perfiles de flujo de venta"). La validación no

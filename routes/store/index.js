@@ -6,6 +6,7 @@ import {
   browserReadLimiter,
 } from "../../middleware/rateLimit.js";
 import { storeCacheHeaders } from "../../middleware/storeCache.js";
+import { requireShopMode } from "../../middleware/storeMode.js";
 import { storeAuthRouter } from "./auth.js";
 import { storeProductsRouter } from "./products.js";
 import { storeCategoriesRouter } from "./categories.js";
@@ -26,8 +27,13 @@ storeRouter.use(resolveTenantFromSlug);
 storeRouter.use("/auth", storeAuthRouter);
 storeRouter.use("/products", storeProductsRouter);
 storeRouter.use("/categories", storeCategoriesRouter);
-storeRouter.use("/cart", storeCartRouter);
-storeRouter.use("/orders", storeOrdersRouter);
+// Las dos rutas de COMPRA, y las únicas con `requireShopMode`: un tenant en modo
+// carta (`storeMode: MENU`) no tiene carrito ni checkout, y hasta acá eso lo apagaba
+// solo el front. Los routers van bloqueados enteros: si la tienda no vende, un
+// historial de pedidos del cliente tampoco tiene qué mostrar. El backoffice no se
+// toca — el mostrador sigue cargando ventas.
+storeRouter.use("/cart", requireShopMode, storeCartRouter);
+storeRouter.use("/orders", requireShopMode, storeOrdersRouter);
 storeRouter.use("/addresses", storeAddressesRouter);
 // `/config` y `/page` las pide el SERVIDOR de Vercel en cada render de la home, no
 // el browser: llegan todas con la misma IP de egreso. Salteadas del limiter general
