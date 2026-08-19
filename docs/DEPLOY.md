@@ -599,6 +599,12 @@ gzip -dc backups/ecommerce-20260811-030000.sql.gz | docker compose -f docker-com
 
 ## Actualizar el deploy
 
+> [!note] El ciclo completo, con los datos de mica, está en `.claude/skills/deploy/`
+> Este documento es la guía **reproducible** —sirve para cualquier máquina y por eso usa
+> placeholders—. El runbook operativo del server que tenemos hoy (cómo entrar, qué correr
+> antes de subir, qué verificar después, y qué falta resolver para automatizarlo) vive en esa
+> skill, que queda fuera de git a propósito: tiene hostname y usuario concretos.
+
 ```bash
 git pull
 docker compose -f docker-compose.prod.yml build

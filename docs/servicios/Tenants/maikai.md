@@ -29,11 +29,14 @@ tenant; se corrige con `node prisma/set-tenant-profile.js maikai carta`. Los mé
 pago y entrega quedan poblados a propósito aunque no gobiernen nada: el campo que define
 qué es este tenant es `storeMode`, uno solo.
 
-> [!warning] El modo carta hoy lo aplica solo el storefront
-> No hay guard en el backend: `POST /orders` y `POST /store/orders` siguen aceptando
-> órdenes de un tenant en `MENU`. Quien apaga el carrito y `/checkout` es el front,
-> leyendo `storeMode` del `GET /tenant-config/:tenantId`. Si el front no lo lee, Maikai
-> vende igual. Ver [[TenantConfig]] y la deuda de [[Órdenes]].
+> [!done] El modo carta lo aplica el backend (2026-08-07)
+> `/store/cart` y `/store/orders` responden **404 `STORE_MODE_MENU`**, así que Maikai ya no
+> vende aunque alguien escriba `/checkout` en la barra de direcciones o pegue un `curl`. El
+> front sigue leyendo `storeMode` del `GET` público para no dibujar el carrito, pero ahora es
+> decoración sobre una regla del servidor y no la regla misma.
+>
+> Lo que **no** cambia: el mostrador del admin y el bot pueden seguir cargando pedidos. En una
+> carta el pedido se cierra por fuera, y eso incluye anotarlo después. Ver [[TenantConfig]].
 
 ## El catálogo
 
@@ -121,8 +124,8 @@ perfil. Tres cosas que conviene saber antes de editarla:
       Postres y no en Panadería.)
 - [ ] **El handle de Instagram.** Se ve truncado en la captura que pasó el cliente
       (`maikai.cafegrow…`) y no se inventa: `socialInstagram` queda sin cargar.
-- [ ] **El guard de `storeMode: MENU` en el backend** (ver el aviso de arriba). No es de
-      este tenant, pero es Maikai quien lo necesita primero.
+- [x] ~~**El guard de `storeMode: MENU` en el backend**~~ — hecho el 2026-08-07 (ver el aviso
+      de arriba). No era de este tenant, pero fue Maikai quien lo necesitó primero.
 
 > [!info] Las fotos de los tiles ya están en dev
 > El seed deja `imageUrl` en `null` a propósito y su comentario todavía dice que las fotos

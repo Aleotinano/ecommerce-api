@@ -45,9 +45,13 @@ Campos por grupo:
   - **En `MENU`, `paymentMethodsEnabled` y `fulfillmentMethodsEnabled` quedan poblados a
     propósito**: no gobiernan nada ahí, y vaciarlos obligaría a `OrderModel.create` a distinguir
     "sin métodos habilitados" de "no vende". El campo que dice qué es el tenant es uno solo.
-  - `[bug]` **Nadie aplica `MENU` del lado del backend**: `POST /orders` y `POST /store/orders`
-    siguen aceptando órdenes. Lo apaga solo el front, leyendo este campo del `GET` público. Si el
-    front no lo lee, el tenant "carta" vende igual.
+  - **El backend lo aplica desde 2026-08-07**, y solo sobre el storefront: `/store/cart` y
+    `/store/orders` responden **404 `STORE_MODE_MENU`** (`middleware/storeMode.js`, montado en
+    `routes/store/index.js`), y `OrderModel.create` repite el chequeo para `origin: "STORE"` por
+    si mañana alguien monta otra ruta sobre ese service. **El mostrador del admin
+    (`POST /orders`) y los borradores del bot siguen funcionando**: en modo carta el pedido se
+    cierra por fuera —WhatsApp, mostrador—, así que impedirle al local registrar su propia venta
+    sería romperle la [[Caja]], no protegerlo.
 - **Caja**: `cashRegisterEnabled` (default `false`) — habilita el módulo de [[Caja]]. **No lo edita el
   tenant**: prendido, cobrar sin turno abierto falla, así que es de la misma clase que los cuatro de
   arriba. No es parte de un perfil: se setea con `node prisma/set-cash-register.js <slug> on|off`.
