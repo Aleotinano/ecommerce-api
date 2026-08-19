@@ -7,7 +7,7 @@ import {
   deleteCloudinaryImage,
 } from "../lib/imageManager.js";
 import { wrap, del, tenantNs } from "../lib/cache.js";
-import { encryptSecret } from "../lib/crypto.js";
+import { assertEncryptionKey, encryptSecret } from "../lib/crypto.js";
 import {
   invalidateCredentials,
   verifyCredentials,
@@ -40,6 +40,24 @@ const TENANT_CONFIG_PUBLIC_SELECT = {
       .map((field) => [field, true])
   ),
 };
+
+/**
+ * `assertEncryptionKey` lanza un `Error` pelado —sin `statusCode`— y eso sale como un 500
+ * genérico que en producción el errorHandler enmascara. Acá se traduce a un error con
+ * código propio: la causa es una variable de entorno faltante en el deploy, y quien lee
+ * la respuesta no tiene otra forma de enterarse.
+ */
+function assertEncryptionKeyOrThrow() {
+  try {
+    assertEncryptionKey();
+  } catch (error) {
+    throw createError(
+      `No se pueden guardar secretos: ${error.message}`,
+      "SECRET_ENC_KEY_MISSING",
+      500
+    );
+  }
+}
 
 function tenantConfigKey(tenantId) {
   return `${tenantNs(tenantId)}:config`;
@@ -85,17 +103,36 @@ export const TenantConfigModel = {
     // alguien sube una imagen y falla, con la config ya persistida. El schema
     // garantiza que vienen las tres o ninguna.
     if (data.cloudinaryCloudName != null) {
-      const valid = await verifyCredentials({
+      // Antes de salir a la red: sin clave de cifrado no vamos a poder guardarlas de
+      // todos modos, y descubrirlo después del ping cuesta un round-trip y sale como un
+      // 500 sin explicación (en producción el errorHandler lo enmascara).
+      assertEncryptionKeyOrThrow();
+
+      const check = await verifyCredentials({
         cloudName: data.cloudinaryCloudName,
         apiKey: data.cloudinaryApiKey,
         apiSecret: data.cloudinaryApiSecret,
       });
 
-      if (!valid) {
+      // "Cloudinary dijo que no" y "no pudimos preguntarle" no son el mismo error, y
+      // hasta acá los dos salían como 400 "revisá las credenciales". Con el server sin
+      // salida a internet, eso manda a revisar lo único que no está roto: el que carga
+      // la cuenta se pone a repegar un API secret correcto por tiempo indefinido.
+      if (!check.ok) {
+        if (check.rejected) {
+          throw createError(
+            "Cloudinary rechazó esas credenciales: revisá cloud name, API key y API secret",
+            "CLOUDINARY_CREDENTIALS_INVALID",
+            400,
+            { status: check.status, reason: check.reason }
+          );
+        }
+
         throw createError(
-          "Cloudinary rechazó esas credenciales: revisá cloud name, API key y API secret",
-          "CLOUDINARY_CREDENTIALS_INVALID",
-          400
+          "No se pudieron validar las credenciales: Cloudinary no respondió. Puede no ser problema de las credenciales — reintentá, y si sigue, revisá la salida a internet del server",
+          "CLOUDINARY_UNREACHABLE",
+          502,
+          { reason: check.reason }
         );
       }
     }
