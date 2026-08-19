@@ -31,7 +31,7 @@ Las credenciales viven en `TenantConfig` (`cloudinaryCloudName`, `cloudinaryApiK
 ```js
 credentialsFor(tenantId)                 // → { cloud_name, api_key, api_secret }
 credentialsForCloudName(tenantId, name)  // para un asset que ya existe
-verifyCredentials({ cloudName, apiKey, apiSecret })
+verifyCredentials({ cloudName, apiKey, apiSecret })  // → { ok, rejected, status, reason }
 invalidateCredentials(tenantId)
 ENV_CREDENTIALS                          // la cuenta global
 ```
@@ -42,6 +42,21 @@ ENV_CREDENTIALS                          // la cuenta global
 así que el "cliente del tenant" es un objeto de credenciales que el llamador spreadea. La
 alternativa —llamar `cloudinary.config()` por request— sería estado mutable global compartido entre
 requests concurrentes de tenants distintos.
+
+> [!warning] Dónde va el objeto de opciones: **justo después de los argumentos posicionales**
+> No "al final", que es la regla que parece y no es. `lib/v2/api.js` y `lib/v2/uploader.js`
+> publican los métodos vía `v1_adapter` con un mapping que dice cuántos argumentos
+> posicionales lleva cada uno: `upload: 1` y `destroy: 1` (el archivo, el public_id) →
+> `upload(file, opciones)`; pero **`ping: 0`** → `ping(opciones)`, con las opciones
+> **primeras**.
+>
+> Ponerlas en el lugar equivocado no da error de tipos: el objeto se toma como callback y la
+> llamada se resuelve contra la config global. Con cuenta de plataforma cargada eso devuelve
+> `ok` **para cualquier credencial inventada**; sin ella revienta con `Must supply cloud_name`,
+> que el usuario ve como "Cloudinary rechazó esas credenciales" teniendo las credenciales
+> correctas. Pasó en producción el 2026-08-19, con la suite en verde: el test mockea el paquete
+> entero, así que fijaba la convención inventada en vez de la real. Hoy lo fija el describe
+> "el orden de los argumentos de api.ping", que va contra el SDK de verdad.
 
 Las credenciales resueltas se cachean en un `Map` de proceso, con TTL de 60 s **además** de la
 invalidación explícita que hace `TenantConfigModel.update`: la invalidación es por proceso y no
@@ -54,8 +69,18 @@ alcanzaría el día que haya más de una instancia.
   sube a ningún lado. No le pide nada raro al panel: el `api_secret` nunca vuelve en el `GET`, así
   que editar una sola nunca fue posible.
 - **Las tres en `null`** = volver a la cuenta global.
-- **Se validan al guardar** con `api.ping()`. Credenciales que Cloudinary rechaza dan
-  `400 CLOUDINARY_CREDENTIALS_INVALID` y **no se persisten**.
+- **Se validan al guardar** con `api.ping()`, y el resultado se parte en dos: si Cloudinary
+  **contestó** rechazando (la respuesta trae `http_code`), es `400 CLOUDINARY_CREDENTIALS_INVALID`
+  con `error.details = { status, reason }`; si **no se llegó** a Cloudinary (error de red, sin
+  `http_code`), es `502 CLOUDINARY_UNREACHABLE`. En los dos casos **no se persiste nada**.
+
+  La distinción no es cosmética: mientras las dos daban 400, un server sin salida a internet le
+  decía a quien carga la cuenta que revisara un API secret que estaba perfecto. El `reason` es el
+  mensaje del proveedor, con el `api_secret` tachado por si el proveedor lo ecoa.
+- **Guardar exige la clave de cifrado.** `SECRET_ENC_KEY` (o el alias viejo
+  `WHATSAPP_TOKEN_ENC_KEY`) se chequea ANTES del ping: sin ella el guardado iba a fallar igual, y
+  hacerlo temprano evita el round-trip y devuelve `500 SECRET_ENC_KEY_MISSING` en vez del 500
+  genérico que en producción no dice nada.
 - **El `api_key` y el `api_secret` no salen nunca** por la API: están en
   `SECRET_TENANT_CONFIG_FIELDS`, que es la lista que `services/tenant-config.js` usa para las dos
   cosas —cifrar al escribir y excluir de la proyección pública—. El `cloud_name` sí vuelve, y le

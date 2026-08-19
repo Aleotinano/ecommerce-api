@@ -107,11 +107,13 @@ beforeEach(() => {
   });
   destroyMock.mockReset().mockResolvedValue({ result: "ok" });
   signMock.mockReset().mockReturnValue("https://firmada.test/asset");
-  // El SDK real firma `ping(callback, options)`, con las opciones SEGUNDAS. Si
-  // alguien las vuelve a pasar primeras, no llegan credenciales y el ping validaría
-  // contra la cuenta global: cualquier `api_secret` inventado daría "ok". El mock
-  // exige verlas en el lugar correcto para que esa regresión falle acá.
-  pingMock.mockReset().mockImplementation(async (_callback, options) => {
+  // `cloudinary.v2.api.ping` toma las opciones PRIMERAS (el mapping `ping: 0` de
+  // lib/v2/api.js: cero argumentos posicionales antes de options). Este mock decía lo
+  // contrario y por eso la suite entera pasaba en verde mientras producción devolvía
+  // "Cloudinary rechazó esas credenciales" con las credenciales correctas. El mock exige
+  // verlas en el lugar correcto; que ese lugar sea el correcto lo fija, contra el SDK de
+  // verdad, el describe "el orden de los argumentos de api.ping".
+  pingMock.mockReset().mockImplementation(async (options) => {
     if (!options?.api_secret) throw new Error("ping sin credenciales");
     return { status: "ok" };
   });
@@ -119,6 +121,83 @@ beforeEach(() => {
 
 afterAll(async () => {
   await prisma.$disconnect();
+});
+
+describe("el orden de los argumentos de api.ping", () => {
+  // Este archivo mockea el paquete `cloudinary` entero, así que ningún caso de acá puede
+  // ver el adapter real — y eso es justo lo que dejó pasar el bug: el mock fijaba una
+  // convención inventada y la suite daba verde mientras el ping de producción salía sin
+  // credenciales. Estos dos casos importan el SDK de verdad.
+  //
+  // **No salen a la red**: `ensureOption` valida `cloud_name` de forma SÍNCRONA, antes de
+  // abrir ningún socket. Con las opciones en el lugar equivocado eso lanza y no hay
+  // request; con las opciones en el lugar correcto sí habría, así que se lo manda a un
+  // `upload_prefix` muerto en loopback.
+  const credenciales = {
+    cloud_name: "cuenta-inventada",
+    api_key: "1",
+    api_secret: "2",
+  };
+
+  let sdkReal;
+  const envGuardadas = {};
+
+  beforeAll(async () => {
+    sdkReal = (await vi.importActual("cloudinary")).v2;
+  });
+
+  beforeEach(() => {
+    // La cuenta de plataforma vacía es lo que hace visible el error, y es la forma del
+    // deploy real: cada cliente trae la suya. Con credenciales globales cargadas, el ping
+    // mal llamado no falla — valida contra NUESTRA cuenta y dice "ok" con cualquier cosa.
+    for (const key of [
+      "CLOUDINARY_CLOUD_NAME",
+      "CLOUDINARY_API_KEY",
+      "CLOUDINARY_API_SECRET",
+    ]) {
+      envGuardadas[key] = process.env[key];
+      delete process.env[key];
+    }
+    sdkReal.config({
+      cloud_name: undefined,
+      api_key: undefined,
+      api_secret: undefined,
+    });
+  });
+
+  afterEach(() => {
+    for (const [key, value] of Object.entries(envGuardadas)) {
+      process.env[key] = value;
+    }
+  });
+
+  it("con las opciones SEGUNDAS las credenciales NO llegan", () => {
+    // La forma que teníamos. El objeto se toma como callback, el ping se queda sin
+    // opciones y cae a la config global: sin cuenta de plataforma, ni siquiera sale.
+    expect(() => sdkReal.api.ping(undefined, credenciales)).toThrow(
+      /Must supply cloud_name/
+    );
+  });
+
+  it("con las opciones PRIMERAS el cloud_name llega", async () => {
+    // El try/catch envuelve al await porque el SDK mezcla las dos formas de fallar: lo
+    // que valida antes de abrir el socket lo lanza SÍNCRONAMENTE (`Must supply`, el
+    // protocolo), y sólo lo de la red llega como rechazo. Un `.catch()` pelado se comería
+    // el rechazo y dejaría pasar el throw.
+    let error;
+    try {
+      await sdkReal.api.ping({
+        ...credenciales,
+        upload_prefix: "https://127.0.0.1:1",
+      });
+    } catch (err) {
+      error = err;
+    }
+
+    // Falla igual —no hay nadie escuchando en ese puerto— pero por la red, y eso es la
+    // prueba de que la llamada se armó con las credenciales que le pasamos.
+    expect(String(error?.message ?? error)).not.toMatch(/Must supply/);
+  });
 });
 
 describe("credentialsFor", () => {
@@ -404,7 +483,6 @@ describe("PATCH /tenant-config/:tenantId — credenciales de Cloudinary", () => 
 
     expect(res.status).toBe(200);
     expect(pingMock).toHaveBeenCalledWith(
-      undefined,
       expect.objectContaining({
         cloud_name: CUENTA_PROPIA.cloudName,
         api_key: CUENTA_PROPIA.apiKey,
@@ -422,8 +500,15 @@ describe("PATCH /tenant-config/:tenantId — credenciales de Cloudinary", () => 
     expect(decryptSecret(row.cloudinaryApiKey)).toBe(CUENTA_PROPIA.apiKey);
   });
 
-  it("credenciales que Cloudinary rechaza → 400 y NO se persisten", async () => {
-    pingMock.mockRejectedValue(new Error("401 Invalid credentials"));
+  it("credenciales que Cloudinary rechaza → 400, con el motivo, y NO se persisten", async () => {
+    // Forma real del rechazo del SDK: un objeto plano con la respuesta del proveedor
+    // anidada en `error` y el status en `http_code` (ver
+    // node_modules/cloudinary/lib/api_client/execute_request.js). No es un `Error`, y la
+    // diferencia importa: es `http_code` lo que distingue "contestó que no" de "no
+    // contestó".
+    pingMock.mockRejectedValue({
+      error: { message: "unknown api_key", http_code: 401 },
+    });
 
     const res = await request(app)
       .patch(`/tenant-config/${acme.id}`)
@@ -436,11 +521,69 @@ describe("PATCH /tenant-config/:tenantId — credenciales de Cloudinary", () => 
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe("CLOUDINARY_CREDENTIALS_INVALID");
+    // Sin esto el que carga la cuenta sólo sabe que "falló", y la causa real queda en un
+    // log adentro del contenedor.
+    expect(res.body.error.details).toEqual({
+      status: 401,
+      reason: "unknown api_key",
+    });
 
     const row = await prisma.tenantConfig.findUnique({
       where: { tenantId: acme.id },
     });
     expect(row.cloudinaryCloudName).toBeNull();
+  });
+
+  it("si no se llega a Cloudinary → 502, y no se culpa a las credenciales", async () => {
+    // El server sin salida a internet daba el MISMO 400 que un secret mal pegado, o sea
+    // que mandaba a repegar por tiempo indefinido unas credenciales que estaban bien.
+    // Un error de red del SDK es un Error de Node pelado: tiene `code`, no `http_code`.
+    pingMock.mockRejectedValue(
+      Object.assign(new Error("getaddrinfo ENOTFOUND api.cloudinary.com"), {
+        code: "ENOTFOUND",
+      })
+    );
+
+    const res = await request(app)
+      .patch(`/tenant-config/${acme.id}`)
+      .set("Cookie", acmeAdminCookie)
+      .send({
+        cloudinaryCloudName: CUENTA_PROPIA.cloudName,
+        cloudinaryApiKey: CUENTA_PROPIA.apiKey,
+        cloudinaryApiSecret: CUENTA_PROPIA.apiSecret,
+      });
+
+    expect(res.status).toBe(502);
+    expect(res.body.error.code).toBe("CLOUDINARY_UNREACHABLE");
+
+    // Tampoco se persisten: no se validaron, así que no se sabe si sirven.
+    const row = await prisma.tenantConfig.findUnique({
+      where: { tenantId: acme.id },
+    });
+    expect(row.cloudinaryCloudName).toBeNull();
+  });
+
+  it("el API secret no vuelve en el detalle del error, aunque Cloudinary lo ecoe", async () => {
+    // El mensaje del proveedor se le muestra a quien carga la cuenta: no puede ser el
+    // vehículo por el que un secreto sale a la red.
+    pingMock.mockRejectedValue({
+      error: {
+        message: `Invalid Signature for api_secret=${CUENTA_PROPIA.apiSecret}`,
+        http_code: 401,
+      },
+    });
+
+    const res = await request(app)
+      .patch(`/tenant-config/${acme.id}`)
+      .set("Cookie", acmeAdminCookie)
+      .send({
+        cloudinaryCloudName: CUENTA_PROPIA.cloudName,
+        cloudinaryApiKey: CUENTA_PROPIA.apiKey,
+        cloudinaryApiSecret: CUENTA_PROPIA.apiSecret,
+      });
+
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).not.toContain(CUENTA_PROPIA.apiSecret);
   });
 
   it("mandar una sola de las tres → 400 de validación", async () => {
