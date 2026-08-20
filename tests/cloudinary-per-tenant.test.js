@@ -284,10 +284,13 @@ describe("sin cuenta de plataforma configurada", () => {
   const guardadas = {};
 
   beforeEach(() => {
+    // `CLOUDINARY_URL` va en la lista desde que es un alias de las otras tres:
+    // dejarla puesta alcanza para que este bloque entero deje de probar lo que dice.
     for (const key of [
       "CLOUDINARY_CLOUD_NAME",
       "CLOUDINARY_API_KEY",
       "CLOUDINARY_API_SECRET",
+      "CLOUDINARY_URL",
     ]) {
       guardadas[key] = process.env[key];
       delete process.env[key];
@@ -297,7 +300,10 @@ describe("sin cuenta de plataforma configurada", () => {
 
   afterEach(() => {
     for (const [key, value] of Object.entries(guardadas)) {
-      process.env[key] = value;
+      // Asignar `undefined` a `process.env` deja la STRING "undefined", que para una
+      // variable opcional es peor que no tenerla.
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
     }
     resetCredentialsCache();
   });
@@ -349,6 +355,94 @@ describe("sin cuenta de plataforma configurada", () => {
     // Sin cuenta de plataforma nunca hubo assets viejos ahí: el reintento no tiene
     // contra qué correr y reventaría adentro del SDK.
     expect(destroyMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("CLOUDINARY_URL como alias de las tres variables", () => {
+  // `cloudinary://api_key:api_secret@cloud_name` es la línea que el dashboard da para
+  // copiar y pegar, o sea la forma en que la cuenta llega a mano. Pegarla en el .env
+  // dejaba el deploy IGUAL que sin cuenta: el SDK sí la parsea al importar, pero el
+  // `config({ ...ENV_CREDENTIALS })` la pisaba con undefined (el merge es un `extend`
+  // de lodash, que copia los undefined) y `platformAccountConfigured()` seguía
+  // diciendo que no hay cuenta. Resultado: 409 para todo tenant sin cuenta propia,
+  // sin nada en la mano que lo explicara.
+  const CLAVES = [
+    "CLOUDINARY_CLOUD_NAME",
+    "CLOUDINARY_API_KEY",
+    "CLOUDINARY_API_SECRET",
+    "CLOUDINARY_URL",
+  ];
+  const guardadas = {};
+
+  beforeEach(() => {
+    for (const key of CLAVES) {
+      guardadas[key] = process.env[key];
+      delete process.env[key];
+    }
+    resetCredentialsCache();
+  });
+
+  afterEach(() => {
+    for (const [key, value] of Object.entries(guardadas)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    resetCredentialsCache();
+  });
+
+  it("resuelve las tres partes y da la cuenta por configurada", () => {
+    process.env.CLOUDINARY_URL = "cloudinary://123456789:se-cre-to@la-nube";
+
+    expect(platformAccountConfigured()).toBe(true);
+    expect({ ...ENV_CREDENTIALS }).toEqual({
+      cloud_name: "la-nube",
+      api_key: "123456789",
+      api_secret: "se-cre-to",
+    });
+  });
+
+  it("desencoda el secreto, que puede venir percent-encoded", () => {
+    process.env.CLOUDINARY_URL = "cloudinary://123:a%2Fb%40c@la-nube";
+
+    expect(ENV_CREDENTIALS.api_secret).toBe("a/b@c");
+  });
+
+  it("las variables explícitas le ganan a la URL", () => {
+    // Una URL vieja olvidada en el entorno no puede cambiarle la cuenta a un deploy
+    // que ya tenía las tres cargadas: ahí terminarían archivos de un cliente.
+    process.env.CLOUDINARY_URL = "cloudinary://vieja:vieja@nube-vieja";
+    process.env.CLOUDINARY_CLOUD_NAME = "nube-explicita";
+    process.env.CLOUDINARY_API_KEY = "key-explicita";
+    process.env.CLOUDINARY_API_SECRET = "secreto-explicito";
+
+    expect({ ...ENV_CREDENTIALS }).toEqual({
+      cloud_name: "nube-explicita",
+      api_key: "key-explicita",
+      api_secret: "secreto-explicito",
+    });
+  });
+
+  it("una URL rota se ignora y deja el deploy sin cuenta de plataforma", () => {
+    // Y sobre todo NO tira: es una variable opcional, y dejar el server sin arrancar
+    // por una línea mal pegada es peor que operar sin cuenta global (que es un
+    // estado válido). El formato lo valida `schemas/env.schema.js`, con un mensaje.
+    process.env.CLOUDINARY_URL = "esto-no-es-una-url";
+
+    expect(platformAccountConfigured()).toBe(false);
+    expect(ENV_CREDENTIALS.cloud_name).toBeUndefined();
+  });
+
+  it("un tenant sin cuenta propia sube a la cuenta de la URL", async () => {
+    process.env.CLOUDINARY_URL = "cloudinary://123456789:se-cre-to@la-nube";
+    await limpiarCredenciales(acme.id);
+
+    await uploadImageToCloudinary("/tmp/no-existe.jpg", {
+      tenantId: acme.id,
+      entity: "productos",
+    });
+
+    const [, opciones] = uploadMock.mock.calls[0];
+    expect(opciones.cloud_name).toBe("la-nube");
   });
 });
 

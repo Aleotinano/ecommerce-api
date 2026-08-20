@@ -56,6 +56,18 @@ const envShape = z.object({
   CLOUDINARY_CLOUD_NAME: z.string().min(1).optional(),
   CLOUDINARY_API_KEY: z.string().min(1).optional(),
   CLOUDINARY_API_SECRET: z.string().min(1).optional(),
+  // Alias de las tres de arriba: es la línea que el dashboard de Cloudinary da para
+  // copiar y pegar. Las explícitas le ganan (ver `ENV_CREDENTIALS` en
+  // lib/cloudinary.js). El prefijo se valida acá porque el SDK tira
+  // `Invalid CLOUDINARY_URL protocol` desde el import y eso deja el server sin
+  // arrancar por una variable que es opcional.
+  CLOUDINARY_URL: z
+    .string()
+    .regex(
+      /^cloudinary:\/\//i,
+      "CLOUDINARY_URL tiene que empezar con cloudinary:// (cloudinary://api_key:api_secret@cloud_name)"
+    )
+    .optional(),
   CLOUDINARY_FOLDER: z.string().min(1).default("e-commerce-express"),
 
   ORIGINS: z.string().optional(),

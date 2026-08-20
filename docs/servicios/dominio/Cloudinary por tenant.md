@@ -94,6 +94,18 @@ postura válida: en un deploy donde cada tienda tiene su cuenta, no tener ningun
 que ningún archivo de un cliente pueda terminar en la nuestra por accidente. Sin cuenta de plataforma
 y sin cuenta del tenant, subir devuelve `409 CLOUDINARY_NOT_CONFIGURED` — un error de dominio y no el
 `Must supply cloud_name` que tiraría el SDK, que del lado del panel se ve como un 500 sin explicación.
+El mensaje nombra las **dos** salidas (conectar cuenta propia desde el panel, o cargar la de la
+plataforma en el deploy) porque las dos faltan y el que lo lee no tiene cómo saber cuál le toca.
+
+Las credenciales de esa cuenta se cargan de dos formas equivalentes: las tres variables sueltas, o
+**`CLOUDINARY_URL=cloudinary://api_key:api_secret@cloud_name`**, que es la línea que el dashboard de
+Cloudinary da para copiar y pegar. Con las dos cargadas gana la explícita, para que una URL vieja
+olvidada en el entorno no pueda cambiarle la cuenta a un deploy que ya tenía las tres. Que el alias
+lo resuelva `ENV_CREDENTIALS` y no el SDK no es redundancia: el SDK parsea la URL al importar, pero
+después `cloudinary.config({ ...ENV_CREDENTIALS })` la pisaba con `undefined` —el merge es un
+`extend` de lodash, que copia los `undefined`—, y sobre todo `platformAccountConfigured()` seguía
+diciendo que no hay cuenta. O sea: pegar la URL no hacía nada y el único síntoma era un 409 para
+todos los tenants sin cuenta propia.
 
 > [!warning] El orden importa si ya hay assets en la cuenta de la plataforma
 > **Ver** las imágenes viejas sigue funcionando con las variables vacías: son URLs públicas y las
