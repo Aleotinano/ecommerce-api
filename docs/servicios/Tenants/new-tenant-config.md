@@ -113,6 +113,14 @@ y queda anotado como pendiente. El precedente es [[mesa dulce demo]], donde 15 p
 quedaron en `stock: 0` porque el stock real es un dato de negocio que no nos corresponde definir
 — y eso se anotó en vez de rellenarlo.
 
+> [!note] Anotarlo no es lo mismo que dejarlo roto
+> Con el default `showOutOfStock: false`, ese catálogo entero en 0 se veía **vacío**, y armar
+> un combo fallaba con `409 INSUFFICIENT_STOCK`. Cuando el negocio no lleva inventario —produce
+> por encargo— la salida no es inventar un número ni dejar 0: es **stock alto +
+> `showOutOfStock: true`**, que es decir "el stock no gobierna nada acá". Lo hacen [[pastaia]]
+> (999 por variante) y [[mesa-dulce]]. Y en los dos el seed **no vuelve a tocar el stock** en un
+> rerun, por si algún día sí lo manejan desde el panel.
+
 En un tenant `carta` el stock no gobierna nada (no nacen órdenes), así que va `stock: 0` y
 `showOutOfStock: true`. Nadie lee un número inventado como si fuera real.
 

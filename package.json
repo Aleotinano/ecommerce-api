@@ -19,6 +19,7 @@
     "seed:mesa-dulce:categorias": "node prisma/mesa-dulce/categorias.js",
     "seed:mesa-dulce:productos": "node prisma/mesa-dulce/productos.js",
     "seed:mesa-dulce:ordenes": "node prisma/mesa-dulce/ordenes.js",
+    "seed:mesa-dulce:config": "node prisma/mesa-dulce/config.js",
     "maikai:build-menu": "node prisma/maikai/build-menu.js",
     "seed:maikai": "node prisma/maikai/index.js",
     "seed:maikai:categorias": "node prisma/maikai/categorias.js",
@@ -37,7 +38,8 @@
     "seed:pastaia:atributos": "node prisma/pastaia/atributos.js",
     "seed:pastaia:productos": "node prisma/pastaia/productos.js",
     "seed:pastaia:config": "node prisma/pastaia/config.js",
-    "receipts:purge": "node scripts/purge-receipts.js"
+    "receipts:purge": "node scripts/purge-receipts.js",
+    "cloudinary:check": "node scripts/check-cloudinary.js"
   },
   "keywords": [],
   "author": "",

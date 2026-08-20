@@ -13,8 +13,15 @@ import { closeRedis } from "../../lib/redis.js";
 import { ProductModel, invalidateProductsCache } from "../../services/productos.js";
 import { PromoModel } from "../../services/promos.js";
 import { cld } from "../lib/seed-helpers.js";
+import { requireTenant } from "./categorias.js";
 
-const TENANT_SLUG = "mesa-dulce";
+// Stock inicial de cada variante. Es un número alto a propósito y NO pretende ser el
+// stock real: con `showOutOfStock: true` (ver ./config.js) un producto en 0 se sigue
+// mostrando, pero el checkout lo rechaza con INSUFFICIENT_STOCK. Mesa Dulce produce a
+// pedido y no lleva inventario, así que el control de stock no gobierna nada acá —
+// mismo criterio que pastaia. Si algún día llevan inventario de verdad, se carga desde
+// el panel: el rerun de este seed NO pisa el stock existente.
+const STOCK_INICIAL = 999;
 
 // Fotos reales de productos de Mesa Dulce (mismo Cloudinary, subidas por el
 // admin del tenant real antes de la migración de tipos — ver
@@ -60,7 +67,6 @@ const PRODUCTS = [
     category: "Brownies",
     ...mdImage("browniesClasico"),
     price: 2000,
-    stock: 30,
     sku: "BRW-CLS",
   },
   {
@@ -69,7 +75,6 @@ const PRODUCTS = [
     category: "Brownies",
     ...mdImage("browniesOreo"),
     price: 2600,
-    stock: 30,
     sku: "BRW-ORE",
   },
   {
@@ -78,7 +83,6 @@ const PRODUCTS = [
     category: "Brownies",
     ...mdImage("browniesRedVelvet"),
     price: 2000,
-    stock: 30,
     sku: "BRW-RVL",
   },
   // --- Cookies Rellenas --------------------------------------------------------
@@ -88,7 +92,6 @@ const PRODUCTS = [
     category: "Cookies Rellenas",
     ...mdImage("rellenaKinderNutella"),
     price: 4300,
-    stock: 25,
     sku: "COR-KIN",
   },
   {
@@ -98,7 +101,6 @@ const PRODUCTS = [
     category: "Cookies Rellenas",
     ...mdImage("rellenaBonBon"),
     price: 4000,
-    stock: 25,
     sku: "COR-BON",
   },
   {
@@ -107,7 +109,6 @@ const PRODUCTS = [
     category: "Cookies Rellenas",
     ...mdImage("rellenaLimonFrutosRojos"),
     price: 3900,
-    stock: 25,
     sku: "COR-LIM",
   },
   {
@@ -116,7 +117,6 @@ const PRODUCTS = [
     category: "Cookies Rellenas",
     // Sin foto real disponible (no está en el dump pre-migración).
     price: 4000,
-    stock: 25,
     sku: "COR-RVL",
   },
   {
@@ -125,7 +125,6 @@ const PRODUCTS = [
     category: "Cookies Rellenas",
     ...mdImage("rellenaFranui"),
     price: 4000,
-    stock: 25,
     sku: "COR-FRA",
   },
   {
@@ -133,7 +132,6 @@ const PRODUCTS = [
     description: "Masa de cacao y avena con trozos de chocolate semiamargo picado y galleta traviata molida, licor de chocolate, salsa de dulce de leche cubierta con virutas de chocolate semiamargo.",
     category: "Cookies Rellenas",
     price: 4000,
-    stock: 25,
     sku: "COR-TUR",
   },
   {
@@ -141,7 +139,6 @@ const PRODUCTS = [
     description: "Masa de cacao con trozos de brownie, rellena con crema chantilly, dulce de leche con licor y merengue seco.",
     category: "Cookies Rellenas",
     price: 4000,
-    stock: 25,
     sku: "COR-PIR",
   },
   {
@@ -149,7 +146,6 @@ const PRODUCTS = [
     description: "Masa de cacao con licor de café, trozos de chocolate semiamargo en la masa, crema de chocotorta, alfajorcito de chocotorta bañado y cubierta con líneas de chocolate semiamargo.",
     category: "Cookies Rellenas",
     price: 4000,
-    stock: 25,
     sku: "COR-CHO",
   },
   // --- Cookies Clásicas --------------------------------------------------------
@@ -159,7 +155,6 @@ const PRODUCTS = [
     category: "Cookies Clásicas",
     ...mdImage("clasicaChip"),
     price: 800,
-    stock: 50,
     sku: "COC-CHI",
   },
   {
@@ -168,7 +163,6 @@ const PRODUCTS = [
     category: "Cookies Clásicas",
     ...mdImage("clasicaRedVelvet"),
     price: 800,
-    stock: 50,
     sku: "COC-RVL",
   },
   {
@@ -177,7 +171,6 @@ const PRODUCTS = [
     category: "Cookies Clásicas",
     ...mdImage("clasicaOreo"),
     price: 800,
-    stock: 50,
     sku: "COC-ORE",
   },
   {
@@ -187,7 +180,6 @@ const PRODUCTS = [
     category: "Cookies Clásicas",
     ...mdImage("clasicaLimon"),
     price: 800,
-    stock: 50,
     sku: "COC-LIM",
   },
   {
@@ -195,7 +187,6 @@ const PRODUCTS = [
     description: "Masa de cacao con licor, con trozos de chocolate semiamargo.",
     category: "Cookies Clásicas",
     price: 800,
-    stock: 50,
     sku: "COC-CHO",
   },
 ];
@@ -318,7 +309,7 @@ async function ensureProduct({ tenantId, spec, categoryId }) {
               tenantId,
               attributes: {},
               price: spec.price,
-              stock: spec.stock,
+              stock: STOCK_INICIAL,
               sku: spec.sku,
               img: spec.img ?? null,
               imgPublicId: spec.imgPublicId ?? null,
@@ -341,22 +332,44 @@ async function ensureProduct({ tenantId, spec, categoryId }) {
     product.imgPublicId !== (spec.imgPublicId ?? null) ||
     product.categoryId !== categoryId;
 
-  if (!needsUpdate) {
+  // El precio de un PRODUCTO vive en su variante `isDefault`, no en `Product.price`
+  // (que es exclusivo de COMBO). Hasta que esto se agregó, el rerun no tocaba la
+  // variante para nada: subir un precio en este archivo y volver a correr el seed no
+  // tenía ningún efecto, y la única salida era editarlo a mano desde el panel.
+  //
+  // El `stock` queda deliberadamente afuera: es lo único de acá que el negocio maneja
+  // en vivo, y pisarlo en cada corrida borraría lo que hayan cargado. Ver STOCK_INICIAL.
+  const precioCambio = existingVariant.price !== spec.price;
+
+  if (!needsUpdate && !precioCambio) {
     console.log(`  -> producto "${spec.name}" ya está al día (id ${product.id}), se omite`);
     return { product, created: false };
   }
 
-  const updated = await prisma.product.update({
-    where: { id: product.id },
-    data: {
-      name: spec.name,
-      description: spec.description ?? null,
-      img: spec.img ?? null,
-      imgPublicId: spec.imgPublicId ?? null,
-      categoryId,
-    },
-  });
-  console.log(`  -> producto "${spec.name}" (id ${product.id}) actualizado`);
+  let updated = product;
+
+  if (needsUpdate) {
+    updated = await prisma.product.update({
+      where: { id: product.id },
+      data: {
+        name: spec.name,
+        description: spec.description ?? null,
+        img: spec.img ?? null,
+        imgPublicId: spec.imgPublicId ?? null,
+        categoryId,
+      },
+    });
+    console.log(`  -> producto "${spec.name}" (id ${product.id}) actualizado`);
+  }
+
+  if (precioCambio) {
+    await prisma.productVariant.update({
+      where: { id: existingVariant.id },
+      data: { price: spec.price, img: spec.img ?? null, imgPublicId: spec.imgPublicId ?? null },
+    });
+    console.log(`  -> producto "${spec.name}" (${spec.sku}): ${existingVariant.price} -> ${spec.price}`);
+  }
+
   return { product: updated, created: false };
 }
 
@@ -445,12 +458,7 @@ async function syncPromo(tenantId) {
 }
 
 export async function seedMesaDulceProductos() {
-  const tenant = await prisma.tenant.findUnique({ where: { slug: TENANT_SLUG } });
-  if (!tenant) {
-    throw new Error(
-      `Tenant "${TENANT_SLUG}" no encontrado. Corré primero "pnpm seed" (o creá el tenant a mano) antes de este script.`
-    );
-  }
+  const tenant = await requireTenant();
   const tenantId = tenant.id;
 
   console.log("== Productos de mesa-dulce ==");

@@ -76,13 +76,23 @@ async function ensureCategory({ tenantId, spec }) {
   return updated;
 }
 
-export async function seedMesaDulceCategorias() {
+// El tenant tiene que existir antes que cualquiera de estos scripts. En dev lo crea
+// `pnpm seed`, pero ese camino NO existe en producción: arranca con un TRUNCATE de toda
+// la base. De ahí que el mensaje mande a `tenant:create`, que es el único alta que sirve
+// en los dos lados. Lo importan también ./productos.js y ./config.js.
+export async function requireTenant() {
   const tenant = await prisma.tenant.findUnique({ where: { slug: TENANT_SLUG } });
   if (!tenant) {
     throw new Error(
-      `Tenant "${TENANT_SLUG}" no encontrado. Corré primero "pnpm seed" (o creá el tenant a mano) antes de este script.`
+      `Tenant "${TENANT_SLUG}" no encontrado. Creálo antes con:\n` +
+        `  pnpm tenant:create --name "Mesa Dulce" --email <email> --profile estandar`
     );
   }
+  return tenant;
+}
+
+export async function seedMesaDulceCategorias() {
+  const tenant = await requireTenant();
 
   console.log("== Categorías de mesa-dulce ==");
   const idByName = new Map();
