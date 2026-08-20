@@ -161,6 +161,7 @@ Fuente única de verdad: `schemas/env.schema.js` (validado con zod en `config.js
 | `CLOUDINARY_CLOUD_NAME` | no | cuenta de la **plataforma**: la usa el tenant que no tenga la suya en `TenantConfig` (ver §11). Vacía = ese tenant no puede subir (`CLOUDINARY_NOT_CONFIGURED`), que es lo correcto si cada tienda tiene cuenta propia. Leída directo por `lib/cloudinary.js` |
 | `CLOUDINARY_API_KEY` | no | idem |
 | `CLOUDINARY_API_SECRET` | no | idem |
+| `CLOUDINARY_URL` | no | alias de las tres de arriba, en el formato `cloudinary://api_key:api_secret@cloud_name` que el dashboard de Cloudinary da para copiar y pegar. Con las dos formas cargadas **gana la explícita**. El prefijo se valida en `schemas/env.schema.js`: el SDK, si no le gusta, tira desde el import y deja el server sin arrancar por una variable opcional |
 | `CLOUDINARY_FOLDER` | no | `e-commerce-express` |
 | `ORIGINS` | **en prod** | CSV de orígenes CORS: el **panel admin** y el dominio de **cada storefront**. La tienda no queda exenta por `storeCors`: el CORS global se monta antes (`app.js`) y contesta 403 antes de entrar al router de `/store`, así que `storeCors` sólo aporta `exposedHeaders: ["Authorization"]`. Con `NODE_ENV=production` el arranque **falla** si falta: vacía no degrada, rechaza *todas* las requests. La barra final se descarta al parsear — el header `Origin` nunca la lleva, así que `https://x.com/` no matchearía nunca |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | no | SMTP nodemailer |
