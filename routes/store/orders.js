@@ -2,9 +2,14 @@ import { Router } from "express";
 import { OrderController } from "../../controllers/orders.js";
 import { validate } from "../../middleware/validate.js";
 import { validateId } from "../../schemas/id.schema.js";
-import { orderQuery, orderCreate } from "../../schemas/order.schema.js";
+import {
+  orderQuery,
+  orderCreate,
+  orderTrackParams,
+} from "../../schemas/order.schema.js";
 import { optionalStoreAuth, verifyStoreToken } from "../../middleware/auth.js";
 import { resolveCartOwner } from "../../middleware/guestCart.js";
+import { orderTrackLimiter } from "../../middleware/rateLimit.js";
 import { createError } from "../../helpers/error.js";
 
 export const storeOrdersRouter = Router();
@@ -59,8 +64,30 @@ storeOrdersRouter.post(
   OrderController.create
 );
 
+// Seguimiento sin cuenta. La ÚNICA lectura de orden que no pide token de cliente:
+// la credencial es el token del link, 128 bits que se emiten una sola vez al crear
+// el pedido y de los que la base guarda solo el hash.
+//
+// Va ANTES de `GET /:id` por prolijidad de lectura, no por necesidad: son dos
+// segmentos contra uno y no se pisan.
+//
+// El teléfono NO alcanza para entrar acá, y esa es la decisión de fondo: un
+// teléfono es un identificador público, así que "tipeá tu número y mirá tus
+// pedidos" deja que cualquiera lea los de cualquiera con una sola request. El
+// costo aceptado es el del portador: quien reciba el link reenviado ve ESE pedido
+// (y solo ese — un token no lista los demás del mismo número).
+//
+// `validate` primero: lo que no tiene forma de token se rechaza sin ir a la base.
+storeOrdersRouter.get(
+  "/track/:token",
+  orderTrackLimiter,
+  validate({ params: orderTrackParams }),
+  OrderController.trackByToken
+);
+
 // El historial sí sigue siendo de la cuenta: un invitado no tiene con qué probar
-// que una orden es suya. Lo que ve al confirmar sale de la respuesta del POST.
+// que una orden es suya. Lo que ve al confirmar sale de la respuesta del POST,
+// junto con el token de seguimiento de arriba.
 storeOrdersRouter.get(
   "/",
   verifyStoreToken,

@@ -401,3 +401,17 @@ export const orderExportQuery = z.object({
   from: dayBoundary("start", "desde"),
   to: dayBoundary("end", "hasta"),
 });
+
+/**
+ * El token de seguimiento en la URL (`GET /store/orders/track/:token`).
+ *
+ * `randomBytes(16).toString("base64url")` da siempre 22 caracteres del alfabeto
+ * base64url (ver lib/tokens.js). Se valida la FORMA antes de tocar la base: lo
+ * que no tiene forma de token no puede ser ninguno, y así una URL cortada al
+ * copiarla se responde sin una query de por medio.
+ */
+export const orderTrackParams = z.object({
+  token: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{22}$/, "Link de seguimiento inválido"),
+});

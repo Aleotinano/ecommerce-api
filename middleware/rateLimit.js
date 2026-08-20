@@ -128,7 +128,8 @@ let generalStore,
   webhookStore,
   chatStore,
   ssrStore,
-  browserReadStore;
+  browserReadStore,
+  orderTrackStore;
 
 try {
   generalStore = createStore("rl:general:");
@@ -170,6 +171,12 @@ try {
   browserReadStore = createStore("rl:read:");
 } catch {
   browserReadStore = undefined;
+}
+
+try {
+  orderTrackStore = createStore("rl:track:");
+} catch {
+  orderTrackStore = undefined;
 }
 
 export const generalLimiter = rateLimit({
@@ -302,4 +309,29 @@ export const chatLimiter = rateLimit({
   // seguidas quedan al borde del tope de 20. Los 429 que sí se testean son los del
   // cost-guard por tenant, que es otro mecanismo.
   skip: () => DEFAULTS.NODE_ENV === "test",
+});
+
+/**
+ * Seguimiento de un pedido sin cuenta (`GET /store/orders/track/:token`).
+ *
+ * **No es la frontera de seguridad**, y conviene tenerlo claro para no elegir mal
+ * el número: el token son 128 bits, así que barrerlo no es un ataque que exista.
+ * Esto es una guarda de recursos contra un J1900 con disco mecánico, encima del
+ * techo general de 200/15 min que la ruta sigue teniendo.
+ *
+ * 60 es deliberadamente holgado. Un cliente que mira su pedido varias veces al
+ * día ni se acerca, y bajarlo castigaría al caso real que sí comparte IP: con
+ * CGNAT, decenas de abonados de la misma operadora móvil caen en el mismo balde.
+ */
+export const orderTrackLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 60,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
+  store: orderTrackStore,
+  // Mismo criterio que `generalLimiter`: fuera de producción no limita, lo que
+  // de paso evita que el contador de Redis se acumule entre corridas de tests.
+  skip: () => !isProd,
+  handler: rateLimitHandler,
 });

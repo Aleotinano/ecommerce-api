@@ -9,6 +9,11 @@ import {
 import { sendMail, buildOrderStatusEmail } from "../lib/mailer.js";
 import { normalizeCustomerPhone } from "../lib/phone.js";
 import { logger } from "../lib/logger.js";
+import {
+  generateOrderTrackingToken,
+  hashToken,
+  orderTrackingCutoff,
+} from "../lib/tokens.js";
 import { validateComboSelection } from "./combos.js";
 import {
   CashRegisterModel,
@@ -837,10 +842,17 @@ export const OrderModel = {
         }
       }
 
+      // Credencial de seguimiento, solo para las órdenes de la tienda: es lo
+      // único con lo que un invitado puede volver a ver su pedido, y una venta de
+      // mostrador o un draft del bot no tienen a quién entregarle un link. Se
+      // persiste el hash; el token en claro sale una sola vez, más abajo.
+      const tracking = origin === "STORE" ? generateOrderTrackingToken() : null;
+
       const order = await tx.order.create({
         data: {
           tenantId,
           userId: ownerId,
+          trackingTokenHash: tracking?.tokenHash ?? null,
           total,
           status: "NEW",
           origin,
@@ -903,7 +915,7 @@ export const OrderModel = {
 
       // El config del tenant viene en el mismo round-trip: el controller lo
       // necesita para armar el deep-link de WhatsApp (lib/whatsapp-link.js).
-      return tx.order.findFirst({
+      const created = await tx.order.findFirst({
         where: { id: order.id },
         include: {
           ...orderItemsInclude.include,
@@ -920,6 +932,13 @@ export const OrderModel = {
           },
         },
       });
+
+      // El token en claro va PEGADO a la orden y no en la fila: la columna
+      // guarda el hash. Es la única vez que existe —no se puede recuperar
+      // después— y por eso viaja hasta el controller de esta forma, en vez de
+      // cambiarle la firma de retorno a `create`, que comparten la ruta de
+      // tienda y la de admin.
+      return tracking ? { ...created, trackingToken: tracking.token } : created;
     });
   },
 
@@ -950,6 +969,49 @@ export const OrderModel = {
 
     if (!order) {
       throw createError("Orden no encontrada", "ORDER_NOT_FOUND", 404);
+    }
+
+    return order;
+  },
+
+  /**
+   * El pedido detrás de un token de seguimiento (`GET /store/orders/track/:token`).
+   *
+   * La contraparte sin cuenta de `getUserOrderById`: allá la prueba de que la
+   * orden es tuya es la sesión, acá es el token del link. Devuelve exactamente un
+   * pedido — **no hay forma de listar los de un mismo teléfono**, y es a
+   * propósito: si un token abriera el historial de la persona, un link reenviado
+   * a un conocido se convertiría en acceso a todo lo que compró.
+   *
+   * El `tenantId` va DENTRO del where, no verificado después: un token del tenant
+   * A no puede resolver bajo el slug del tenant B.
+   *
+   * No se filtra por `archivedAt`: el archivado lo sella el cierre del turno de
+   * caja, o sea el mismo día del pedido, y filtrar por ahí mataría el link a las
+   * pocas horas de haberlo entregado.
+   *
+   * Un solo 404 para inexistente, de otro tenant y vencido: distinguirlos le
+   * contaría a quien prueba tokens cuál de las tres cosas acertó.
+   */
+  async getByTrackingToken({ tenantId, token }) {
+    const order = await prisma.order.findFirst({
+      where: {
+        tenantId,
+        trackingTokenHash: hashToken(token),
+        createdAt: { gte: orderTrackingCutoff() },
+      },
+      include: {
+        ...orderItemsInclude.include,
+        statusHistory: { orderBy: { createdAt: "asc" } },
+      },
+    });
+
+    if (!order) {
+      throw createError(
+        "No encontramos ese pedido. El link puede haber vencido.",
+        "TRACKING_NOT_FOUND",
+        404
+      );
     }
 
     return order;

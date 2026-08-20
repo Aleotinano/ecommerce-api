@@ -73,6 +73,76 @@ function comboOf(item) {
     : null;
 }
 
+/**
+ * El pedido tal como lo ve UN CLIENTE, con o sin cuenta.
+ *
+ * Existe para que haya **un solo lugar** que decida eso. Lo comen las dos puertas
+ * del detalle —`getById` (cliente logueado) y `trackByToken` (link de invitado)—
+ * y si cada una armara su objeto, la segunda terminaría filtrando un campo que la
+ * primera ya había decidido no mostrar.
+ *
+ * Lo que NO sale de acá, y por qué:
+ *
+ * - `stateOf` (blockers, canProduce, payment): es del backoffice. Al cliente no
+ *   le sirve —ni le corresponde— saber que su pedido espera que alguien lo revise.
+ * - `contactPhone` / `contactName`: el link de seguimiento es un portador, así que
+ *   quien lo reciba reenviado no tiene por qué llevarse el teléfono de nadie. La
+ *   persona ya sabe qué datos dio; verlos repetidos no le suma.
+ * - `origin`, `reviewedAt`, `creationContext`, `userId`: interna del negocio.
+ *
+ * Lo que SÍ sale y conviene tener presente: `timeline[].nota` es texto que escribe
+ * el personal (`OrderStatusHistory.note`). Ya se le mostraba al cliente con cuenta
+ * y se mantiene igual, pero es la nota que hay que revisar si alguna vez se usa
+ * ese campo para comentarios internos.
+ */
+function customerOrderView(order) {
+  // El contacto se saca del bloque de entrega en vez de no pedirlo: así, si
+  // mañana `fulfillmentOf` suma un campo, entra solo acá y la decisión de qué
+  // ocultar sigue estando escrita en un lugar.
+  const { contactPhone, contactName, ...fulfillment } = fulfillmentOf(order);
+  void contactPhone;
+  void contactName;
+
+  return {
+    id: order.id,
+    status: order.status,
+    paymentStatus: order.paymentStatus,
+    ...fulfillment,
+    transferConfirmedAt: order.transferConfirmedAt,
+    // La seña completa: sin los tres campos, un consumidor del detalle no tiene
+    // forma de saber que la orden la lleva ni si está confirmada.
+    requiresDeposit: order.requiresDeposit,
+    depositAmount: order.depositAmount,
+    depositConfirmedAt: order.depositConfirmedAt,
+    paymentConfirmedAt: order.paymentConfirmedAt,
+    total: order.total,
+    createdAt: order.createdAt,
+    updatedAt: order.updatedAt,
+    productos: order.orderItems.map((item) => ({
+      id: item.id,
+      productId: item.productId,
+      variantId: item.variantId,
+      nombre: item.product?.name ?? item.variant?.sku,
+      description: item.product?.description,
+      cantidad: item.quantity,
+      precioUnitario: item.price,
+      subtotal: item.price * item.quantity,
+      attributes: item.variant?.attributes ?? {},
+      image: item.variant?.img ?? item.product?.img ?? null,
+      note: item.note,
+      combo: comboOf(item),
+    })),
+    timeline: (order.statusHistory ?? []).map((entry) => ({
+      estado: entry.toStatus,
+      nota: entry.note,
+      fecha: entry.createdAt,
+      // Campo agregado, no cambiado: distingue el avance que hizo el motor al
+      // cumplirse las condiciones del que apretó una persona.
+      automatico: entry.trigger === "AUTO",
+    })),
+  };
+}
+
 export class OrderController {
   static async create(req, res, next) {
     try {
@@ -160,6 +230,11 @@ export class OrderController {
         // el tenant no tiene número cargado o el armado falla, la orden ya
         // está creada y se devuelve igual con whatsapp: null.
         whatsapp: buildWhatsappBlock(order),
+        // La credencial de seguimiento, y la ÚNICA vez que existe en claro: en
+        // la base vive el hash. Va afuera de `order` a propósito —no es un campo
+        // del pedido, es el secreto que después deja volver a verlo— y es null
+        // en las órdenes que no salieron de la tienda (mostrador, bot).
+        tracking: order.trackingToken ? { token: order.trackingToken } : null,
       });
     } catch (error) {
       next(error);
@@ -329,49 +404,43 @@ export class OrderController {
             orderId,
           });
 
+      // El staff ve lo mismo que el cliente MÁS el contacto y el estado del
+      // motor; el cliente, solo `customerOrderView`.
       return res.json({
-        order: {
-          id: order.id,
-          status: order.status,
-          paymentStatus: order.paymentStatus,
-          ...fulfillmentOf(order),
-          transferConfirmedAt: order.transferConfirmedAt,
-          // La seña completa: sin los tres campos, un consumidor del detalle no
-          // tiene forma de saber que la orden la lleva ni si está confirmada.
-          requiresDeposit: order.requiresDeposit,
-          depositAmount: order.depositAmount,
-          depositConfirmedAt: order.depositConfirmedAt,
-          paymentConfirmedAt: order.paymentConfirmedAt,
-          // Solo para el backoffice: al cliente no le sirve —ni le corresponde—
-          // saber que su pedido está esperando que alguien lo revise.
-          ...(isStaff ? stateOf(order) : {}),
-          total: order.total,
-          createdAt: order.createdAt,
-          updatedAt: order.updatedAt,
-          productos: order.orderItems.map((item) => ({
-            id: item.id,
-            productId: item.productId,
-            variantId: item.variantId,
-            nombre: item.product?.name ?? item.variant?.sku,
-            description: item.product?.description,
-            cantidad: item.quantity,
-            precioUnitario: item.price,
-            subtotal: item.price * item.quantity,
-            attributes: item.variant?.attributes ?? {},
-            image: item.variant?.img ?? item.product?.img ?? null,
-            note: item.note,
-            combo: comboOf(item),
-          })),
-          timeline: (order.statusHistory ?? []).map((entry) => ({
-            estado: entry.toStatus,
-            nota: entry.note,
-            fecha: entry.createdAt,
-            // Campo agregado, no cambiado: distingue el avance que hizo el motor
-            // al cumplirse las condiciones del que apretó una persona.
-            automatico: entry.trigger === "AUTO",
-          })),
-        },
+        order: isStaff
+          ? {
+              ...customerOrderView(order),
+              contactPhone: order.contactPhone,
+              contactName: order.contactName,
+              ...stateOf(order),
+            }
+          : customerOrderView(order),
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Seguimiento de un pedido SIN CUENTA (`GET /store/orders/track/:token`).
+   *
+   * La única lectura de orden que no pide sesión: el token del link es la
+   * credencial, y abre exactamente un pedido. Existe porque el storefront de
+   * tenant se compra siempre como invitado, y hasta acá lo único que la persona
+   * veía de su pedido era la respuesta del POST guardada en su navegador.
+   *
+   * Emite el MISMO objeto que ve un cliente logueado (`customerOrderView`): que
+   * el pedido se vea distinto según por dónde se entró sería un error, no una
+   * medida de seguridad.
+   */
+  static async trackByToken(req, res, next) {
+    try {
+      const order = await OrderModel.getByTrackingToken({
+        tenantId: req.tenantId,
+        token: req.params.token,
+      });
+
+      return res.json({ order: customerOrderView(order) });
     } catch (error) {
       next(error);
     }

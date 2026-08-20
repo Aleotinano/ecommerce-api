@@ -691,6 +691,56 @@ Del otro lado, un admin ve el mensaje, encuentra la orden ya creada en `NEW` y l
 (`POST /orders/:id/review`); si con eso no le queda nada pendiente, la orden entra sola a
 `PROCESSING`.
 
+## Seguimiento del pedido sin cuenta (2026-08-19)
+
+El storefront de tenant se compra **siempre como invitado**, y hasta acá lo único que la persona veía
+de su pedido era la respuesta del `POST`, guardada en el `sessionStorage` de su navegador: al cerrar
+la pestaña, se perdía. `GET /store/orders/:id` exige token de cuenta y un invitado no tiene con qué
+probar que la orden es suya.
+
+**Cada orden `STORE` nace con un token de seguimiento.** 128 bits (`randomBytes(16)` en base64url, 22
+caracteres — `generateOrderTrackingToken` en `lib/tokens.js`), del que la base guarda **solo el
+SHA-256** en `Order.trackingTokenHash` (UNIQUE), igual que `User.emailVerificationTokenHash`. El
+token en claro sale **una sola vez**, en el 201:
+
+```jsonc
+{ "message": "Orden creada exitosamente",
+  "order": { "id": 812, ... },
+  "whatsapp": { "url": "https://wa.me/...", ... },
+  "tracking": { "token": "l2EdnFMwzLQg7uyFe3ycKQ" } }
+```
+
+`tracking` va **afuera de `order`** a propósito: no es un campo del pedido, es la credencial para
+volver a verlo. Es `null` en las órdenes que no salieron de la tienda (mostrador, bot): no hay a
+quién entregarle un link.
+
+**El teléfono no autoriza nada**, y esa es la decisión de fondo: un teléfono es un identificador
+público, así que "tipeá tu número y mirá tus pedidos" deja que cualquiera lea los de cualquiera con
+**una** request dirigida. La IP tampoco lo completa (CGNAT), y **no se guarda en la orden**. El
+razonamiento completo, con las opciones que se descartaron, está en
+[[Producción sin cuentas (propuesta)#Decisión 3 — El seguimiento del invitado]].
+
+Lo que hay que tener presente para tocarlo:
+
+- `customerOrderView` (`controllers/orders.js`) es el **único** lugar que decide qué ve un cliente, y
+  lo comen las dos puertas del detalle (`getById` sin rol staff, y `trackByToken`). No devuelve
+  `contactPhone`/`contactName` —el link es un portador y no tiene por qué llevar el teléfono de
+  nadie— ni el bloque de `stateOf` (blockers/canProduce/payment), que es del backoffice. Sí devuelve
+  `timeline[].nota`, que la escribe el personal: era así para el cliente con cuenta y se mantiene,
+  pero es el campo a revisar si alguna vez se usa para comentarios internos.
+- La **caducidad son 90 días** y se deriva de `createdAt` (`ORDER_TRACKING_TTL_MS`): no hay columna
+  de vencimiento. **No** se filtra por `archivedAt` — lo sella el cierre del turno de caja, el mismo
+  día, y mataría el link a las pocas horas.
+- El `tenantId` va **dentro** del `where` de `getByTrackingToken`, no verificado después.
+- El rate limit es **guarda de recursos, no frontera**: contra 128 bits no hay barrido posible.
+- **No se puede "reenviar el link"**, solo rotarlo: en la base está el hash. Es el pendiente 4 de la
+  nota de arriba.
+
+Cómo llega el link a la persona lo decide el frontend (tres vías: la pantalla de gracias, el
+`localStorage` del navegador y —la que importa— el pie del mensaje de WhatsApp que le manda al
+negocio, que le queda en su propio historial). Eso se documenta del otro lado del vault; acá vive
+solo el modelo.
+
 ## Archivado: el día lo cierra la caja (2026-08-01)
 
 `services/order-archive.js`. **Archivar es sacar una orden del tablero, no de la base.**
@@ -798,6 +848,7 @@ turnos no hay cierre, y el tablero se comporta exactamente como antes de esta fe
 | POST | `/` | Crea una orden **siempre desde el carrito**. Mismo body obligatorio que el backoffice (`orderCreate`), pero la orden queda `origin = STORE` (→ necesita `review` antes de producir) y el 201 incluye el bloque `whatsapp` con el deep-link del pedido. **`items` se rechaza acá** (`400 ITEMS_NOT_ALLOWED`): el schema es compartido y lo acepta, pero el middleware `rejectExplicitItems` corta antes de resolver el carrito. No se descarta en silencio a propósito — ver abajo | **Sin login** (`optionalStoreAuth` + `resolveCartOwner`); el invitado debe mandar `contactName` + `contactPhone` |
 | GET | `/` | Lista las órdenes del cliente | Cliente del store (`verifyStoreToken`) |
 | GET | `/:id` | Detalle de una orden del cliente | Cliente del store (`verifyStoreToken`) |
+| GET | `/track/:token` | **Seguimiento sin cuenta.** Devuelve un pedido —el del token— con la misma vista que ve un cliente logueado (`customerOrderView`). 404 único (`TRACKING_NOT_FOUND`) para token inexistente, de otro tenant o vencido | **Sin login**: la credencial es el token del link. `orderTrackLimiter` (60 / 15 min por IP) |
 
 ### Dos fuentes de líneas, un solo precio
 

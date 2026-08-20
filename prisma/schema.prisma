@@ -671,6 +671,21 @@ model Order {
   // Snapshot del fragmento de conversación que originó la orden (Redis tiene TTL).
   creationContext String?
 
+  // Seguimiento del pedido SIN CUENTA: el hash SHA-256 del token que viaja en el
+  // link (`GET /store/orders/track/:token`). El token en claro se emite una sola
+  // vez, en la respuesta del POST, y no se guarda en ningún lado — mismo criterio
+  // que `User.emailVerificationTokenHash`. De ahí que "reenviar el link" solo
+  // pueda implementarse ROTÁNDOLO, nunca recuperándolo.
+  //
+  // El token ES la credencial: el teléfono del cliente no autoriza nada, porque un
+  // teléfono es un identificador público y alcanzaría con conocerlo para leer los
+  // pedidos de cualquiera. La caducidad se deriva de `createdAt` (90 días) y por
+  // eso no hay columna de vencimiento.
+  //
+  // Solo lo llevan las órdenes STORE: las de mostrador y las del bot no tienen a
+  // quién entregarle un link.
+  trackingTokenHash String? @unique
+
   // Archivado: la orden sale del tablero, NO de la base. Es un filtro de
   // visibilidad —el listado del backoffice excluye lo archivado por defecto— y no
   // un borrado ni un estado: agregar `ARCHIVED` al enum habría roto el pipeline
