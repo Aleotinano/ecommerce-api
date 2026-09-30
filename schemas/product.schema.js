@@ -94,9 +94,41 @@ export const comboCategoryOption = z.object({
 
 // PRODUCTO: siempre tiene >=1 ProductVariant (la principal marcada `isDefault`) —
 // precio/stock viven ahí, nunca en columnas de Product. COMBO: producto compuesto de
-// otros productos; `price` es su precio fijo. Ver docs/servicios/dominio/Productos.md
-// y Combos.md.
-export const PRODUCT_TYPES = ["PRODUCTO", "COMBO"];
+// otros productos; `price` es su precio fijo. SERVICIO: precio en variantes como un
+// PRODUCTO, sin stock; su línea de pedido lleva el turno. Ver
+// docs/servicios/dominio/Productos.md, Combos.md y Servicios.md.
+export const PRODUCT_TYPES = ["PRODUCTO", "COMBO", "SERVICIO"];
+
+// Para quién es un servicio (ver enum `ServiceRecipient` en prisma/schema.prisma).
+export const SERVICE_RECIPIENTS = ["DIRECTO", "TERCERO", "AMBOS"];
+
+// Campos exclusivos de SERVICIO, compartidos por alta y edición.
+const serviceFields = {
+  serviceRecipient: z
+    .enum(SERVICE_RECIPIENTS, {
+      invalid_type_error: "serviceRecipient debe ser DIRECTO, TERCERO o AMBOS",
+    })
+    .optional(),
+  // Cómo pregunta el storefront por el destinatario: "Nombre del perro", "Empresa".
+  serviceRecipientLabel: z
+    .string({ invalid_type_error: "La etiqueta del destinatario debe ser texto" })
+    .trim()
+    .max(60, "La etiqueta del destinatario no puede superar 60 caracteres")
+    .nullable()
+    .optional(),
+};
+
+const rejectServiceFields = (data, ctx) => {
+  for (const key of Object.keys(serviceFields)) {
+    if (data[key] != null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [key],
+        message: "Solo aplica a servicios",
+      });
+    }
+  }
+};
 
 export const createProduct = z
   .object({
@@ -135,7 +167,8 @@ export const createProduct = z
       .positive("El precio de lista debe ser mayor a 0")
       .nullable()
       .optional(),
-    // Solo aplica a PRODUCTO, junto con `price` (ver comentario de `price` arriba).
+    // Solo aplica a PRODUCTO, junto con `price` (ver comentario de `price` arriba). Un
+    // SERVICIO no tiene stock: su atajo de alta en 1 paso es `price` solo.
     stock: z.coerce
       .number({ invalid_type_error: "El stock debe ser un número" })
       .int("El stock debe ser un número entero")
@@ -172,8 +205,13 @@ export const createProduct = z
       .optional(),
     comboOptions: z.array(comboOption).optional().default([]),
     comboCategoryOptions: z.array(comboCategoryOption).optional().default([]),
+    ...serviceFields,
   })
   .superRefine((data, ctx) => {
+    if (data.type !== "SERVICIO") {
+      rejectServiceFields(data, ctx);
+    }
+
     if (data.type === "COMBO") {
       if (data.variants.length > 0) {
         ctx.addIssue({
@@ -218,8 +256,40 @@ export const createProduct = z
           message: "El precio de lista tiene que ser mayor al precio del combo",
         });
       }
+    } else if (data.type === "SERVICIO") {
+      if (data.stock !== undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["stock"],
+          message: "El stock no aplica a servicios",
+        });
+      }
+      if (data.variants.length > 0 && data.price !== undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["variants"],
+          message: "Enviá price o variants, no ambos",
+        });
+      }
+      if (data.compareAtPrice != null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["compareAtPrice"],
+          message: "El precio de lista solo aplica a combos",
+        });
+      }
     } else {
-      // PRODUCTO
+      // PRODUCTO. El stock de cada variante es opcional en `createVariant` porque un
+      // servicio no lo lleva; para un producto sigue siendo obligatorio.
+      data.variants.forEach((variant, index) => {
+        if (variant.stock === undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["variants", index, "stock"],
+            message: "El stock es requerido",
+          });
+        }
+      });
       if (data.variants.length > 0 && (data.price !== undefined || data.stock !== undefined)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -307,6 +377,9 @@ export const updateProduct = z
       .optional(),
     comboOptions: z.array(comboOption).optional(),
     comboCategoryOptions: z.array(comboCategoryOption).optional(),
+    // Servicios: si el producto no es (ni pasa a ser) SERVICIO, `ProductModel.edit`
+    // los rechaza — acá no se sabe el tipo actual.
+    ...serviceFields,
   })
   // Sin `.refine` de "al menos un campo": el caso vacío (ni body ni imagen) ya lo
   // corta `requireBodyOrImage` en la ruta, y ese refine rechazaba los updates que
@@ -316,14 +389,18 @@ export const updateProduct = z
   // cambiando el tipo) — si se omite, la transición no aplica y la regla no
   // corresponde chequearla acá (el servicio ya sabe el tipo actual).
   .superRefine((data, ctx) => {
-    if (data.type === "PRODUCTO" && data.price !== undefined) {
+    const variantPriced = data.type === "PRODUCTO" || data.type === "SERVICIO";
+    if (variantPriced && data.price !== undefined) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["price"],
         message: "El precio de un producto vive en cada variante, no a nivel producto",
       });
     }
-    if (data.type === "PRODUCTO" && data.compareAtPrice != null) {
+    if (data.type !== undefined && data.type !== "SERVICIO") {
+      rejectServiceFields(data, ctx);
+    }
+    if (variantPriced && data.compareAtPrice != null) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["compareAtPrice"],
@@ -398,7 +475,8 @@ export const productQuery = z
         )
       )
       .optional(),
-    // Filtro por tipo de producto (PRODUCTO/COMBO): match exacto sobre Product.type.
+    // Filtro por tipo de producto (PRODUCTO/COMBO/SERVICIO): match exacto sobre
+    // Product.type. `?type=SERVICIO` es la sección de servicios del storefront.
     type: z.enum(PRODUCT_TYPES, { invalid_type_error: "Tipo de producto inválido" }).optional(),
     // Destacados por ángulo de marketing (Page Builder → OfertContainer). Reusa el
     // mismo enum que Sugerencias; la resolución reusa ANGLE_PREDICATES (fuente única).

@@ -2,6 +2,7 @@ import prisma from "../lib/prisma.js";
 import { createError } from "../helpers/error.js";
 import { resolveProductStock, resolveVariantForProduct } from "../helpers/price.js";
 import { validateComboSelection } from "./combos.js";
+import { resolveServiceBooking } from "../helpers/service-booking.js";
 
 // Dueño del carrito: userId (autenticado) o guestId (cookie de invitado) — nunca
 // ambos ni ninguno, ver constraint CHECK en la migración de Cart. `where` usa el
@@ -44,8 +45,15 @@ export const CartModel = {
    * misma transacción) da un 409 de negocio legible; el índice único parcial de
    * `CartItem` (ver prisma/schema.prisma) sigue siendo el backstop real contra
    * condiciones de carrera.
+   *
+   * SERVICIO: mismo camino, con `service` (el turno) obligatorio. No hay stock que
+   * mirar y la línea es siempre de 1: volver a agregar el mismo servicio (y la misma
+   * variante) REEMPLAZA el turno en vez de sumar, igual que `addCombo` reemplaza la
+   * selección. Dos turnos del mismo servicio —dos perros del mismo tamaño— no entran
+   * en un carrito en v1: el unique (cartId, productId, variantId) de `CartItem` es por
+   * producto, no por turno. Ver docs/servicios/dominio/Servicios.md.
    */
-  async add({ tenantId, userId, guestId, productId, variantId }) {
+  async add({ tenantId, userId, guestId, productId, variantId, service }) {
     return prisma.$transaction(async (tx) => {
       const product = await tx.product.findFirst({
         where: { id: productId, tenantId },
@@ -82,6 +90,10 @@ export const CartModel = {
 
       const resolvedVariantId = variant.id;
 
+      // Antes de tocar el carrito: un turno inválido no puede dejar un carrito vacío
+      // creado. Para un PRODUCTO devuelve todo en null (y rechaza un `service` suelto).
+      const booking = resolveServiceBooking(product, service, { rejectPast: true });
+
       const cart = await tx.cart.upsert({
         where: cartOwnerWhere({ tenantId, userId, guestId }),
         update: {},
@@ -91,6 +103,26 @@ export const CartModel = {
       const existingItem = await tx.cartItem.findFirst({
         where: { cartId: cart.id, productId, variantId: resolvedVariantId },
       });
+
+      if (product.type === "SERVICIO") {
+        if (existingItem) {
+          return tx.cartItem.update({
+            where: { id: existingItem.id },
+            data: { quantity: 1, ...booking },
+            include: { product: true, variant: true },
+          });
+        }
+        return tx.cartItem.create({
+          data: {
+            cartId: cart.id,
+            productId,
+            variantId: resolvedVariantId,
+            quantity: 1,
+            ...booking,
+          },
+          include: { product: true, variant: true },
+        });
+      }
 
       const currentQuantity = existingItem?.quantity ?? 0;
       const stock = resolveProductStock(product, variant) ?? 0;
@@ -245,8 +277,9 @@ export const CartModel = {
    * Fusiona el carrito de invitado (cookie guestId) dentro del Cart del user que
    * acaba de loguearse: reparenta las líneas sin conflicto, suma cantidades cuando
    * el mismo producto+variante ya está en ambos carritos (clampeado a stock), y ante
-   * un conflicto de combo (mismo producto, variantId null) se queda con la selección
-   * que ya tenía el usuario logueado, descartando la del guest. Se llama desde
+   * un conflicto de combo (mismo producto, variantId null) o de servicio (mismo
+   * servicio y variante) se queda con la selección/turno que ya tenía el usuario
+   * logueado, descartando la del guest. Se llama desde
    * StoreAuthController.login; si no hay carrito de guest, es un no-op.
    */
   async mergeGuestCartIntoUser({ tenantId, userId, guestId }) {
@@ -286,7 +319,7 @@ export const CartModel = {
           continue;
         }
 
-        if (guestItem.variantId == null) {
+        if (guestItem.variantId == null || guestItem.product?.type === "SERVICIO") {
           await tx.cartItem.delete({ where: { id: guestItem.id } });
           continue;
         }

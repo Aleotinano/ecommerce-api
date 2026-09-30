@@ -3,6 +3,7 @@ import { createError } from "../helpers/error.js";
 import { deleteCloudinaryImage } from "../lib/imageManager.js";
 import { generateUniqueVariantSku } from "../utils/sku.js";
 import { TenantAttributeModel } from "./tenant-attributes.js";
+import { usesVariants, VARIANT_PRODUCT_TYPES } from "../helpers/service-booking.js";
 import { wrap, delPattern, hashParams, tenantNs } from "../lib/cache.js";
 import { addDays, startOfDay } from "./stats/utils.js";
 import {
@@ -54,9 +55,9 @@ const buildPriceRange = ({ minPrice, maxPrice }) => {
   return Object.keys(range).length ? range : null;
 };
 
-// Construye el WHERE de producto por tipo: PRODUCTO resuelve precio/atributos contra
-// ProductVariant (siempre tiene >=1); COMBO contra `Product.price` (su precio fijo,
-// no tiene atributos de variante).
+// Construye el WHERE de producto por tipo: PRODUCTO/SERVICIO resuelven precio/atributos
+// contra ProductVariant (siempre tienen >=1); COMBO contra `Product.price` (su precio
+// fijo, no tiene atributos de variante).
 const buildProductWhere = ({ base, attributes, minPrice, maxPrice }) => {
   const where = { ...base };
   const attributeFilter = buildVariantAttributeFilter(attributes);
@@ -65,14 +66,18 @@ const buildProductWhere = ({ base, attributes, minPrice, maxPrice }) => {
   const and = [];
 
   if (hasAttributeFilter) {
-    and.push({ type: "PRODUCTO", variants: { some: attributeFilter } });
+    and.push({ type: { in: VARIANT_PRODUCT_TYPES }, variants: { some: attributeFilter } });
   }
 
   if (priceRange) {
     and.push({
       OR: [
-        // PRODUCTO: precio de alguna variante activa (que además matchee el filtro de atributos si hay).
-        { type: "PRODUCTO", variants: { some: { ...attributeFilter, price: priceRange } } },
+        // PRODUCTO/SERVICIO: precio de alguna variante activa (que además matchee el
+        // filtro de atributos si hay).
+        {
+          type: { in: VARIANT_PRODUCT_TYPES },
+          variants: { some: { ...attributeFilter, price: priceRange } },
+        },
         // COMBO: precio fijo del combo. No aplica si hay filtro de atributos (un
         // combo no tiene atributos de variante).
         ...(hasAttributeFilter ? [] : [{ type: "COMBO", price: priceRange }]),
@@ -195,6 +200,13 @@ const ensureComboOptionsValid = async (tenantId, comboOptions, comboProductId = 
         400
       );
     }
+    if (product.type === "SERVICIO") {
+      throw createError(
+        "Un servicio no puede ser parte de un combo",
+        "COMBO_SERVICE_NOT_ALLOWED",
+        400
+      );
+    }
   }
 
   await ensureAllowedVariantsValid(
@@ -267,6 +279,13 @@ const ensureComboCategoryOptionsValid = async (
         throw createError(
           "No se permiten combos anidados",
           "COMBO_NESTED_NOT_ALLOWED",
+          400
+        );
+      }
+      if (product.type === "SERVICIO") {
+        throw createError(
+          "Un servicio no puede ser parte de un combo",
+          "COMBO_SERVICE_NOT_ALLOWED",
           400
         );
       }
@@ -495,7 +514,7 @@ export const ProductModel = {
           where: {
             tenantId,
             isActive: true,
-            product: { type: "PRODUCTO" },
+            product: { type: { in: VARIANT_PRODUCT_TYPES } },
           },
           select: { attributes: true },
         }),
@@ -524,8 +543,8 @@ export const ProductModel = {
   /**
    * Agregados del catálogo para las stat cards del header de Productos. El stock de
    * PRODUCTO siempre vive en sus `ProductVariant` (nunca en columnas de Product);
-   * COMBO no tiene stock propio (se excluye de bajo/sin stock, pero cuenta en
-   * total/activos).
+   * COMBO y SERVICIO no tienen stock propio (se excluyen de bajo/sin stock, pero
+   * cuentan en total/activos).
    */
   async getStats({ tenantId, lowStockThreshold = 5 }) {
     const key = `${tenantNs(tenantId)}:prod:stats:${lowStockThreshold}`;
@@ -555,7 +574,7 @@ export const ProductModel = {
       let lowStock = 0;
       let outOfStock = 0;
       for (const product of activeProducts) {
-        if (product.type === "COMBO") continue;
+        if (product.type !== "PRODUCTO") continue;
 
         const stock = stockOf.get(product.id) ?? 0;
 
@@ -645,18 +664,24 @@ export const ProductModel = {
     comboMaxItems,
     comboOptions = [],
     comboCategoryOptions = [],
+    serviceRecipient,
+    serviceRecipientLabel,
   }) {
     await ensureCategoryExists(tenantId, categoryId);
 
     let variantsWithSku = [];
 
-    if (type === "PRODUCTO") {
+    if (usesVariants(type)) {
       // `variants` puede venir vacío: alta en 2 pasos (el admin agrega la variante
       // principal después vía /variants/:productId), o traer `price`/`stock` sueltos
       // como atajo de alta en 1 paso (mutuamente excluyente con `variants[]`, ya
       // validado en el schema). Si vienen, la primera queda marcada `isDefault`.
-      const effectiveVariants =
-        variants.length > 0 ? variants : price !== undefined ? [{ price, stock }] : [];
+      //
+      // SERVICIO: mismo camino, sin stock — sus variantes lo guardan en 0 (la columna
+      // es NOT NULL) y nadie lo lee, ver `resolveProductStock`.
+      const effectiveVariants = (
+        variants.length > 0 ? variants : price !== undefined ? [{ price, stock }] : []
+      ).map((variant) => (type === "SERVICIO" ? { ...variant, stock: 0 } : variant));
       if (effectiveVariants.length > 0) {
         variantsWithSku = await buildVariantsWithSku({
           tenantId,
@@ -707,6 +732,10 @@ export const ProductModel = {
       isCombo: type === "COMBO",
       comboMinItems: type === "COMBO" ? comboMinItems ?? null : null,
       comboMaxItems: type === "COMBO" ? comboMaxItems ?? null : null,
+      // Exclusivos de SERVICIO. Sin `serviceRecipient` explícito el servicio es
+      // DIRECTO: no le pide al cliente nada que el local no haya decidido pedir.
+      serviceRecipient: type === "SERVICIO" ? serviceRecipient ?? "DIRECTO" : null,
+      serviceRecipientLabel: type === "SERVICIO" ? serviceRecipientLabel ?? null : null,
     };
 
     // Transacción porque los miembros explícitos de cada regla de categoría
@@ -799,6 +828,8 @@ export const ProductModel = {
       comboMaxItems,
       comboOptions,
       comboCategoryOptions,
+      serviceRecipient,
+      serviceRecipientLabel,
     }
   ) {
     const existing = await this.getByIdForManagement({ tenantId, id });
@@ -807,6 +838,19 @@ export const ProductModel = {
     const currentType = existing.type;
     const targetType = type ?? currentType;
     const isTypeChange = type !== undefined && type !== currentType;
+
+    // El schema solo puede rechazar estos campos cuando `type` viene en el body; el
+    // tipo actual lo conoce recién el service.
+    if (
+      targetType !== "SERVICIO" &&
+      (serviceRecipient != null || serviceRecipientLabel != null)
+    ) {
+      throw createError(
+        "serviceRecipient y serviceRecipientLabel solo aplican a servicios",
+        "SERVICE_FIELDS_NOT_ALLOWED",
+        400
+      );
+    }
 
     if (targetType === "COMBO" && comboOptions !== undefined) {
       await ensureComboOptionsValid(tenantId, comboOptions, id);
@@ -819,12 +863,16 @@ export const ProductModel = {
       }
     }
 
-    // Transición PRODUCTO -> COMBO: desactiva (nunca borra) lo que deja de aplicar —
-    // por integridad de OrderItem históricos que puedan referenciarlo. `isDefault` se
-    // preserva (no se limpia) para poder reactivar la misma variante si el producto
-    // vuelve a PRODUCTO más adelante (ver más abajo).
+    // Transición PRODUCTO/SERVICIO -> COMBO: desactiva (nunca borra) lo que deja de
+    // aplicar — por integridad de OrderItem históricos que puedan referenciarlo.
+    // `isDefault` se preserva (no se limpia) para poder reactivar la misma variante si
+    // el producto vuelve a tener variantes más adelante (ver más abajo).
+    //
+    // PRODUCTO <-> SERVICIO no toca las variantes: las dos formas se pricean igual. El
+    // stock que tuviera un producto queda guardado sin uso mientras sea servicio, y un
+    // servicio que pasa a producto arranca con el 0 de sus variantes — hay que cargarlo.
     if (isTypeChange) {
-      if (currentType === "PRODUCTO") {
+      if (usesVariants(currentType) && !usesVariants(targetType)) {
         await prisma.productVariant.updateMany({
           where: { productId: id, isActive: true },
           data: { isActive: false },
@@ -854,10 +902,10 @@ export const ProductModel = {
     }
 
     let newVariants;
-    // Al volver a PRODUCTO desde COMBO reactivamos la que era default (si había
-    // alguna) en vez de exigir variantes nuevas — un combo sin componentes propios
-    // vuelve al mismo estado transitorio "sin variante todavía" que un alta nueva.
-    if (currentType === "COMBO" && targetType === "PRODUCTO" && isTypeChange) {
+    // Al volver a PRODUCTO/SERVICIO desde COMBO reactivamos la que era default (si
+    // había alguna) en vez de exigir variantes nuevas — un combo sin componentes
+    // propios vuelve al mismo estado transitorio "sin variante todavía" que un alta.
+    if (currentType === "COMBO" && usesVariants(targetType) && isTypeChange) {
       const previousDefault = existing.variants.find((v) => v.isDefault);
       if (previousDefault) {
         await prisma.productVariant.update({
@@ -867,11 +915,16 @@ export const ProductModel = {
       }
     }
 
-    if (targetType === "PRODUCTO" && Array.isArray(variants) && variants.length > 0) {
+    if (usesVariants(targetType) && Array.isArray(variants) && variants.length > 0) {
+      if (targetType === "PRODUCTO" && variants.some((variant) => variant.stock === undefined)) {
+        throw createError("El stock es requerido", "STOCK_REQUIRED", 400);
+      }
       newVariants = await buildVariantsWithSku({
         tenantId,
         productName: existing.name,
-        variants,
+        variants: variants.map((variant) =>
+          targetType === "SERVICIO" ? { ...variant, stock: 0 } : variant
+        ),
       });
     }
 
@@ -891,6 +944,16 @@ export const ProductModel = {
         targetType === "COMBO" ? comboMinItems : isTypeChange ? null : undefined,
       comboMaxItems:
         targetType === "COMBO" ? comboMaxItems : isTypeChange ? null : undefined,
+      // Al volverse servicio sin decir para quién, queda DIRECTO (mismo default que
+      // el alta); al dejar de serlo se limpian.
+      serviceRecipient:
+        targetType === "SERVICIO"
+          ? serviceRecipient ?? (isTypeChange ? "DIRECTO" : undefined)
+          : isTypeChange
+            ? null
+            : undefined,
+      serviceRecipientLabel:
+        targetType === "SERVICIO" ? serviceRecipientLabel : isTypeChange ? null : undefined,
     };
 
     const updateData = Object.fromEntries(

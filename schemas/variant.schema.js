@@ -14,13 +14,14 @@ export const createVariant = z.object({
       invalid_type_error: "El precio debe ser un número",
     })
     .positive("El precio debe ser mayor a 0"),
+  // Obligatorio para la variante de un PRODUCTO, pero no acá: el schema no conoce el
+  // tipo, y la variante de un SERVICIO no tiene stock. Lo exigen `createProduct`
+  // (superRefine) y `VariantModel.createVariant` (STOCK_REQUIRED).
   stock: z.coerce
-    .number({
-      required_error: "El stock es requerido",
-      invalid_type_error: "El stock debe ser un número",
-    })
+    .number({ invalid_type_error: "El stock debe ser un número" })
     .int("El stock debe ser un número entero")
-    .min(0, "El stock no puede ser negativo"),
+    .min(0, "El stock no puede ser negativo")
+    .optional(),
   img: z
     .string({ invalid_type_error: "La imagen debe ser texto" })
     .url("La URL de la imagen no es válida")

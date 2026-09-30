@@ -147,7 +147,8 @@ const resolveProductLabel = ({ product, metrics, isTopSeller, lowStockThreshold 
     return { key: "best_seller", label: "mas vendido", tone: "danger" };
   }
 
-  if (product.type === "COMBO") {
+  // SERVICIO: sin stock, igual que COMBO (ver helpers/price.js).
+  if (product.type === "COMBO" || product.type === "SERVICIO") {
     if (metrics.unitsSold === 0 && product.isActive) {
       return { key: "forgotten", label: "olvidado", tone: "info" };
     }

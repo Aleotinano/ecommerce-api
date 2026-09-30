@@ -37,7 +37,8 @@ const activeVariants = (product) =>
  * mas abajo. Ver docs/servicios/dominio/Combos.md.
  */
 const totalStock = (product) => {
-  if (product.type === "COMBO") {
+  // SERVICIO tampoco tiene stock (vende turnos, ver helpers/price.js).
+  if (product.type === "COMBO" || product.type === "SERVICIO") {
     return null;
   }
   return activeVariants(product).reduce((sum, variant) => sum + variant.stock, 0);

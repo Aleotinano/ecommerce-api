@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { dayBoundary } from "./date.schema.js";
 import { comboSelectionEntry } from "./combo.schema.js";
+import { serviceBooking } from "./service.schema.js";
 
 // READY = "listo para retirar/enviar". Es un paso opcional entre PROCESSING y
 // COMPLETED (ver services/order-state.js): un panel viejo que no lo ofrezca
@@ -206,6 +207,9 @@ const orderCreateItem = z.object({
     .array(comboSelectionEntry)
     .min(1, "La selección del combo no puede estar vacía")
     .optional(),
+  // Turno de una línea de SERVICIO (día, hora, para quién). Obligatorio si el
+  // producto es un servicio; lo valida `resolveServiceBooking` en `priceItems`.
+  service: serviceBooking.optional(),
 });
 
 // Creación de orden: entrega/retiro + método de pago.
@@ -272,6 +276,9 @@ export const orderReview = z
             .max(150, "La nota de la línea no puede superar 150 caracteres")
             .nullable()
             .optional(),
+          // Reprogramar el turno de una línea de SERVICIO. Reemplaza el turno
+          // completo; si no viene, se conserva el que tenía.
+          service: serviceBooking.optional(),
         })
       )
       .optional(),

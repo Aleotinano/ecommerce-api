@@ -9,6 +9,7 @@ import {
   getUploadedReceiptFile,
 } from "../middleware/upload.js";
 import { logger } from "../lib/logger.js";
+import { serviceBookingOf } from "../helpers/service-booking.js";
 
 const log = logger.child({ module: "orders-controller" });
 
@@ -131,6 +132,7 @@ function customerOrderView(order) {
       image: item.variant?.img ?? item.product?.img ?? null,
       note: item.note,
       combo: comboOf(item),
+      service: serviceBookingOf(item),
     })),
     timeline: (order.statusHistory ?? []).map((entry) => ({
       estado: entry.toStatus,
@@ -223,6 +225,7 @@ export class OrderController {
             attributes: item.variant?.attributes ?? {},
             note: item.note,
             combo: comboOf(item),
+            service: serviceBookingOf(item),
           })),
         },
         // Deep-link para que el cliente mande el pedido por WhatsApp. Es la
@@ -270,6 +273,7 @@ export class OrderController {
           attributes: item.variant?.attributes ?? {},
           note: item.note,
           combo: comboOf(item),
+          service: serviceBookingOf(item),
         })),
       }));
 
@@ -337,6 +341,7 @@ export class OrderController {
           attributes: item.variant?.attributes ?? {},
           note: item.note,
           combo: comboOf(item),
+          service: serviceBookingOf(item),
         })),
       }));
 
@@ -545,6 +550,7 @@ export class OrderController {
             attributes: item.variant?.attributes ?? {},
             note: item.note,
             combo: comboOf(item),
+            service: serviceBookingOf(item),
           })),
         },
       });

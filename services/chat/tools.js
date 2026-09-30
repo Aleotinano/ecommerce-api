@@ -19,6 +19,10 @@
  *  - Combos (`product.type === "COMBO"`): el bot todavía no los vende — se
  *    listan/describen, pero `createDraftOrder` los rechaza con un mensaje
  *    amigable. Ver docs/servicios/dominio/Combos.md.
+ *  - Servicios (`product.type === "SERVICIO"`): mismo criterio. Se describen
+ *    (siempre disponibles: no tienen stock), pero pedirlos exige un turno —día,
+ *    hora, para quién— que el bot no sabe tomar todavía. Ver
+ *    docs/servicios/dominio/Servicios.md.
  */
 import { ProductModel } from "../productos.js";
 import { CategoryModel } from "../categories.js";
@@ -89,7 +93,7 @@ const buildCreationContext = (history = [], message = "") => {
  * reporta siempre disponible en v1 (el bot igual no lo vende, ver `createDraftOrder`).
  */
 const hasStock = (product) => {
-  if (product.type === "COMBO") {
+  if (product.type === "COMBO" || product.type === "SERVICIO") {
     return true;
   }
   return (product.variants ?? []).some((v) => v.isActive && v.stock > 0);
@@ -186,10 +190,12 @@ export const buildToolContext = ({ tenantId, user, config, channel }) => {
         };
       }
 
+      // Un servicio no tiene stock: sus variantes (ej. tamaño del perro) están
+      // siempre disponibles.
       let variantes = (product.variants ?? []).map((v) => ({
         atributos: v.attributes ?? {},
         precio: getProductPrice(v, product),
-        disponible: v.stock > 0,
+        disponible: product.type === "SERVICIO" || v.stock > 0,
       }));
 
       if (!showOutOfStock) {
@@ -211,7 +217,7 @@ export const buildToolContext = ({ tenantId, user, config, channel }) => {
 
       const product = await ProductModel.getById({ tenantId, id: productId });
 
-      if (product.type === "COMBO") {
+      if (product.type === "COMBO" || product.type === "SERVICIO") {
         return { disponible: true };
       }
 
@@ -315,6 +321,15 @@ export const buildToolContext = ({ tenantId, user, config, channel }) => {
         if (product.type === "COMBO") {
           return {
             error: `"${product.name}" es un combo armable — por ahora esos se arman en el local, contactanos para coordinarlo.`,
+          };
+        }
+
+        // Servicios: el pedido necesita un turno (día, hora, para quién) que el bot
+        // todavía no toma. Sin esto, `priceItems` igual lo frenaría con
+        // SERVICE_BOOKING_REQUIRED, pero como error crudo en medio del chat.
+        if (product.type === "SERVICIO") {
+          return {
+            error: `"${product.name}" es un servicio con turno — por ahora los turnos se piden desde la tienda online o coordinándolo directamente con el local.`,
           };
         }
 

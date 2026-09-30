@@ -219,7 +219,8 @@ El storefront NO usa cookies. Cada request protegida necesita `Authorization: Be
 > **Productos y carrito por tipo (UNIDAD/VARIANTE/COMBO):** desde 2026-07-08 las rutas de carrito son
 > por `:productId` (antes `:variantId`) y todo alta/edición de producto exige `type`. Contrato completo,
 > breaking changes y ejemplos en [FRONTEND_PRODUCT_TYPES.md](FRONTEND_PRODUCT_TYPES.md); armado de
-> combos en [FRONTEND_COMBOS.md](FRONTEND_COMBOS.md).
+> combos en [FRONTEND_COMBOS.md](FRONTEND_COMBOS.md); servicios con turno (`type: "SERVICIO"`, body
+> `service` en el carrito) en [FRONTEND_SERVICIOS.md](FRONTEND_SERVICIOS.md).
 
 > **Checkout (breaking, 2026-07-23 / 2026-07-26):** `POST /store/orders` y `POST /orders` exigen
 > `fulfillmentMethod` + `paymentMethod` en el body; si el pago es mixto van también los montos, y si

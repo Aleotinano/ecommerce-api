@@ -297,10 +297,29 @@ model Categories {
 // la principal — precio/stock se leen SIEMPRE de la variante, nunca de columnas propias
 // de Product (ver `ProductVariant.isDefault`). COMBO: `Product.price` es su precio fijo;
 // no tiene stock ni variantes propias (se valida/descuenta sobre los componentes
-// elegidos). Ver docs/servicios/dominio/Productos.md y Combos.md.
+// elegidos). SERVICIO: se vende como un PRODUCTO (precio en variantes: "perro chico /
+// mediano / grande") pero SIN stock — lo que se compra es un turno, y cada línea del
+// pedido lleva día, hora y para quién es. Ver docs/servicios/dominio/Productos.md,
+// Combos.md y Servicios.md.
 enum ProductType {
   PRODUCTO
   COMBO
+  SERVICIO
+}
+
+// Para quién es un SERVICIO, definido POR SERVICIO (no por tenant: una veterinaria
+// puede ofrecer baño para la mascota y una consulta para el dueño).
+//   DIRECTO  lo recibe quien lo contrata (un corte de pelo para uno mismo). No se
+//            pide destinatario.
+//   TERCERO  siempre es para otro (el perro en una peluquería canina, la empresa en
+//            un catering). El nombre del destinatario es obligatorio.
+//   AMBOS    el cliente elige: un turno de peluquería para sí o para su hijo. El
+//            nombre es opcional; sin nombre, es para quien contrata.
+// Ver docs/servicios/dominio/Servicios.md.
+enum ServiceRecipient {
+  DIRECTO
+  TERCERO
+  AMBOS
 }
 
 model Product {
@@ -348,6 +367,13 @@ model Product {
   // Promos de descuento por cantidad vinculadas a este producto (solo PRODUCTO,
   // nunca COMBO — ver services/promos.js). Ver [[Promo]] más abajo.
   promoLinks PromoProduct[]
+
+  // Exclusivos de SERVICIO (null en PRODUCTO/COMBO). `serviceRecipient` decide si el
+  // turno pide el nombre de a quién se le presta; `serviceRecipientLabel` es cómo se
+  // lo pregunta el storefront ("Nombre del perro", "Empresa") — null = texto default
+  // del front. Ver `ServiceRecipient` y docs/servicios/dominio/Servicios.md.
+  serviceRecipient      ServiceRecipient?
+  serviceRecipientLabel String?
 
   @@index([tenantId])
 }
@@ -590,6 +616,12 @@ model CartItem {
   // al agregar (services/combos.js) y se vuelve a validar al pasar a orden — nunca
   // se confía en este JSON al leerlo. null para líneas que no son combo.
   comboSelection Json?
+
+  // Turno pedido para una línea de SERVICIO (null en las demás). Mismas columnas que
+  // en `OrderItem`, donde se copian al hacer checkout. Ver `OrderItem.serviceDate`.
+  serviceDate          DateTime? @db.Date
+  serviceTime          String?
+  serviceRecipientName String?
 
   @@unique([cartId, productId, variantId])
 }
@@ -859,9 +891,27 @@ model OrderItem {
   parentItem   OrderItem?  @relation("ComboItems", fields: [parentItemId], references: [id], onDelete: Cascade)
   childItems   OrderItem[] @relation("ComboItems")
 
+  // Turno de una línea de SERVICIO: qué día, a qué hora y para quién. null en las
+  // líneas de PRODUCTO/COMBO. Columnas y no JSON (a diferencia de `comboSelection`)
+  // porque la pregunta que viene es "¿qué turnos tengo el martes?", y eso es un WHERE.
+  //
+  // Día y hora van separados y la hora como texto "HH:MM" a propósito: es la hora de
+  // reloj del local, no un instante. Un `DateTime` con zona obligaría a decidir en qué
+  // huso vive cada tenant, y el proyecto no tiene esa noción (ver [[Estadísticas]]):
+  // "el martes a las 10" se guarda exactamente así. `@db.Date` no tiene hora, así que
+  // tampoco puede correrse de día al serializarse.
+  //
+  // Los dos van juntos, y la hora con formato HH:MM (CHECKs en la migración
+  // `..._product_type_servicio`). `serviceRecipientName` null = el servicio es para
+  // quien lo contrató (su nombre ya está en `Order.contactName`).
+  serviceDate          DateTime? @db.Date
+  serviceTime          String?
+  serviceRecipientName String?
+
   @@index([orderId, variantId])
   @@index([orderId, productId])
   @@index([parentItemId])
+  @@index([serviceDate])
 }
 
 // ---------------------------------------------------------------------------

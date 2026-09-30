@@ -213,6 +213,17 @@ export async function validateComboSelection({
     if (product.type === "COMBO") {
       throw createError("No se permiten combos anidados", "COMBO_NESTED_NOT_ALLOWED", 400);
     }
+    // Un servicio necesita su turno (día, hora, para quién) y un combo no tiene dónde
+    // llevarlo. Llega hasta acá solo por una regla de categoría SIN miembros que
+    // abarca una categoría con servicios: las whitelists explícitas ya lo rechazan
+    // al guardarse (services/productos.js).
+    if (product.type === "SERVICIO") {
+      throw createError(
+        "Un servicio no puede ser parte de un combo",
+        "COMBO_SERVICE_NOT_ALLOWED",
+        400
+      );
+    }
     if (!product.isActive) {
       const error = createError(
         "Producto del combo no disponible",

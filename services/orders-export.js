@@ -11,6 +11,7 @@ import {
 } from "../helpers/xlsx.js";
 import { paymentSummary } from "./order-state.js";
 import { getStatusMeta } from "./order-status.js";
+import { serviceBookingOf } from "../helpers/service-booking.js";
 
 /**
  * Exportación de órdenes a Excel.
@@ -47,6 +48,18 @@ function formatAttributes(attributes) {
   const entries = Object.entries(attributes ?? {});
   if (entries.length === 0) return null;
   return entries.map(([key, value]) => `${key}: ${value}`).join(", ");
+}
+
+/**
+ * El turno de una línea de servicio como texto: "05/10/2026 10:30 · Firulais". Día
+ * armado a mano desde el `YYYY-MM-DD` y no con `formatDay`: es una fecha de reloj
+ * del local, no un instante, y pasarla por una zona podría correrla de día.
+ */
+function formatServiceBooking(booking) {
+  if (!booking) return null;
+  const [year, month, day] = booking.date.split("-");
+  const when = `${day}/${month}/${year} ${booking.time}`;
+  return booking.recipientName ? `${when} · ${booking.recipientName}` : when;
 }
 
 /** Quién es el cliente: la cuenta registrada o, en las del bot, el contacto. */
@@ -146,6 +159,7 @@ export async function buildOrdersWorkbook({
     { header: `Unitario (${currency})`, key: "unitario", width: 14 },
     { header: `Subtotal (${currency})`, key: "subtotal", width: 14 },
     { header: "Nota", key: "nota", width: 30 },
+    { header: "Turno", key: "turno", width: 28 },
   ];
   styleHeader(detalle.getRow(1));
 
@@ -160,6 +174,7 @@ export async function buildOrdersWorkbook({
         unitario: item.price,
         subtotal: item.price * item.quantity,
         nota: item.note ?? "—",
+        turno: formatServiceBooking(serviceBookingOf(item)) ?? "—",
       });
 
       row.getCell("fecha").numFmt = DATETIME_FORMAT;
@@ -168,7 +183,7 @@ export async function buildOrdersWorkbook({
     }
   }
 
-  detalle.autoFilter = { from: "A1", to: "H1" };
+  detalle.autoFilter = { from: "A1", to: "I1" };
   detalle.views = [{ state: "frozen", ySplit: 1 }];
 
   // ── Hoja 3: los totales del período ──────────────────────────────────────

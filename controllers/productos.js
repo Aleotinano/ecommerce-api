@@ -109,6 +109,8 @@ export class productsController {
         comboMaxItems,
         comboOptions,
         comboCategoryOptions,
+        serviceRecipient,
+        serviceRecipientLabel,
       } = req.body;
 
       if (uploadedFile) {
@@ -135,6 +137,8 @@ export class productsController {
         comboMaxItems,
         comboOptions,
         comboCategoryOptions,
+        serviceRecipient,
+        serviceRecipientLabel,
       });
 
       return res.status(201).json({
@@ -177,6 +181,8 @@ export class productsController {
         comboMaxItems,
         comboOptions,
         comboCategoryOptions,
+        serviceRecipient,
+        serviceRecipientLabel,
       } = req.body;
 
       const imageData = {};
@@ -211,6 +217,8 @@ export class productsController {
           comboMaxItems,
           comboOptions,
           comboCategoryOptions,
+          serviceRecipient,
+          serviceRecipientLabel,
           ...imageData,
         }
       );

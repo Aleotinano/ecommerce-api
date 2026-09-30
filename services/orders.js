@@ -15,6 +15,7 @@ import {
   orderTrackingCutoff,
 } from "../lib/tokens.js";
 import { validateComboSelection } from "./combos.js";
+import { resolveServiceBooking, serviceBookingOf } from "../helpers/service-booking.js";
 import {
   CashRegisterModel,
   hasCashChannels,
@@ -124,7 +125,8 @@ const orderItemsInclude = {
 };
 
 /**
- * Valida una lista de items `{ productId, variantId?, quantity, note?, comboSelection? }`
+ * Valida una lista de items `{ productId, variantId?, quantity, note?, comboSelection?,
+ * service? }`
  * contra el catálogo del tenant y resuelve el precio SERVER-SIDE. Devuelve los items con
  * precio y el total. Compartido por la creación desde carrito, la creación borrador del
  * bot y la revisión admin (no se duplica la validación ni el pricing). Corre dentro de
@@ -138,9 +140,14 @@ const orderItemsInclude = {
  * como `OrderItem` hijos con `price: 0` (el cobro ya está en el padre, que cobra el
  * precio fijo del combo). Ver docs/servicios/dominio/Combos.md.
  *
+ * Si el producto es SERVICIO, el item DEBE traer `service` (el turno: día, hora y
+ * para quién) — lo valida `resolveServiceBooking` contra el producto y viaja en las
+ * columnas `serviceX` de la línea. Un servicio no tiene stock que validar. Ver
+ * docs/servicios/dominio/Servicios.md.
+ *
  * @param {object}  tx                 cliente de transacción de Prisma
  * @param {number}  tenantId
- * @param {Array}   items              `[{ productId, variantId?, quantity, note?, comboSelection? }]`
+ * @param {Array}   items              `[{ productId, variantId?, quantity, note?, comboSelection?, service? }]`
  * @param {object}  [opts]
  * @param {boolean} [opts.checkStock]  si valida stock (carrito sí; bot a-pedido no)
  * @returns {Promise<{ pricedItems: Array, total: number }>}
@@ -203,9 +210,10 @@ async function priceItems(tx, tenantId, items, { checkStock = true } = {}) {
     }
 
     // Los combos no tienen stock propio: el chequeo de stock corre sobre los
-    // componentes elegidos, más abajo (validateComboSelection).
-    if (checkStock && product.type !== "COMBO") {
-      const stock = resolveProductStock(product, variant) ?? 0;
+    // componentes elegidos, más abajo (validateComboSelection). Los servicios no
+    // tienen stock en absoluto (`resolveProductStock` → null).
+    const stock = product.type === "COMBO" ? null : resolveProductStock(product, variant);
+    if (checkStock && stock != null) {
       if (item.quantity > stock) {
         const error = createError(
           "Stock insuficiente",
@@ -256,6 +264,11 @@ async function priceItems(tx, tenantId, items, { checkStock = true } = {}) {
       }));
     }
 
+    // Sin `rejectPast`: el carrito ya lo validó al agregar, el mostrador puede estar
+    // registrando un turno que ya se hizo y la revisión no puede trabarse porque el
+    // día pasó.
+    const booking = resolveServiceBooking(product, item.service);
+
     pricedItems.push({
       productId: item.productId,
       variantId: variant?.id ?? null,
@@ -263,6 +276,7 @@ async function priceItems(tx, tenantId, items, { checkStock = true } = {}) {
       price: finalPrice,
       note: item.note ?? null,
       comboChildren,
+      ...booking,
     });
   }
 
@@ -278,14 +292,28 @@ async function priceItems(tx, tenantId, items, { checkStock = true } = {}) {
  */
 async function insertOrderItems(tx, orderId, pricedItems) {
   await tx.orderItem.createMany({
-    data: pricedItems.map(({ productId, variantId, quantity, price, note }) => ({
-      orderId,
-      productId,
-      variantId,
-      quantity,
-      price,
-      note,
-    })),
+    data: pricedItems.map(
+      ({
+        productId,
+        variantId,
+        quantity,
+        price,
+        note,
+        serviceDate,
+        serviceTime,
+        serviceRecipientName,
+      }) => ({
+        orderId,
+        productId,
+        variantId,
+        quantity,
+        price,
+        note,
+        serviceDate,
+        serviceTime,
+        serviceRecipientName,
+      })
+    ),
   });
 
   // Autoincrement + misma transacción: el orden de inserción coincide con el
@@ -817,12 +845,14 @@ export const OrderModel = {
               quantity: item.quantity,
               note: item.note ?? undefined,
               comboSelection: item.comboSelection ?? undefined,
+              service: item.service ?? undefined,
             }))
           : cart.items.map((item) => ({
               productId: item.productId,
               variantId: item.variantId ?? undefined,
               quantity: item.quantity,
               comboSelection: item.comboSelection ?? undefined,
+              service: serviceBookingOf(item) ?? undefined,
             }))
       );
 
@@ -1221,10 +1251,12 @@ export const OrderModel = {
 
     // Líneas que representan stock REAL a validar/descontar: para un combo, sus
     // hijos (los componentes elegidos); para una línea normal, ella misma. El
-    // combo-padre nunca tiene stock propio.
-    const stockLines = order.orderItems.flatMap((item) =>
-      item.childItems?.length ? item.childItems : [item]
-    );
+    // combo-padre nunca tiene stock propio, y un servicio tampoco: su variante tiene
+    // `variantId` (se pricea como un producto) pero descontarle stock haría fallar la
+    // orden al completarla.
+    const stockLines = order.orderItems
+      .filter((item) => item.product?.type !== "SERVICIO")
+      .flatMap((item) => (item.childItems?.length ? item.childItems : [item]));
 
     // Entregar es cobrar: una orden que se completa sin nada pendiente en el libro
     // dejaba la plata sin registrar (típico del efectivo, donde no hay ninguna
@@ -1466,6 +1498,9 @@ export const OrderModel = {
             // "note" in edit distingue "no la mandó" (mantener la actual) de
             // "la mandó en null" (borrarla).
             note: edit && "note" in edit ? edit.note : it.note,
+            // Reprogramar un turno es la corrección típica de un servicio ("el martes
+            // no puedo, ¿el miércoles?"). Sin `service` en el edit, se conserva.
+            service: edit?.service ?? serviceBookingOf(it) ?? undefined,
             comboSelection: it.childItems?.length
               ? it.childItems.map((c) => ({
                   productId: c.productId,
@@ -1488,7 +1523,14 @@ export const OrderModel = {
           const original = order.orderItems[index];
           await tx.orderItem.update({
             where: { id: original.id },
-            data: { quantity: pi.quantity, price: pi.price, note: pi.note },
+            data: {
+              quantity: pi.quantity,
+              price: pi.price,
+              note: pi.note,
+              serviceDate: pi.serviceDate,
+              serviceTime: pi.serviceTime,
+              serviceRecipientName: pi.serviceRecipientName,
+            },
           });
 
           for (const child of pi.comboChildren ?? []) {

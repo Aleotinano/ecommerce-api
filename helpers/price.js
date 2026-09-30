@@ -4,8 +4,8 @@ export const roundMoney = (n) => Math.round(n * 100) / 100;
 /**
  * Precio efectivo de una línea, según el tipo de producto (`Product.type`):
  * - COMBO: `product.price` (precio fijo del combo).
- * - PRODUCTO: `variant.price` (autoritativo — todo PRODUCTO tiene siempre una
- *   variante, nunca hay fallback a nivel producto). `null` si por algún motivo no
+ * - PRODUCTO / SERVICIO: `variant.price` (autoritativo — todo PRODUCTO tiene siempre
+ *   una variante, nunca hay fallback a nivel producto). `null` si por algún motivo no
  *   se resolvió ninguna variante (ver `resolveVariantForProduct`).
  */
 export function getProductPrice(variant, product) {
@@ -16,13 +16,17 @@ export function getProductPrice(variant, product) {
 }
 
 /**
- * Stock efectivo de una línea, según el tipo de producto:
+ * Stock efectivo de una línea, según el tipo de producto. `null` = no hay stock que
+ * validar ni descontar:
  * - COMBO: `null` — no tiene stock propio, se valida/descuenta sobre los componentes
  *   elegidos (ver services/combos.js, services/orders.js).
+ * - SERVICIO: `null` — lo que se vende es un turno, no una unidad de inventario. La
+ *   columna `ProductVariant.stock` de sus variantes existe (es NOT NULL) pero no
+ *   significa nada: queda en 0 y nadie la lee.
  * - PRODUCTO: `variant.stock`.
  */
 export function resolveProductStock(product, variant) {
-  if (product?.type === "COMBO") {
+  if (product?.type === "COMBO" || product?.type === "SERVICIO") {
     return null;
   }
   return variant?.stock ?? 0;

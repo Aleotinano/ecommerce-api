@@ -14,7 +14,7 @@ código se marca como `> [!todo] TBD`.
 > [!note] Estado de la documentación
 > - ✅ Documentados: [[Órdenes]], [[Sugerencias de contenido]], [[Productos]], [[TenantConfig]],
 >   [[Categorías]], [[Combos]], [[Variantes]], [[Carrito]], [[MercadoPago]], [[Estadísticas]], [[Roles]],
->   [[Direcciones]], [[Perfiles de flujo de venta]], [[Caja]], [[Cloudinary por tenant]]
+>   [[Direcciones]], [[Perfiles de flujo de venta]], [[Caja]], [[Cloudinary por tenant]], [[Servicios]]
 > - ⚠️ Implementado **sin doc de dominio**: Promos (descuento por cantidad, `services/promos.js` + `/promos`)
 > - 📐 Propuestas: [[Sugerencias de contenido — Imágenes (propuesta)]] (librería lista, feature no
 >   expuesta), [[Producción sin cuentas (propuesta)]] (plan puro, nada implementado),
@@ -54,7 +54,7 @@ Dentro de "Deuda técnica" cada ítem se etiqueta por **tipo de acción**, para 
 
 ## Servicios de dominio
 
-- [[Productos]] — catálogo de productos del tenant, con tipo explícito (`PRODUCTO`/`COMBO`).
+- [[Productos]] — catálogo de productos del tenant, con tipo explícito (`PRODUCTO`/`COMBO`/`SERVICIO`).
   `services/productos.js`, `controllers/store/products.js`.
 - [[Categorías]] — categorías y subcategorías (árbol `parent`/`children`) por tenant, orden configurable
   vía `position`. `services/categories.js`.
@@ -90,6 +90,9 @@ Dentro de "Deuda técnica" cada ítem se etiqueta por **tipo de acción**, para 
 - [[Combos]] — productos compuestos de otros productos, el cliente arma su propio combo eligiendo
   entre productos permitidos. `services/combos.js`, `services/productos.js`, `services/cart.js`,
   `services/orders.js`. Ver también [[mesa dulce demo]].
+- [[Servicios]] — productos que se venden como turno (peluquería canina, peluquería, catering):
+  `type = "SERVICIO"`, precio por variante, sin stock, y cada línea del pedido lleva día, hora y para
+  quién. `helpers/service-booking.js` (reglas del turno), `services/cart.js`, `services/orders.js`.
 - [[Caja]] — turno de caja física: apertura, movimientos, arqueo. Además del cobro de las órdenes
   (que cae solo, un movimiento por fila del libro), es el libro de la plata del local: sueldos,
   insumos y retiros con etiqueta del catálogo del tenant y destinatario. Opt-in por tenant

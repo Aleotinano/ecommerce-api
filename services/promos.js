@@ -92,7 +92,7 @@ async function validateProducts(tx, tenantId, productIds) {
   const comboIds = products.filter((p) => p.type !== "PRODUCTO").map((p) => p.id);
   if (comboIds.length) {
     const error = createError(
-      "Los combos no pueden tener promociones por cantidad, solo productos",
+      "Solo los productos pueden tener promociones por cantidad (ni combos ni servicios)",
       "PROMO_PRODUCT_TYPE_NOT_ALLOWED",
       400
     );

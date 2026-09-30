@@ -29,8 +29,8 @@ Fuente: `prisma/schema.prisma` (modelos `Product`, `ProductVariant`, enum `Produ
   y en un PRODUCTO se rechaza. El día que un PRODUCTO necesite precio tachado, el campo espejo va en
   `ProductVariant`, que es donde vive su precio. Primer uso real: las 10 promos con "AHORRÁ $X"
   impreso de [[punto-healthy]].
-- **`type: ProductType`** (`PRODUCTO | COMBO`, **NOT NULL**) — fuente única de verdad de qué forma
-  tiene el producto. Colapsado desde los 3 valores originales (`UNIDAD`/`VARIANTE`/`COMBO`) — ver
+- **`type: ProductType`** (`PRODUCTO | COMBO | SERVICIO`, **NOT NULL**) — fuente única de verdad de
+  qué forma tiene el producto. `SERVICIO` se sumó el 2026-10-01, ver [[Servicios]]. Colapsado desde los 3 valores originales (`UNIDAD`/`VARIANTE`/`COMBO`) — ver
   Deuda técnica.
 - **`ProductVariant`** — ver [[Variantes]]: `attributes: Json = {}` (atributos flexibles del catálogo
   `TenantAttribute` del tenant, ej. `{"color":"#fff","talle":"M"}` o `{"sabor":"chocolate"}`),
@@ -43,6 +43,7 @@ Fuente: `prisma/schema.prisma` (modelos `Product`, `ProductVariant`, enum `Produ
 | --- | --- | --- | --- | --- |
 | **PRODUCTO** | por variante (`ProductVariant.price`; la default es el precio "de lista") | por variante | ≥1 (la default; más si hay ejes de elección reales) | cualquier producto vendible por sí mismo — simple (una sola variante, `attributes: {}`) o con opciones (talle, sabor…) |
 | **COMBO** | `Product.price` (fijo) | sin stock propio, ver [[Combos]] | vacío | producto compuesto de otros productos |
+| **SERVICIO** | por variante, como PRODUCTO | **sin stock** (`resolveProductStock` → `null`; la columna de la variante queda en 0) | ≥1, como PRODUCTO | un turno: cada línea del pedido lleva día, hora y para quién — ver [[Servicios]] |
 
 > [!note] Precio/stock efectivo
 > `getProductPrice(variant, product)` y `resolveProductStock(product, variant)`

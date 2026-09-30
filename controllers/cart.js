@@ -2,6 +2,7 @@ import prisma from "../lib/prisma.js";
 import { CartModel } from "../services/cart.js";
 import { getProductPrice, resolveProductStock } from "../helpers/price.js";
 import { getPromoTiersByProduct, pickPromoTier, applyPromoDiscount } from "../services/promos.js";
+import { serviceBookingOf } from "../helpers/service-booking.js";
 
 // Este controller es compartido por /cart (admin, exige login vía verifyToken, sin
 // req.cartOwner) y /store/cart (storefront, admite guest vía resolveCartOwner). El
@@ -66,6 +67,9 @@ export class cartController {
             img: item.variant?.img ?? item.product?.img ?? null,
             quantity: item.quantity,
             comboSelection: item.comboSelection ?? null,
+            // Turno de una línea de SERVICIO (`{ date, time, recipientName }`), null en
+            // las demás.
+            service: serviceBookingOf(item),
           };
         }),
       });
@@ -106,7 +110,7 @@ export class cartController {
     try {
       const { userId, guestId } = resolveOwner(req);
       const productId = req.params.productId;
-      const { variantId } = req.body ?? {};
+      const { variantId, service } = req.body ?? {};
 
       const cartItem = await CartModel.add({
         tenantId: req.tenantId,
@@ -114,6 +118,7 @@ export class cartController {
         guestId,
         productId,
         variantId,
+        service,
       });
 
       const stock = resolveProductStock(cartItem.product, cartItem.variant);
@@ -131,6 +136,7 @@ export class cartController {
             : null,
           cantidad: cartItem.quantity,
           stockRestante: stock != null ? stock - cartItem.quantity : null,
+          service: serviceBookingOf(cartItem),
         },
       });
     } catch (error) {

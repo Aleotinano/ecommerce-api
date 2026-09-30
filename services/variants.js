@@ -109,6 +109,12 @@ export const VariantModel = {
   }) {
     const product = await ensureProductIsNotCombo(tenantId, productId);
 
+    // La variante de un SERVICIO no tiene stock (ver `resolveProductStock`); la de
+    // un PRODUCTO sí, y el schema ya no lo exige porque no conoce el tipo.
+    if (product.type === "PRODUCTO" && stock === undefined) {
+      throw createError("El stock es requerido", "STOCK_REQUIRED", 400);
+    }
+
     // Valida contra el catálogo del tenant y normaliza (orden de keys estable).
     const normalizedAttributes = await TenantAttributeModel.validateAttributes({
       tenantId,
@@ -134,7 +140,7 @@ export const VariantModel = {
         productId,
         attributes: normalizedAttributes,
         price,
-        stock,
+        stock: product.type === "SERVICIO" ? 0 : stock,
         sku,
         img: img ?? null,
         imgPublicId: imgPublicId ?? null,
