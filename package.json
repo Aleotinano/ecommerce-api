@@ -38,6 +38,11 @@
     "seed:pastaia:atributos": "node prisma/pastaia/atributos.js",
     "seed:pastaia:productos": "node prisma/pastaia/productos.js",
     "seed:pastaia:config": "node prisma/pastaia/config.js",
+    "seed:agencia-video": "node prisma/agencia-video/index.js",
+    "seed:agencia-video:categorias": "node prisma/agencia-video/categorias.js",
+    "seed:agencia-video:atributos": "node prisma/agencia-video/atributos.js",
+    "seed:agencia-video:productos": "node prisma/agencia-video/productos.js",
+    "seed:agencia-video:config": "node prisma/agencia-video/config.js",
     "receipts:purge": "node scripts/purge-receipts.js",
     "cloudinary:check": "node scripts/check-cloudinary.js"
   },

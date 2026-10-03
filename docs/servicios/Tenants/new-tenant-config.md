@@ -180,6 +180,11 @@ tiene variantes (packs y sabores) y 11 combos. Mirala si el tenant nuevo vende: 
 criterio de stock inicial en modo SHOP, los dos patrones de whitelist de combo y cuál elegir,
 y las tres cosas de una carta que el modelo todavía no representa.
 
+[[agencia-video]] es la referencia de un tenant de **SERVICIOS** (2026-10-03): perfil `carta`,
+cada servicio un producto y cada plan una variante con su precio (atributo `plan`). Sin
+`build-menu.js`: `servicios.json` es la lista de precios y se edita a mano, con el SKU escrito
+en el JSON. Del lado del storefront usa una plantilla reutilizable, no una landing propia.
+
 > [!question] Quién está en cada modo, hoy
 > `node prisma/set-tenant-profile.js` sin argumentos lo lista. Al 2026-08-07: `maikai` y
 > `cafe-sublime` en carta; `acme`, `shopco`, `mesa-dulce` y **`shifu`** en tienda. Lo de
