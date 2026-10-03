@@ -1,48 +1,49 @@
-// Branding y preferencias de tienda de agencia-video sobre la TenantConfig que ya
-// creó el alta. Idempotente: es un update de campos concretos.
-//   node prisma/agencia-video/config.js
+// Ajustes de tienda de agencia-video sobre la TenantConfig que ya creó el alta.
+// Idempotente: es un update de campos concretos.
+//   pnpm tenant:create --name "Agencia Video" --email <email> --profile carta
+//   pnpm seed:agencia-video
+//
+// Del lado del backend este tenant es SOLO el alta: el catálogo de servicios, los
+// precios, el branding y los textos los carga el equipo desde el panel, y la landing
+// se maqueta en el storefront. Por eso acá no hay categorías, productos ni copys:
+// solo las dos perillas de operación que, mal puestas, dejan la landing vacía.
 //
 // NO toca el bloque de flujo de venta (storeMode, métodos de pago/entrega, seña): eso
 // sale del perfil `carta` que se aplica al crear el tenant, y se corrige con
 // `node prisma/set-tenant-profile.js agencia-video carta`. Ver [[Perfiles de flujo
 // de venta]].
-//
-// `storeName` NO va acá: lo pone `pnpm tenant:create --name`, y el nombre real de la
-// agencia todavía no está decidido. Cuando lo esté se cambia desde el panel, y si
-// este seed lo declarara lo pisaría en cada corrida.
-//
-// Contacto (contactEmail, contactPhone, socialWhatsapp, socialInstagram,
-// socialTiktok, socialYoutube) queda SIN cargar: se OMITE en vez de ir en null,
-// porque `update: CONFIG` pisa todo lo que declare y un null borraría lo cargado
-// desde el panel. Mientras falte, el storefront usa el fallback de su content.ts.
 import "dotenv/config";
 import { pathToFileURL } from "node:url";
 
 import prisma from "../../lib/prisma.js";
-import { requireTenant } from "./categorias.js";
+
+const TENANT_SLUG = "agencia-video";
 
 const CONFIG = {
-  storeTagline: "Edición de video para marcas, creadores y eventos",
-  storeDescription:
-    "Editamos tus videos para redes, YouTube, podcasts, eventos y publicidad. Vos grabás, nosotros lo convertimos en contenido. Precios por plan, a la vista.",
-
-  seoTitle: "Edición de video para redes, YouTube y eventos — precios y planes",
-  seoDescription:
-    "Agencia de edición de video: Reels y TikTok, YouTube, podcasts en video, casamientos y 15, spots publicitarios. Mirá los planes y precios y pedí tu presupuesto por WhatsApp.",
-  seoKeywords:
-    "edición de video, editor de video, edición de reels, edición tiktok, edición youtube, podcast en video, video de casamiento, video de 15, aftermovie, spot publicitario, motion graphics",
-
   currency: "ARS",
   locale: "es-AR",
   customerPhoneCountry: "54",
 
-  // Modo carta con stock 0 en todos los planes (ver ./productos.js): sin esto, el
-  // default `false` esconde el catálogo entero y la sección de precios queda vacía.
+  // Modo carta: no nacen órdenes desde la tienda, así que el stock de los servicios
+  // no gobierna nada y lo natural es cargarlos en 0. Con el default `false`, un
+  // catálogo en 0 se ve VACÍO (new-tenant-config.md §7).
   showOutOfStock: true,
-  // Casi todos los servicios tienen más de un plan: el panel tiene que mostrar el
-  // alta de variantes.
+  // Un servicio con varios planes (1 video / pack de 4…) es un producto con varias
+  // variantes: el panel tiene que mostrar el alta de variantes.
   productVariantsEnabled: true,
 };
+
+async function requireTenant() {
+  const tenant = await prisma.tenant.findUnique({ where: { slug: TENANT_SLUG } });
+  if (!tenant) {
+    throw new Error(
+      `Tenant "${TENANT_SLUG}" no encontrado. Creálo antes con:\n` +
+        `  pnpm tenant:create --name "Agencia Video" --email <email> --profile carta\n` +
+        `El slug sale del --name: con otro nombre, el slug (y esta constante) cambian.`
+    );
+  }
+  return tenant;
+}
 
 export async function seedAgenciaVideoConfig() {
   const tenant = await requireTenant();
@@ -53,13 +54,7 @@ export async function seedAgenciaVideoConfig() {
     where: { tenantId: tenant.id },
     update: CONFIG,
     create: { tenantId: tenant.id, ...CONFIG },
-    select: {
-      id: true,
-      storeName: true,
-      storeMode: true,
-      showOutOfStock: true,
-      socialWhatsapp: true,
-    },
+    select: { id: true, storeName: true, storeMode: true, showOutOfStock: true },
   });
 
   console.log(
@@ -71,12 +66,6 @@ export async function seedAgenciaVideoConfig() {
       `  ⚠️  storeMode es "${config.storeMode}", no "MENU". La agencia cotiza por WhatsApp, no vende online:\n` +
         "      node prisma/set-tenant-profile.js agencia-video carta\n" +
         `      y borrá la key t${tenant.id}:config de Redis, o el storefront sigue viendo el modo viejo 10 minutos.`
-    );
-  }
-
-  if (!config.socialWhatsapp) {
-    console.warn(
-      "  ⚠️  socialWhatsapp sin cargar: los botones de cotizar usan el número de respaldo del storefront."
     );
   }
 
